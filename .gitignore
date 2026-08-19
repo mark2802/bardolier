@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+
+# Xcode (app/ — the human's build artefacts, not the .swift sources)
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.build/
+.swiftpm/

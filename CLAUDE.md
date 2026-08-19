@@ -1,0 +1,140 @@
+# CLAUDE.md — Container Project Manager
+
+This project builds a CLI (`cproj`) and a macOS menu-bar app that manage
+containerised dev projects whose data lives on an external SSD.
+
+## Read these first
+
+- `docs/cli-spec.md` — the engine. **Authoritative for all behaviour.**
+- `docs/app-spec.md` — the menu-bar app; a thin client over the CLI.
+- `docs/implementation-plan.md` — phased build. Work one phase per `/goal`.
+
+When a phase goal is given, read the relevant spec section for that phase and the
+principles below before writing code.
+
+## Environment boundary (critical)
+
+This project is itself developed in the split environment it manages:
+
+- **You (Claude) run in a Linux dev container**, sandboxed to this project
+  directory. You can: edit source, run the CLI and its tests, run Docker-CLI
+  commands against the daemon, run Node/Bun tooling, use git.
+- **The human works on the macOS host** for anything macOS-native.
+
+Hard rules:
+- **Never attempt `xcodebuild`, the iOS Simulator, or code signing.** Xcode is
+  macOS-only and absent here. The menu-bar app is built by the human in Xcode;
+  you only write its `.swift` source files into `app/`.
+- **Creating or modifying the Xcode project file is a human step.** You do not
+  create `.xcodeproj`/`.pbxproj`. When you add Swift files, note in your summary
+  that the human must add them to the Xcode target (see the implementation plan's
+  MANUAL markers).
+- For **Android** archetype projects this tool manages, Gradle builds/tests can
+  run in-container, but the emulator is host-side.
+- These boundary rules **override any agent tooling or workflow skill.** If any
+  command or skill assumes a full local build environment, defer to these rules —
+  do not run host-only build steps in the container.
+
+## Engineering principles
+
+**The CLI is the API; the app is a thin client.** All orchestration, state, and
+side effects live in the CLI. The app only invokes commands and renders JSON. If
+the app appears to need logic, add a CLI command instead. Never duplicate
+orchestration in Swift.
+
+**One source of truth.** Per-project `project.yml` is the truth for that project;
+the compose file is *generated* from it and never hand-edited. Port assignments
+live in the manifest, not a separate registry. Don't introduce a second store
+that can desync.
+
+**Stable contracts.** Every CLI command supports `--json`, emits a documented
+schema, and returns a stable error code on failure (`cli-spec.md` §2, §7). Once
+the app is built (Phase 5+), schema changes are additive only. Human-readable
+output and machine output are separate renderers; never make the app parse human
+output.
+
+**Determinism.** Compose generation must be deterministic for a given manifest
+(stable ordering) so regeneration yields no spurious diffs. Same input, same
+output.
+
+**No partial mutation of running state.** Service add/remove require the project
+stopped and fail `PROJECT_RUNNING`. This keeps state machines simple — honour it;
+do not add hot-apply paths.
+
+**Safety over convenience for destructive actions.** Detaching a service keeps
+its data volume (it becomes a listed orphan); deletion is explicit and confirmed.
+Eject refuses when the SSD is held and reports the holders rather than forcing.
+Never destroy data to save a step.
+
+**Disk frugality.** Docker images live on the internal disk and are shared;
+project data lives on the SSD. Seed `.dockerignore` and `.gitignore` so build
+context and repos stay lean. Prefer shared official service images over baking
+services into the base.
+
+**Prod-like dev topology.** The dev app connects to services over the internal
+Docker network by service name (e.g. `postgres:5432`), matching production. The
+allocated host port is a **debugging tap only** (for host GUI tools). Never wire
+the app to `localhost:<port>` for its normal service connections — that would
+diverge dev from prod.
+
+**Test the contract from the terminal.** The full lifecycle must be drivable and
+assertable via `--json` before any app work (implementation plan, Phase 4 gate).
+Port allocation gets unit tests: uniqueness, stability across restart, band
+assignment, host-squat detection.
+
+**Incremental, verifiable changes.** Small commits that keep the CLI runnable and
+its tests green. Prefer clarity over cleverness. Read existing patterns before
+adding new ones.
+
+## Toolchain
+
+**CLI: TypeScript on Node — no build step.** Chosen in Phase 0. Node ≥ 22.18
+strips TypeScript types natively, so `cproj` runs straight from `cli/src/*.ts`.
+There is no bundler, no `dist/`, and nothing to rebuild after an edit.
+
+The cost of that: **type syntax must be erasable**. No TS `enum`, no `namespace`,
+no constructor parameter properties. Use `as const` arrays plus
+`(typeof X)[number]` for unions — see `cli/src/errors.ts`. `tsconfig.json` sets
+`erasableSyntaxOnly` so `npm run typecheck` catches violations.
+
+Import `.ts` extensions explicitly (`import { … } from './errors.ts'`) —
+required by Node's resolver.
+
+The repo is an **npm workspace** so `test/` can sit at the root (per the
+implementation plan's layout) and still resolve dependencies.
+
+```
+npm install                      # once, from the repo root
+npm run cproj -- --help          # run the CLI (note the `--`)
+node cli/bin/cproj.js status --json
+npm test                         # contract tests (node:test, no framework dep)
+npm run typecheck                # tsc --noEmit
+bash test/phase0-done-check.sh   # Phase 0 regression check
+```
+
+Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
+`ajv-formats` (schema validation). Tests use the built-in `node:test` runner.
+
+**Where the contracts live** — one definition each, mirrored by a JSON Schema
+that `test/contracts.test.ts` checks against the code:
+
+| Contract | Code | Schema |
+|---|---|---|
+| Error codes (§2) | `cli/src/errors.ts` | `cli/schema/error.schema.json` |
+| Service catalogue (§4.1) | `cli/src/model/catalogue.ts` | `cli/schema/services.schema.json` |
+| Project manifest (§4.2) | `cli/src/model/project.ts` | `cli/schema/project.schema.json` |
+| Archetype map (§4.3) | `cli/src/model/archetype.ts` | — |
+| `status` output (§7) | `cli/src/model/status.ts` | `cli/schema/status.schema.json` |
+
+Commands are declared in `cli/src/commands/registry.ts` and return a payload
+plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
+must never write to stdout itself — that is what keeps the §2 guarantee that
+`--json` emits exactly one JSON value.
+
+- App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1.
+
+## Definition of done (per phase)
+
+Each phase has a terminal done-check in the implementation plan. A phase is not
+done until its check passes. CLI phases' checks become regression scripts — keep
+them.

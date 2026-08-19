@@ -1,0 +1,54 @@
+/**
+ * `status` JSON — THE app's primary contract. `cli-spec.md` §7.
+ *
+ * Schema stability is the contract: once the app ships (Phase 5+), changes to
+ * this shape are ADDITIVE ONLY. Never rename or remove a field; never narrow a
+ * union. The Swift `Codable` models in `app/` mirror this file.
+ */
+
+import type { Archetype } from './archetype.ts'
+
+/** A project is `partial` when some but not all of its containers are up. */
+export const PROJECT_STATES = ['running', 'stopped', 'partial'] as const
+export type ProjectState = (typeof PROJECT_STATES)[number]
+
+export const SERVICE_STATES = ['running', 'stopped'] as const
+export type ServiceState = (typeof SERVICE_STATES)[number]
+
+export type StatusService = {
+  /** Catalogue key, e.g. `postgres`. */
+  key: string
+  /** Human label from the catalogue, e.g. `PostgreSQL`. */
+  display: string
+  state: ServiceState
+  /** The debugging tap on the Mac (§5). NOT what the dev app connects to. */
+  host_port: number
+  /** Fixed port inside the container network — what the dev app connects to. */
+  container_port: number
+  /** Ready-to-copy string for host GUI tools, e.g. `postgresql://localhost:5433`. */
+  connection_hint: string
+}
+
+export type StatusProject = {
+  name: string
+  archetype: Archetype
+  state: ProjectState
+  services: StatusService[]
+  /** Container name, or null when the project is stopped. */
+  dev_container: string | null
+}
+
+export type OrphanedVolume = {
+  name: string
+  size_bytes: number
+  size_human: string
+  /** Project the volume belonged to, or null if it can't be attributed. */
+  last_project: string | null
+}
+
+export type Status = {
+  ssd: { mounted: boolean; root: string }
+  docker: { available: boolean }
+  projects: StatusProject[]
+  orphaned_volumes: OrphanedVolume[]
+}

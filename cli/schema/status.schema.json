@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/status.schema.json",
+  "title": "cproj status output",
+  "description": "The app's primary contract. cli-spec.md §7. Once the app ships (Phase 5+), changes to this schema are ADDITIVE ONLY.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ssd", "docker", "projects", "orphaned_volumes"],
+  "properties": {
+    "ssd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mounted", "root"],
+      "properties": {
+        "mounted": { "type": "boolean" },
+        "root": {
+          "type": "string",
+          "description": "Configured $SSD_ROOT. Present and reportable even when mounted is false."
+        }
+      }
+    },
+    "docker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/project" }
+    },
+    "orphaned_volumes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/orphanedVolume" }
+    }
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "archetype", "state", "services", "dev_container"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
+        "state": {
+          "type": "string",
+          "description": "partial = some but not all of the project's containers are up.",
+          "enum": ["running", "stopped", "partial"]
+        },
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/service" }
+        },
+        "dev_container": {
+          "type": ["string", "null"],
+          "description": "Container name, or null when the project is stopped."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "display", "state", "host_port", "container_port", "connection_hint"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "display": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "enum": ["running", "stopped"] },
+        "host_port": {
+          "type": "integer",
+          "description": "Debugging tap on the Mac. NOT what the dev app connects to.",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "container_port": {
+          "type": "integer",
+          "description": "Fixed port on the internal Docker network — what the dev app connects to.",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "connection_hint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "orphanedVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size_bytes", "size_human", "last_project"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "size_human": { "type": "string", "minLength": 1 },
+        "last_project": {
+          "type": ["string", "null"],
+          "description": "Owning project inferred from the volume name, or null when it can't be attributed."
+        }
+      }
+    }
+  }
+}

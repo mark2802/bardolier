@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/services.schema.json",
+  "title": "cproj service catalogue (services.yml)",
+  "description": "Editable catalogue of attachable services. cli-spec.md §4.1. Adding a service type is a YAML edit, not a code change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["services"],
+  "properties": {
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["display", "image", "container_port", "host_port_base", "volume", "mount"],
+        "properties": {
+          "display": { "type": "string", "minLength": 1 },
+          "image": { "type": "string", "minLength": 1 },
+          "container_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "host_port_base": {
+            "type": "integer",
+            "description": "Start of this service's host-port band; the allocator counts upward from here.",
+            "minimum": 1024,
+            "maximum": 65535
+          },
+          "volume": {
+            "type": "string",
+            "description": "Named volume; {project} is interpolated with the project name.",
+            "minLength": 1
+          },
+          "mount": {
+            "type": "string",
+            "description": "Container path the named volume mounts at.",
+            "pattern": "^/"
+          },
+          "env": {
+            "type": "object",
+            "description": "Service container environment; values may contain {project}.",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/project.schema.json",
+  "title": "cproj project manifest (project.yml)",
+  "description": "Source of truth for one project. cli-spec.md §4.2. The compose file is generated from this and never hand-edited.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "archetype", "base_image", "created"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name; also the directory name under $SSD_ROOT.",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "archetype": {
+      "type": "string",
+      "enum": ["web", "ios", "android", "library"]
+    },
+    "base_image": {
+      "type": "string",
+      "description": "Resolved from archetype per cli-spec.md §4.3.",
+      "enum": ["claude-web", "claude-ios", "claude-and"]
+    },
+    "services": {
+      "type": "object",
+      "description": "Attached services keyed by catalogue key. Absent or empty means none attached.",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["host_port"],
+        "properties": {
+          "host_port": {
+            "type": "integer",
+            "description": "Assigned at service-add, stable for life, released on remove/delete. cli-spec.md §5.",
+            "minimum": 1024,
+            "maximum": 65535
+          }
+        }
+      }
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

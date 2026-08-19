@@ -1,0 +1,16 @@
+{
+  "name": "claude-yard",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Container Project Manager — cproj CLI + macOS menu-bar app",
+  "type": "module",
+  "workspaces": [
+    "cli"
+  ],
+  "scripts": {
+    "cproj": "node cli/bin/cproj.js",
+    "test": "node --test 'test/**/*.test.ts'",
+    "typecheck": "npm run typecheck --workspace cli",
+    "done-check": "bash test/phase0-done-check.sh"
+  }
+}

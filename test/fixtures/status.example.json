@@ -1,0 +1,30 @@
+{
+  "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" },
+  "docker": { "available": true },
+  "projects": [
+    {
+      "name": "myapp",
+      "archetype": "web",
+      "state": "running",
+      "services": [
+        {
+          "key": "postgres",
+          "display": "PostgreSQL",
+          "state": "running",
+          "host_port": 5433,
+          "container_port": 5432,
+          "connection_hint": "postgresql://localhost:5433"
+        }
+      ],
+      "dev_container": "cproj-myapp"
+    }
+  ],
+  "orphaned_volumes": [
+    {
+      "name": "oldapp_pgdata",
+      "size_bytes": 20971520,
+      "size_human": "20 MB",
+      "last_project": "oldapp"
+    }
+  ]
+}

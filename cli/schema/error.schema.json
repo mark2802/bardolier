@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/error.schema.json",
+  "title": "cproj failure output (--json)",
+  "description": "Emitted on stdout for any failing command run with --json. cli-spec.md §2. The error code list lives in code at cli/src/errors.ts — this enum mirrors it and is checked against it by test/contracts.test.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "SSD_NOT_MOUNTED",
+            "PROJECT_EXISTS",
+            "PROJECT_NOT_FOUND",
+            "PROJECT_RUNNING",
+            "PROJECT_STOPPED",
+            "SERVICE_UNKNOWN",
+            "SERVICE_ATTACHED",
+            "SERVICE_NOT_ATTACHED",
+            "PORT_UNAVAILABLE",
+            "VOLUME_IN_USE",
+            "EJECT_BLOCKED",
+            "DOCKER_UNAVAILABLE",
+            "INVALID_ARGUMENT",
+            "NOT_IMPLEMENTED",
+            "CONFIG_INVALID",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 },
+        "details": {
+          "type": "object",
+          "description": "Optional code-specific detail, e.g. EJECT_BLOCKED's holders array."
+        }
+      }
+    }
+  }
+}

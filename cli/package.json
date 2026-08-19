@@ -1,0 +1,28 @@
+{
+  "name": "cproj",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Container Project Manager engine — the CLI is the API",
+  "type": "module",
+  "bin": {
+    "cproj": "./bin/cproj.js"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "cproj": "node ./bin/cproj.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test ../test",
+    "done-check": "bash ../test/phase0-done-check.sh"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

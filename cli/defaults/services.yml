@@ -1,0 +1,38 @@
+# Default service catalogue — cli-spec.md §4.1.
+#
+# This is the BUNDLED FALLBACK. Resolution order:
+#   1. `catalogue_path` from ~/.config/cproj/config.yml
+#   2. $SSD_ROOT/services.yml
+#   3. this file
+#
+# Adding a service type is an edit here (or to your own copy on the SSD) —
+# never a code change. `{project}` is interpolated with the project name.
+#
+# host_port_base is the START of the service's band; the allocator counts
+# upward from it so ports stay readable (postgres 5432 -> 5433 -> 5434 ...).
+
+services:
+  postgres:
+    display: "PostgreSQL"
+    image: "postgres:17"
+    container_port: 5432        # fixed port inside the container/network
+    host_port_base: 5432        # start of this service's host-port band
+    volume: "{project}_pgdata"  # named volume; {project} interpolated
+    mount: "/var/lib/postgresql/data"
+    env:
+      POSTGRES_PASSWORD: "dev"
+      POSTGRES_DB: "{project}"
+  redis:
+    display: "Redis"
+    image: "redis:7"
+    container_port: 6379
+    host_port_base: 6379
+    volume: "{project}_redisdata"
+    mount: "/data"
+  mongo:
+    display: "MongoDB"
+    image: "mongo:7"
+    container_port: 27017
+    host_port_base: 27017
+    volume: "{project}_mongodata"
+    mount: "/data/db"
