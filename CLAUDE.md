@@ -110,6 +110,7 @@ node cli/bin/cproj.js status --json
 npm test                         # contract tests (node:test, no framework dep)
 npm run typecheck                # tsc --noEmit
 bash test/phase0-done-check.sh   # Phase 0 regression check
+bash test/phase1-done-check.sh   # Phase 1 regression check (runs Phase 0's too)
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -125,11 +126,23 @@ that `test/contracts.test.ts` checks against the code:
 | Project manifest (§4.2) | `cli/src/model/project.ts` | `cli/schema/project.schema.json` |
 | Archetype map (§4.3) | `cli/src/model/archetype.ts` | — |
 | `status` output (§7) | `cli/src/model/status.ts` | `cli/schema/status.schema.json` |
+| `list` output (§6) | `cli/src/model/list.ts` | `cli/schema/list.schema.json` |
+| `doctor` output (§6) | `cli/src/model/doctor.ts` | `cli/schema/doctor.schema.json` |
+| Config file (§8) | `cli/src/config.ts` | `cli/schema/config.schema.json` |
 
 Commands are declared in `cli/src/commands/registry.ts` and return a payload
 plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
 must never write to stdout itself — that is what keeps the §2 guarantee that
 `--json` emits exactly one JSON value.
+
+**The outside world reaches commands through one seam.** A command takes a
+`Context` (`cli/src/context.ts`) carrying the loaded config, a `Docker` probe,
+and a deferred catalogue loader — it never reads `process.env`, spawns `docker`,
+or hard-codes the SSD path itself. That is what lets the whole read-only core be
+tested with a temp dir for the SSD and a stubbed Docker runner (`test/helpers.ts`).
+Config is read from `~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` /
+`CPROJ_SSD_VOLUME` overrides (§8), plus `CPROJ_CONFIG` to relocate the file
+itself — which is how the done-checks stay hermetic on a real machine.
 
 - App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1.
 

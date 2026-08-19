@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/doctor.schema.json",
+  "title": "cproj doctor output",
+  "description": "Structured environment findings. cli-spec.md §6 (Lifecycle / SSD). The app calls this on launch, so once the app ships (Phase 5+) changes are ADDITIVE ONLY. doctor exits 0 even when findings fail — see cli/src/model/doctor.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "findings"],
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True when every finding is ok."
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "ok", "detail"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable check id the app may key UI off.",
+          "enum": ["config", "ssd", "docker", "base_images", "catalogue", "manifests"]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "detail": { "type": "string", "minLength": 1 },
+        "remedy": {
+          "type": "string",
+          "description": "What to do about it. Present only when the finding is actionable.",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

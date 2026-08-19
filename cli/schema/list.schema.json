@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/list.schema.json",
+  "title": "cproj list output",
+  "description": "Projects with archetype and running state. cli-spec.md §6 (Projects). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projects"],
+  "properties": {
+    "projects": {
+      "type": "array",
+      "description": "Sorted by name; empty when the SSD holds no projects.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "archetype", "state"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
+          "state": { "type": "string", "enum": ["running", "stopped", "partial"] }
+        }
+      }
+    }
+  }
+}

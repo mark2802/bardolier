@@ -114,7 +114,12 @@ printf '    all codes: %s\n' "$CODES"
 # ── 5. Renderers are separate; --json emits the §2 envelope ───────────────────
 head "5. --json emits a single JSON value; failures use the §2 error envelope"
 
-ENVELOPE="$($CPROJ status --json 2>/dev/null || true)"
+# Phase 1 implemented `status`, so the guaranteed-failing invocation used here
+# is a rejected FLAG instead: INVALID_ARGUMENT stays a failure in every phase,
+# which keeps this a §2 envelope check rather than a stub check.
+FAILING=(status --nope)
+
+ENVELOPE="$($CPROJ "${FAILING[@]}" --json 2>/dev/null || true)"
 if node -e "
   const v = JSON.parse(process.argv[1])
   if (!v.error || typeof v.error.code !== 'string' || typeof v.error.message !== 'string') process.exit(1)
@@ -124,17 +129,17 @@ else
   bad "failure envelope is malformed: $ENVELOPE"
 fi
 
-if $CPROJ status --json >/dev/null 2>&1; then
-  bad "a stub command exited 0 (expected non-zero)"
+if $CPROJ "${FAILING[@]}" --json >/dev/null 2>&1; then
+  bad "a failing command exited 0 (expected non-zero)"
 else
   ok "a failing command exits non-zero"
 fi
 
 # Note: capture rather than pipe — under `pipefail` a pipeline would inherit
 # the CLI's intentional non-zero exit and mask a matching grep.
-HUMAN_ERR="$($CPROJ status 2>&1 >/dev/null || true)"
-HUMAN_OUT="$($CPROJ status 2>/dev/null || true)"
-if grep -q 'NOT_IMPLEMENTED' <<<"$HUMAN_ERR" && [ -z "$HUMAN_OUT" ]; then
+HUMAN_ERR="$($CPROJ "${FAILING[@]}" 2>&1 >/dev/null || true)"
+HUMAN_OUT="$($CPROJ "${FAILING[@]}" 2>/dev/null || true)"
+if grep -q 'INVALID_ARGUMENT' <<<"$HUMAN_ERR" && [ -z "$HUMAN_OUT" ]; then
   ok "human renderer writes the error to stderr, keeping stdout clean"
 else
   bad "human error output did not reach stderr (stderr: '$HUMAN_ERR', stdout: '$HUMAN_OUT')"

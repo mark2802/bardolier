@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/config.schema.json",
+  "title": "cproj config file (~/.config/cproj/config.yml)",
+  "description": "cli-spec.md §8. Lives on the INTERNAL disk so doctor/status can report \"SSD not mounted\". Every key is optional; a missing file is equivalent to an empty one.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ssd_root": {
+      "type": "string",
+      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to <ssd_volume>/claude-projects. Overridden by $CPROJ_SSD_ROOT.",
+      "minLength": 1
+    },
+    "ssd_volume": {
+      "type": "string",
+      "description": "Mount point of the SSD itself, e.g. /Volumes/ssd — what `eject` unmounts. Overridden by $CPROJ_SSD_VOLUME.",
+      "minLength": 1
+    },
+    "catalogue_path": {
+      "type": "string",
+      "description": "Service catalogue location (§4.1). Unset falls back to $SSD_ROOT/services.yml, then the bundled default.",
+      "minLength": 1
+    },
+    "terminal": {
+      "type": "string",
+      "description": "Terminal the APP uses for shell-open (app-spec.md §7, §12). Surfaced here so there is a single source; the CLI never spawns a terminal.",
+      "minLength": 1
+    }
+  }
+}

@@ -23,6 +23,14 @@ export type CatalogueService = {
   mount: string
   /** Environment for the service container; values may contain `{project}`. */
   env?: Record<string, string>
+  /**
+   * Optional `status.connection_hint` template (§7), e.g.
+   * `postgresql://localhost:{host_port}`. Interpolates `{host_port}`,
+   * `{container_port}` and `{project}`. Absent for the bundled services, which
+   * fall back to the scheme table in `src/catalogue.ts`; supplying it is what
+   * lets a new service type stay a YAML-only addition.
+   */
+  connection_hint?: string
 }
 
 export type ServiceCatalogue = {

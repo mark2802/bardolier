@@ -39,6 +39,11 @@
             "type": "object",
             "description": "Service container environment; values may contain {project}.",
             "additionalProperties": { "type": "string" }
+          },
+          "connection_hint": {
+            "type": "string",
+            "description": "Optional template for status's connection_hint (§7), e.g. postgresql://localhost:{host_port}. {host_port}, {container_port} and {project} are interpolated. The bundled services omit it and fall back to the built-in scheme table; supplying it keeps a new service type a YAML-only addition (§4.1).",
+            "minLength": 1
           }
         }
       }

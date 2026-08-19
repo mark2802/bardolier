@@ -6,12 +6,17 @@
  * raise, so help output and the app's error mapping (app-spec.md §13) are
  * driven off one declaration rather than drifting apart.
  *
- * Every command's `run` currently throws NOT_IMPLEMENTED. Phases 1–4 replace
- * them one at a time; nothing else about a command's declaration should change.
+ * Commands land phase by phase; the unimplemented ones still throw
+ * NOT_IMPLEMENTED. Nothing else about a command's declaration changes when one
+ * is implemented — the usage, flags and error codes are the frozen part.
  */
 
 import type { ErrorCode } from '../errors.ts'
-import { notImplemented } from '../errors.ts'
+import { CprojError, notImplemented } from '../errors.ts'
+import { createContext } from '../context.ts'
+import { collectStatus, renderStatus } from './status.ts'
+import { collectList, renderList } from './list.ts'
+import { collectDoctor, renderDoctor } from './doctor.ts'
 
 export const COMMAND_GROUPS = ['Projects', 'Services', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
@@ -61,6 +66,28 @@ export type CommandNode = {
   readonly children?: readonly CommandNode[]
 }
 
+/**
+ * Pair a payload with its human renderer. The cast is contained here so a
+ * command can keep a precisely typed renderer while the registry stays generic.
+ */
+export function output<T>(json: T, human: (value: T) => string[]): CommandOutput {
+  return { json, human: (value) => human(value as T) }
+}
+
+/** Reject stray positionals rather than ignoring them (§2, INVALID_ARGUMENT). */
+function atMostOneArg(inv: Invocation, command: string, placeholder: string): string | null {
+  if (inv.args.length > 1) {
+    throw new CprojError('INVALID_ARGUMENT', `\`cproj ${command}\` takes at most one ${placeholder}.`)
+  }
+  return inv.args[0] ?? null
+}
+
+function noArgs(inv: Invocation, command: string): void {
+  if (inv.args.length > 0) {
+    throw new CprojError('INVALID_ARGUMENT', `\`cproj ${command}\` takes no arguments.`)
+  }
+}
+
 /** Placeholder for grouping nodes, which are never invoked directly. */
 function group(name: string): CommandNode['run'] {
   return () => notImplemented(name)
@@ -89,7 +116,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'List projects with archetype and running state.',
     flags: [],
     errors: ['SSD_NOT_MOUNTED'],
-    run: () => notImplemented('list'),
+    run: async (inv) => {
+      noArgs(inv, 'list')
+      return output(await collectList(createContext()), renderList)
+    },
   },
   {
     path: ['status'],
@@ -98,7 +128,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'Full status object(s) per cli-spec.md §7. No arg = all projects.',
     flags: [],
     errors: ['PROJECT_NOT_FOUND'],
-    run: () => notImplemented('status'),
+    run: async (inv) => {
+      const name = atMostOneArg(inv, 'status', '<name>')
+      return output(await collectStatus(createContext(), name), renderStatus)
+    },
   },
   {
     path: ['up'],
@@ -240,7 +273,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'Environment check: Docker running, SSD mounted, base images present, catalogue valid.',
     flags: [],
     errors: [],
-    run: () => notImplemented('doctor'),
+    run: async (inv) => {
+      noArgs(inv, 'doctor')
+      return output(await collectDoctor(createContext()), renderDoctor)
+    },
   },
 
   // ── Images ─────────────────────────────────────────────────────────────────

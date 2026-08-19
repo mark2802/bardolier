@@ -15,6 +15,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { ERROR_CODES, CprojError, isErrorCode } from '../cli/src/errors.ts'
 import { SCHEMA_NAMES, loadSchema, validate } from '../cli/src/schema.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE } from '../cli/src/model/archetype.ts'
+import { DOCTOR_CHECKS, type DoctorReport } from '../cli/src/model/doctor.ts'
+import type { ListOutput } from '../cli/src/model/list.ts'
 import { COMMANDS, ROOT, walk } from '../cli/src/commands/registry.ts'
 import { renderRootHelp } from '../cli/src/render/human.ts'
 import type { Status } from '../cli/src/model/status.ts'
@@ -181,6 +183,74 @@ describe('service catalogue (cli-spec.md §4.1)', () => {
   })
 })
 
+describe('doctor contract (cli-spec.md §6)', () => {
+  const fixture = JSON.parse(readText('test/fixtures/doctor.example.json')) as DoctorReport
+
+  test('the example report validates against doctor.schema.json', () => {
+    const { valid, errors } = validate('doctor', fixture)
+    assert.ok(valid, `fixture failed validation:\n${errors.join('\n')}`)
+  })
+
+  test('the schema mirrors the check ids defined in code', () => {
+    const schema = loadSchema('doctor') as {
+      $defs: { finding: { properties: { id: { enum: string[] } } } }
+    }
+    assert.deepEqual(schema.$defs.finding.properties.id.enum, [...DOCTOR_CHECKS])
+  })
+
+  test('a failing finding carries a remedy and flips the top-level ok', () => {
+    const failing = fixture.findings.find((f) => !f.ok)
+    assert.ok(failing)
+    assert.ok(failing.remedy)
+    assert.equal(fixture.ok, false)
+  })
+
+  test('an all-ok report with no findings is valid (nothing to check is not a failure)', () => {
+    assert.ok(validate('doctor', { ok: true, findings: [] }).valid)
+  })
+
+  test('rejects an unknown check id', () => {
+    const bad = { ok: true, findings: [{ id: 'vibes', title: 'Vibes', ok: true, detail: 'good' }] }
+    assert.equal(validate('doctor', bad).valid, false)
+  })
+})
+
+describe('list contract (cli-spec.md §6)', () => {
+  test('an empty list is valid', () => {
+    const empty: ListOutput = { projects: [] }
+    assert.ok(validate('list', empty).valid)
+  })
+
+  test('archetypes agree with the archetype model', () => {
+    const schema = loadSchema('list') as {
+      properties: { projects: { items: { properties: { archetype: { enum: string[] } } } } }
+    }
+    assert.deepEqual(schema.properties.projects.items.properties.archetype.enum, [...ARCHETYPES])
+  })
+
+  test('rejects a project missing its state', () => {
+    assert.equal(validate('list', { projects: [{ name: 'a', archetype: 'web' }] }).valid, false)
+  })
+})
+
+describe('config contract (cli-spec.md §8)', () => {
+  test('every §8 key is accepted and every key is optional', () => {
+    assert.ok(validate('config', {}).valid)
+    assert.ok(
+      validate('config', {
+        ssd_root: '/Volumes/ssd/claude-projects',
+        ssd_volume: '/Volumes/ssd',
+        catalogue_path: '/Volumes/ssd/services.yml',
+        terminal: 'Terminal',
+      }).valid,
+    )
+  })
+
+  test('rejects an unknown key so a typo cannot be silently ignored', () => {
+    assert.equal(validate('config', { ssd_rooot: '/typo' }).valid, false)
+  })
+})
+
 describe('error codes (cli-spec.md §2)', () => {
   test('every code named in §2 is defined', () => {
     const spec = [
@@ -229,6 +299,8 @@ describe('error codes (cli-spec.md §2)', () => {
 describe('command surface (cli-spec.md §6)', () => {
   const leaves = walk(ROOT)
   const names = leaves.map((c) => c.path.join(' '))
+  /** Commands with real behaviour. Phase 1: the read-only core. */
+  const IMPLEMENTED = new Set(['status', 'list', 'doctor'])
 
   test('declares every command in §6', () => {
     assert.deepEqual(names.sort(), [
@@ -267,13 +339,24 @@ describe('command surface (cli-spec.md §6)', () => {
     }
   })
 
-  test('every command is still a stub', async () => {
+  test('every command not yet built is still a stub', async () => {
     for (const command of leaves) {
+      const name = command.path.join(' ')
+      if (IMPLEMENTED.has(name)) continue
       await assert.rejects(
         async () => command.run({ args: [], flags: {} }),
         (error: unknown) => error instanceof CprojError && error.code === 'NOT_IMPLEMENTED',
-        `\`${command.path.join(' ')}\` did not throw NOT_IMPLEMENTED`,
+        `\`${name}\` did not throw NOT_IMPLEMENTED`,
       )
+    }
+  })
+
+  test('the implemented set matches the phases landed so far', () => {
+    // Phase 1 is the read-only core; Phases 2-4 add the rest. Update this list
+    // as each phase lands so an accidentally-live command can't slip through.
+    assert.deepEqual([...IMPLEMENTED].sort(), ['doctor', 'list', 'status'])
+    for (const name of IMPLEMENTED) {
+      assert.ok(names.includes(name), `${name} is not a declared command`)
     }
   })
 })
