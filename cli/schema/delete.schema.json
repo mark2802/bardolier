@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/delete.schema.json",
+  "title": "cproj delete output",
+  "description": "What `cproj delete` removed. cli-spec.md §6 (Projects), §5 (port release).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "deleted", "dir", "released_ports", "removed_volumes", "kept_volumes"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "deleted": { "type": "boolean", "description": "False when the confirmation was declined; nothing was touched." },
+    "dir": { "type": "string", "minLength": 1 },
+    "released_ports": {
+      "type": "array",
+      "description": "Host ports the project no longer holds, free for the next allocation (§5).",
+      "items": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+    },
+    "removed_volumes": {
+      "type": "array",
+      "description": "Named volumes removed under --purge.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "kept_volumes": {
+      "type": "array",
+      "description": "Named volumes left behind under --keep-data; they become listed orphans.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

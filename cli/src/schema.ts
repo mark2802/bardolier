@@ -10,7 +10,20 @@ import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
 import { CprojError } from './errors.ts'
 
-export const SCHEMA_NAMES = ['project', 'services', 'status', 'error', 'config', 'doctor', 'list'] as const
+export const SCHEMA_NAMES = [
+  'project',
+  'services',
+  'status',
+  'error',
+  'config',
+  'doctor',
+  'list',
+  'new',
+  'up',
+  'down',
+  'delete',
+  'build',
+] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]
 
 export function schemaPath(name: SchemaName): string {

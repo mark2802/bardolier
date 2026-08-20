@@ -54,7 +54,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       return EXIT_SUCCESS
     }
 
-    const output = await command.run({ args: parsed.args, flags: parsed.flags })
+    const output = await command.run({ args: parsed.args, flags: parsed.flags, json: parsed.json })
     if (parsed.json) renderJson(output.json)
     else renderHuman(output.human(output.json))
     return EXIT_SUCCESS

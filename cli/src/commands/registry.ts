@@ -1,14 +1,19 @@
 /**
- * The command surface — cli-spec.md §6, complete, as stubs.
+ * The command surface — cli-spec.md §6, complete.
  *
- * Phase 0 declares the whole surface so `cproj --help` is the contract you can
+ * Phase 0 declared the whole surface so `cproj --help` is the contract you can
  * read from the terminal. Each command records the error codes §6 says it can
  * raise, so help output and the app's error mapping (app-spec.md §13) are
  * driven off one declaration rather than drifting apart.
  *
- * Commands land phase by phase; the unimplemented ones still throw
- * NOT_IMPLEMENTED. Nothing else about a command's declaration changes when one
- * is implemented — the usage, flags and error codes are the frozen part.
+ * Commands land phase by phase — Phase 1 the read-only core, Phase 2 the
+ * project lifecycle — and the ones still to come throw NOT_IMPLEMENTED. Nothing
+ * else about a command's declaration changes when one is implemented: the
+ * usage, flags and error codes are the frozen part.
+ *
+ * Every `run` here is a thin adapter: validate the shape of the invocation,
+ * build a Context, call the command module, pair the payload with its human
+ * renderer. Behaviour lives in the command modules, never in this file.
  */
 
 import type { ErrorCode } from '../errors.ts'
@@ -17,6 +22,11 @@ import { createContext } from '../context.ts'
 import { collectStatus, renderStatus } from './status.ts'
 import { collectList, renderList } from './list.ts'
 import { collectDoctor, renderDoctor } from './doctor.ts'
+import { renderNew, runNew } from './new.ts'
+import { renderUp, runUp } from './up.ts'
+import { renderDown, runDown } from './down.ts'
+import { renderDelete, runDelete } from './delete.ts'
+import { renderBuild, runBuild } from './build.ts'
 
 export const COMMAND_GROUPS = ['Projects', 'Services', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
@@ -49,6 +59,12 @@ export type Invocation = {
   readonly args: readonly string[]
   /** Flags present on the invocation, e.g. `{ force: true, archetype: 'web' }`. */
   readonly flags: Readonly<Record<string, string | boolean>>
+  /**
+   * Whether `--json` was given. A command must not RENDER differently for it —
+   * that is main.ts's job — but a command that would otherwise prompt has to
+   * know there is no one to ask (`delete`, §2).
+   */
+  readonly json: boolean
 }
 
 export type CommandNode = {
@@ -82,6 +98,23 @@ function atMostOneArg(inv: Invocation, command: string, placeholder: string): st
   return inv.args[0] ?? null
 }
 
+/** Exactly `count` positionals, or INVALID_ARGUMENT naming the usage. */
+function exactArgs(inv: Invocation, command: CommandNode, count: number): string[] {
+  if (inv.args.length !== count) {
+    throw new CprojError('INVALID_ARGUMENT', `Usage: cproj ${command.usage}`)
+  }
+  return [...inv.args]
+}
+
+function stringFlag(inv: Invocation, key: string): string | undefined {
+  const value = inv.flags[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function boolFlag(inv: Invocation, key: string): boolean {
+  return inv.flags[key] === true
+}
+
 function noArgs(inv: Invocation, command: string): void {
   if (inv.args.length > 0) {
     throw new CprojError('INVALID_ARGUMENT', `\`cproj ${command}\` takes no arguments.`)
@@ -107,7 +140,17 @@ export const COMMANDS: readonly CommandNode[] = [
       { name: '--services', arg: '<a,b>', description: 'Catalogue keys to attach immediately; ports assigned now.' },
     ],
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_EXISTS', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
-    run: () => notImplemented('new'),
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('new'), 1)
+      return output(
+        await runNew(createContext(), {
+          name,
+          archetype: stringFlag(inv, 'archetype'),
+          services: stringFlag(inv, 'services'),
+        }),
+        renderNew,
+      )
+    },
   },
   {
     path: ['list'],
@@ -140,7 +183,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'Bring the dev container and attached services up. Validates ports. Idempotent.',
     flags: [{ name: '--no-shell', description: "Suppress the app's shell-open after start. The CLI never spawns a terminal." }],
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('up'),
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('up'), 1)
+      return output(await runUp(createContext(), { name, noShell: boolFlag(inv, 'noShell') }), renderUp)
+    },
   },
   {
     path: ['down'],
@@ -148,8 +194,11 @@ export const COMMANDS: readonly CommandNode[] = [
     usage: 'down <name>',
     summary: "Stop and remove the project's containers. Data persists. Idempotent.",
     flags: [],
-    errors: ['PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('down'),
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('down'), 1)
+      return output(await runDown(createContext(), name), renderDown)
+    },
   },
   {
     path: ['delete'],
@@ -161,8 +210,20 @@ export const COMMANDS: readonly CommandNode[] = [
       { name: '--keep-data', description: "Keep the project's named volumes (default); they become orphans." },
       { name: '--purge', description: "Also remove the project's named volumes. Destroys data." },
     ],
-    errors: ['PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('delete'),
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE', 'VOLUME_IN_USE'],
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('delete'), 1)
+      return output(
+        await runDelete(createContext(), {
+          name,
+          force: boolFlag(inv, 'force'),
+          keepData: boolFlag(inv, 'keepData'),
+          purge: boolFlag(inv, 'purge'),
+          json: inv.json,
+        }),
+        renderDelete,
+      )
+    },
   },
 
   // ── Services ───────────────────────────────────────────────────────────────
@@ -287,9 +348,23 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: "Build base image(s) with host UID/GID build args. No arg builds every archetype's base.",
     flags: [{ name: '--archetype', arg: '<a>', description: 'Build only this archetype’s base image.' }],
     errors: ['DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('build'),
+    run: async (inv) => {
+      noArgs(inv, 'build')
+      return output(await runBuild(createContext(), stringFlag(inv, 'archetype')), renderBuild)
+    },
   },
 ]
+
+/**
+ * Usage strings for the commands that report their own usage on a bad
+ * invocation. Resolved from the declared surface so the error text and
+ * `--help` can never drift apart.
+ */
+function byPath(path: string): CommandNode {
+  const found = walk(ROOT).find((command) => command.path.join(' ') === path)
+  if (!found) throw new CprojError('INTERNAL_ERROR', `No command declared at \`${path}\`.`)
+  return found
+}
 
 export const ROOT: CommandNode = {
   path: [],

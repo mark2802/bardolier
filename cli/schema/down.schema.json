@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/down.schema.json",
+  "title": "cproj down output",
+  "description": "What `cproj down` stopped. Data always persists. cli-spec.md §6 (Projects).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "state", "was_running", "data_kept"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "state": { "type": "string", "enum": ["running", "stopped", "partial"] },
+    "was_running": { "type": "boolean", "description": "False when down was an idempotent no-op (§2)." },
+    "data_kept": { "type": "boolean", "const": true, "description": "`down` never removes volumes; only delete --purge and volumes rm do." }
+  }
+}

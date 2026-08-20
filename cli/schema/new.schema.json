@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/new.schema.json",
+  "title": "cproj new output",
+  "description": "What `cproj new` created. cli-spec.md §6 (Projects), §10 (seeded files). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "manifest_path", "compose_path", "seeded", "services"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "archetype", "base_image", "dir", "created"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
+        "base_image": { "type": "string", "enum": ["claude-web", "claude-ios", "claude-and"] },
+        "dir": { "type": "string", "minLength": 1 },
+        "created": { "type": "string", "format": "date-time" }
+      }
+    },
+    "manifest_path": { "type": "string", "minLength": 1 },
+    "compose_path": { "type": "string", "minLength": 1 },
+    "seeded": {
+      "type": "array",
+      "description": "File names written per §10, in write order.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "services": {
+      "type": "array",
+      "description": "Catalogue keys attached at creation.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

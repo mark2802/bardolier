@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/build.schema.json",
+  "title": "cproj build output",
+  "description": "Base images considered by `cproj build`. cli-spec.md §6 (Images), §4.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uid", "gid", "images"],
+  "properties": {
+    "uid": { "type": "integer", "minimum": 0, "description": "Host UID passed as a build arg." },
+    "gid": { "type": "integer", "minimum": 0, "description": "Host GID passed as a build arg." },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image", "archetypes", "status", "dockerfile"],
+        "properties": {
+          "image": { "type": "string", "enum": ["claude-web", "claude-ios", "claude-and"] },
+          "archetypes": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["web", "ios", "android", "library"] }
+          },
+          "status": { "type": "string", "enum": ["built", "unavailable"] },
+          "dockerfile": { "type": ["string", "null"] },
+          "reason": { "type": "string", "description": "Why the image is unavailable; absent on success." }
+        }
+      }
+    }
+  }
+}

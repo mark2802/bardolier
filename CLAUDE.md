@@ -111,6 +111,7 @@ npm test                         # contract tests (node:test, no framework dep)
 npm run typecheck                # tsc --noEmit
 bash test/phase0-done-check.sh   # Phase 0 regression check
 bash test/phase1-done-check.sh   # Phase 1 regression check (runs Phase 0's too)
+bash test/phase2-done-check.sh   # Phase 2 regression check (runs 0 and 1 too)
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -129,6 +130,11 @@ that `test/contracts.test.ts` checks against the code:
 | `list` output (§6) | `cli/src/model/list.ts` | `cli/schema/list.schema.json` |
 | `doctor` output (§6) | `cli/src/model/doctor.ts` | `cli/schema/doctor.schema.json` |
 | Config file (§8) | `cli/src/config.ts` | `cli/schema/config.schema.json` |
+| `new` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/new.schema.json` |
+| `up` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/up.schema.json` |
+| `down` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/down.schema.json` |
+| `delete` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/delete.schema.json` |
+| `build` output (§6) | `cli/src/model/build.ts` | `cli/schema/build.schema.json` |
 
 Commands are declared in `cli/src/commands/registry.ts` and return a payload
 plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
@@ -136,13 +142,30 @@ must never write to stdout itself — that is what keeps the §2 guarantee that
 `--json` emits exactly one JSON value.
 
 **The outside world reaches commands through one seam.** A command takes a
-`Context` (`cli/src/context.ts`) carrying the loaded config, a `Docker` probe,
-and a deferred catalogue loader — it never reads `process.env`, spawns `docker`,
-or hard-codes the SSD path itself. That is what lets the whole read-only core be
-tested with a temp dir for the SSD and a stubbed Docker runner (`test/helpers.ts`).
-Config is read from `~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` /
-`CPROJ_SSD_VOLUME` overrides (§8), plus `CPROJ_CONFIG` to relocate the file
-itself — which is how the done-checks stay hermetic on a real machine.
+`Context` (`cli/src/context.ts`) carrying the loaded config, a `Docker` handle,
+a deferred catalogue loader, a host-port probe, a confirmation prompt, a host
+UID/GID, and the clock — it never reads `process.env`, spawns `docker`, binds a
+socket, prompts, or hard-codes the SSD path itself. That is what lets the whole
+CLI, mutations included, be tested with a temp dir for the SSD and stubs for the
+rest (`test/helpers.ts`). Anything with an observable side effect belongs on the
+Context, or the tests stop being honest. Config is read from
+`~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` / `CPROJ_SSD_VOLUME`
+overrides (§8), plus `CPROJ_CONFIG` to relocate the file itself — which is how
+the done-checks stay hermetic on a real machine.
+
+**Generated files are regenerated, seeded files are not.** `docker-compose.yml`
+is rendered from `project.yml` by `cli/src/compose.ts` on every `new`, `up`, and
+service change; it is never patched, never read back for facts, and a hand edit
+loses. The §10 seeds (`.gitignore`, `.dockerignore`, project `CLAUDE.md`) are
+written once by `new` and are the user's from then on. Writing goes through
+`cli/src/workspace.ts`, which also skips the write when the bytes already match —
+that is what makes determinism observable rather than merely intended.
+
+**Base images live in `cli/images/<image>/Dockerfile`** and are built by
+`cproj build`, which passes `HOST_UID`/`HOST_GID` so files the dev container
+writes into the bind-mounted `/work` come back owned by the Mac user. The
+`claude-ios` and `claude-and` images land in Phase 8; until then `build` reports
+them `unavailable` rather than failing.
 
 - App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1.
 

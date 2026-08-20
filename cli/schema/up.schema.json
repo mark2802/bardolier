@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/up.schema.json",
+  "title": "cproj up output",
+  "description": "What `cproj up` started. cli-spec.md §6 (Projects). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "state", "dev_container", "services", "already_running", "compose_regenerated", "open_shell"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "state": { "type": "string", "enum": ["running", "stopped", "partial"] },
+    "dev_container": { "type": "string", "minLength": 1 },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "host_port", "container_port"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "host_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+          "container_port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        }
+      }
+    },
+    "already_running": { "type": "boolean", "description": "True when up was an idempotent no-op (§2)." },
+    "compose_regenerated": { "type": "boolean", "description": "True when the compose file on disk differed from the manifest." },
+    "open_shell": { "type": "boolean", "description": "The app's cue to open a shell; false under --no-shell. The CLI spawns no terminal." }
+  }
+}

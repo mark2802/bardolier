@@ -309,7 +309,7 @@ describe('status (cli-spec.md §7)', () => {
 
   test('succeeds with the SSD unmounted — reporting is not failing', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { CPROJ_SSD_ROOT: join(box.root, 'unplugged') })
+    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
     const status = await collectStatus(ctx)
     assert.equal(status.ssd.mounted, false)
     assert.equal(status.ssd.root, join(box.root, 'unplugged'))
@@ -442,7 +442,7 @@ describe('list (cli-spec.md §6)', () => {
 
   test('raises SSD_NOT_MOUNTED where status deliberately does not', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { CPROJ_SSD_ROOT: join(box.root, 'unplugged') })
+    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => collectList(ctx),
       (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
@@ -470,7 +470,7 @@ describe('doctor (cli-spec.md §6)', () => {
 
   test('reports the SSD absent, with a remedy', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { CPROJ_SSD_ROOT: join(box.root, 'unplugged') })
+    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
     const report = await collectDoctor(ctx)
     const ssd = finding(report, 'ssd')
     assert.equal(ssd.ok, false)

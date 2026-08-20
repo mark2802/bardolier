@@ -14,7 +14,7 @@
     "cproj": "node ./bin/cproj.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test ../test",
-    "done-check": "bash ../test/phase1-done-check.sh"
+    "done-check": "bash ../test/phase2-done-check.sh"
   },
   "dependencies": {
     "ajv": "^8.17.1",

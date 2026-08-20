@@ -14,22 +14,12 @@
 
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
-import type { DockerContainer } from '../docker.ts'
 import { devContainerName, serviceContainerName } from '../naming.ts'
 import { discoverProjects, probeSsd, type DiscoveredProject } from '../projects.ts'
+import { observeState, runningNames } from '../workspace.ts'
 import { connectionHint } from '../catalogue.ts'
 import type { Status, StatusProject, StatusService } from '../model/status.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
-
-/** Every name every running container answers to. */
-function runningNames(containers: readonly DockerContainer[]): Set<string> {
-  const names = new Set<string>()
-  for (const container of containers) {
-    if (container.state !== 'running') continue
-    for (const name of container.names) names.add(name)
-  }
-  return names
-}
 
 function buildProject(
   project: DiscoveredProject,
@@ -57,22 +47,16 @@ function buildProject(
     })
   }
 
-  const devName = devContainerName(name)
-  const devRunning = running.has(devName)
-
-  // The dev container plus every ATTACHED service (not just the describable
-  // ones) is what "all up" means, so an unknown key can't make a half-running
-  // project look fully running.
-  const expected = 1 + attached.length
-  const up = (devRunning ? 1 : 0) + attached.filter(([key]) => running.has(serviceContainerName(name, key))).length
-  const state = up === 0 ? 'stopped' : up === expected ? 'running' : 'partial'
+  // Shared with the lifecycle commands so `up`/`down` and `status` can never
+  // disagree about what "running" means.
+  const observed = observeState(manifest, running)
 
   return {
     name,
     archetype: manifest.archetype,
-    state,
+    state: observed.state,
     services,
-    dev_container: devRunning ? devName : null,
+    dev_container: observed.devRunning ? devContainerName(name) : null,
   }
 }
 

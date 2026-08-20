@@ -11,6 +11,6 @@
     "cproj": "node cli/bin/cproj.js",
     "test": "node --test 'test/**/*.test.ts'",
     "typecheck": "npm run typecheck --workspace cli",
-    "done-check": "bash test/phase1-done-check.sh"
+    "done-check": "bash test/phase2-done-check.sh"
   }
 }

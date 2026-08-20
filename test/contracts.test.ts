@@ -299,8 +299,8 @@ describe('error codes (cli-spec.md §2)', () => {
 describe('command surface (cli-spec.md §6)', () => {
   const leaves = walk(ROOT)
   const names = leaves.map((c) => c.path.join(' '))
-  /** Commands with real behaviour. Phase 1: the read-only core. */
-  const IMPLEMENTED = new Set(['status', 'list', 'doctor'])
+  /** Commands with real behaviour. Phase 1: read-only core. Phase 2: lifecycle. */
+  const IMPLEMENTED = new Set(['status', 'list', 'doctor', 'new', 'up', 'down', 'delete', 'build'])
 
   test('declares every command in §6', () => {
     assert.deepEqual(names.sort(), [
@@ -344,7 +344,7 @@ describe('command surface (cli-spec.md §6)', () => {
       const name = command.path.join(' ')
       if (IMPLEMENTED.has(name)) continue
       await assert.rejects(
-        async () => command.run({ args: [], flags: {} }),
+        async () => command.run({ args: [], flags: {}, json: false }),
         (error: unknown) => error instanceof CprojError && error.code === 'NOT_IMPLEMENTED',
         `\`${name}\` did not throw NOT_IMPLEMENTED`,
       )
@@ -352,9 +352,10 @@ describe('command surface (cli-spec.md §6)', () => {
   })
 
   test('the implemented set matches the phases landed so far', () => {
-    // Phase 1 is the read-only core; Phases 2-4 add the rest. Update this list
-    // as each phase lands so an accidentally-live command can't slip through.
-    assert.deepEqual([...IMPLEMENTED].sort(), ['doctor', 'list', 'status'])
+    // Phase 1 was the read-only core; Phase 2 adds the project lifecycle.
+    // Phases 3-4 add services, shell, volumes and eject. Update this list as
+    // each phase lands so an accidentally-live command can't slip through.
+    assert.deepEqual([...IMPLEMENTED].sort(), ['build', 'delete', 'doctor', 'down', 'list', 'new', 'status', 'up'])
     for (const name of IMPLEMENTED) {
       assert.ok(names.includes(name), `${name} is not a declared command`)
     }
