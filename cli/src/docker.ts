@@ -2,9 +2,12 @@
  * The Docker seam — every `docker` invocation this tool makes goes through here.
  *
  * Phase 1 only asked questions. Phase 2 adds the mutations the lifecycle needs —
- * `compose up`, `compose down`, `build`, `volume rm` — and nothing else. Every
- * process failure is mapped to DOCKER_UNAVAILABLE here so no raw stderr or
- * spawn error escapes into a command (cli-spec.md §2).
+ * `compose up`, `compose down`, `build`, `volume rm` — and nothing else. Phase 4
+ * adds what `volumes orphaned` and `down-all` need: volume LABELS (how an
+ * orphan is attributed to the project it came from, §7), volume SIZES, and
+ * force-removing a stray container by name. Every process failure is mapped to
+ * DOCKER_UNAVAILABLE here so no raw stderr or spawn error escapes into a
+ * command (cli-spec.md §2).
  *
  * The `DockerRunner` seam is the whole point of this module: tests substitute a
  * runner and exercise the lifecycle on a machine with no Docker daemon and no
@@ -46,6 +49,16 @@ export type DockerImage = {
   readonly tag: string
 }
 
+export type DockerVolume = {
+  readonly name: string
+  /**
+   * The volume's labels. `cproj.project` / `cproj.service` are written by the
+   * generated compose file (§9), which is how an orphaned volume is attributed
+   * to the project it came from without a second registry.
+   */
+  readonly labels: Readonly<Record<string, string>>
+}
+
 export type ComposeTarget = {
   /** Absolute path to the generated compose file. */
   readonly file: string
@@ -72,6 +85,16 @@ export type Docker = {
   /** Currently running containers. Throws DOCKER_UNAVAILABLE if the daemon is down. */
   runningContainers(): Promise<readonly DockerContainer[]>
   volumeNames(): Promise<readonly string[]>
+  /** Volumes with their labels. Cheap: one `docker volume ls`. */
+  volumes(): Promise<readonly DockerVolume[]>
+  /**
+   * Disk usage per volume, in bytes, keyed by volume name.
+   *
+   * Separate from `volumes()` because it costs a `docker system df -v`, which
+   * walks the volume tree and can take seconds. A volume missing from the map
+   * has an unknown size — reported as such rather than guessed at.
+   */
+  volumeSizes(): Promise<ReadonlyMap<string, number>>
   images(): Promise<readonly DockerImage[]>
   /** Drop the memoised snapshot after a mutation. */
   refresh(): void
@@ -86,11 +109,15 @@ export type Docker = {
   build(request: BuildRequest): Promise<void>
   /** Remove one named volume. Throws VOLUME_IN_USE when a container holds it. */
   removeVolume(name: string): Promise<void>
+  /** `docker rm --force` one container by name. Used by `down-all` to sweep strays. */
+  removeContainer(name: string): Promise<void>
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000
 /** Builds and `compose up` pull layers; the query timeout is far too short. */
 const MUTATION_TIMEOUT_MS = 30 * 60_000
+/** `system df -v` walks every volume on disk; slower than a `ps`, faster than a build. */
+const DF_TIMEOUT_MS = 120_000
 
 /** Spawns the real `docker` binary. Replaced wholesale in tests. */
 export function execDocker(defaultTimeoutMs = DEFAULT_TIMEOUT_MS): DockerRunner {
@@ -144,6 +171,25 @@ function parseLabels(raw: string): Record<string, string> {
   return labels
 }
 
+/**
+ * `docker system df` reports sizes as human strings ("110.7MB", "0B", "N/A") —
+ * the CLI offers no byte-exact form. Parsed back here, decimal units as Docker
+ * writes them, so the rest of the CLI can work in bytes. Null means "Docker did
+ * not say", which is reported as unknown rather than as zero.
+ */
+export function parseDockerSize(text: string): number | null {
+  const match = /^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]*)$/.exec(text.trim())
+  if (!match) return null
+  const value = Number(match[1])
+  if (!Number.isFinite(value)) return null
+  const unit = (match[2] ?? '').toLowerCase()
+  const SI: Record<string, number> = { '': 1, b: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, pb: 1e15 }
+  const IEC: Record<string, number> = { kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4, pib: 1024 ** 5 }
+  const factor = SI[unit] ?? IEC[unit]
+  if (factor === undefined) return null
+  return Math.round(value * factor)
+}
+
 function memoise<T>(fn: () => Promise<T>): () => Promise<T> {
   let pending: Promise<T> | null = null
   return () => {
@@ -189,6 +235,40 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
   }
   let volumeNames = memoise(readVolumeNames)
 
+  const readVolumes = async () => {
+    const result = await ok(['volume', 'ls', '--format', '{{json .}}'], 'list volumes')
+    return parseJsonLines(result.stdout).map((row): DockerVolume => ({
+      name: str(row, 'Name'),
+      labels: parseLabels(str(row, 'Labels')),
+    }))
+  }
+  let volumes = memoise(readVolumes)
+
+  const readVolumeSizes = async () => {
+    // `--format '{{json .Volumes}}'` is one JSON array, not the line-per-object
+    // form every other query uses. Note the longer timeout: df walks the volume
+    // tree on disk.
+    const result = await ok(['system', 'df', '-v', '--format', '{{json .Volumes}}'], 'measure volumes', DF_TIMEOUT_MS)
+    const sizes = new Map<string, number>()
+    let rows: unknown
+    try {
+      rows = JSON.parse(result.stdout.trim() || '[]')
+    } catch {
+      // A df we cannot read means sizes are unknown, not that the command failed.
+      return sizes
+    }
+    if (!Array.isArray(rows)) return sizes
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const record = row as Record<string, unknown>
+      const name = str(record, 'Name')
+      const bytes = parseDockerSize(str(record, 'Size'))
+      if (name.length > 0 && bytes !== null) sizes.set(name, bytes)
+    }
+    return sizes
+  }
+  let volumeSizes = memoise(readVolumeSizes)
+
   const readImages = async () => {
     const result = await ok(['images', '--format', '{{json .}}'], 'list images')
     return parseJsonLines(result.stdout).map((row): DockerImage => ({
@@ -205,11 +285,15 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
     available,
     runningContainers: () => runningContainers(),
     volumeNames: () => volumeNames(),
+    volumes: () => volumes(),
+    volumeSizes: () => volumeSizes(),
     images: () => images(),
 
     refresh() {
       runningContainers = memoise(readRunningContainers)
       volumeNames = memoise(readVolumeNames)
+      volumes = memoise(readVolumes)
+      volumeSizes = memoise(readVolumeSizes)
       images = memoise(readImages)
     },
 
@@ -251,6 +335,14 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
           `Could not remove volume ${name}: ${stderr || `docker exited ${result.code}`}`,
         )
       }
+      docker.refresh()
+    },
+
+    async removeContainer(name) {
+      // `--force` because this is only ever called on a container `down-all`
+      // has already decided is ours and unwanted; a running stray is exactly
+      // the case that needs removing.
+      await ok(['rm', '--force', name], `remove container ${name}`)
       docker.refresh()
     },
   }

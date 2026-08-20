@@ -17,6 +17,7 @@ import { CprojError } from '../errors.ts'
 import { devContainerName, serviceContainerName } from '../naming.ts'
 import { discoverProjects, probeSsd, type DiscoveredProject } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
+import { scanVolumes } from '../volumes.ts'
 import { connectionHint } from '../catalogue.ts'
 import type { Status, StatusProject, StatusService } from '../model/status.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
@@ -88,9 +89,27 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
     ssd: { mounted: ssd.mounted, root: ssd.root },
     docker: { available: dockerAvailable },
     projects: selected.map((project) => buildProject(project, running, catalogue)),
-    // Phase 4 owns `volumes orphaned`, which is where sizes and attribution
-    // come from. Reporting [] here is honest; inventing entries would not be.
-    orphaned_volumes: [],
+    orphaned_volumes: await orphanedVolumes(ctx, ssd.mounted, dockerAvailable),
+  }
+}
+
+/**
+ * The §7 orphan list, shared with `volumes orphaned` so the app's reclaim view
+ * and its menu can never disagree.
+ *
+ * `status` must not fail (it is the app's poll-on-open call), and the scan has
+ * real failure modes — an unmounted SSD, an unreadable manifest, a daemon that
+ * went away mid-call. Any of those means "cproj cannot tell what is orphaned",
+ * which is reported as an empty list, exactly as it reports no projects when
+ * the SSD is absent. `cproj volumes orphaned` is where the reason is raised.
+ */
+async function orphanedVolumes(ctx: Context, mounted: boolean, dockerAvailable: boolean) {
+  if (!mounted || !dockerAvailable) return []
+  try {
+    const scan = await scanVolumes(ctx)
+    return [...scan.orphans]
+  } catch {
+    return []
   }
 }
 

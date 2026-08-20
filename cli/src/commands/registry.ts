@@ -7,8 +7,8 @@
  * driven off one declaration rather than drifting apart.
  *
  * Commands land phase by phase — Phase 1 the read-only core, Phase 2 the
- * project lifecycle, Phase 3 services and port allocation — and the ones still
- * to come throw NOT_IMPLEMENTED. Nothing else about a command's declaration
+ * project lifecycle, Phase 3 services and port allocation, Phase 4 shell,
+ * volumes, down-all and eject. Nothing else about a command's declaration
  * changes when one is implemented: the usage, flags and error codes are the
  * frozen part.
  *
@@ -28,6 +28,14 @@ import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
 import { renderDelete, runDelete } from './delete.ts'
 import { renderBuild, runBuild } from './build.ts'
+import { renderShell, renderShellPrint, runShell } from './shell.ts'
+import {
+  collectOrphanedVolumes,
+  renderOrphanedVolumes,
+  renderVolumeRemove,
+  runVolumeRemove,
+} from './volumes.ts'
+import { renderDownAll, renderEject, runDownAll, runEject } from './ssd.ts'
 import {
   collectServiceList,
   renderServiceAdd,
@@ -291,8 +299,13 @@ export const COMMANDS: readonly CommandNode[] = [
     usage: 'shell <name> [--print]',
     summary: 'Resolve the dev container and RETURN the exec invocation. The CLI spawns no terminal.',
     flags: [{ name: '--print', description: 'Human mode: print the command to run.' }],
-    errors: ['PROJECT_NOT_FOUND', 'PROJECT_STOPPED'],
-    run: () => notImplemented('shell'),
+    errors: ['PROJECT_NOT_FOUND', 'PROJECT_STOPPED', 'DOCKER_UNAVAILABLE'],
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('shell'), 1)
+      // Same payload either way; `--print` only chooses the human renderer, so
+      // the machine contract cannot drift from the flag (§2).
+      return output(await runShell(createContext(), name), boolFlag(inv, 'print') ? renderShellPrint : renderShell)
+    },
   },
 
   // ── Volumes / disk ─────────────────────────────────────────────────────────
@@ -311,8 +324,13 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'volumes orphaned',
         summary: 'Volumes referenced by no current compose file, with sizes.',
         flags: [],
-        errors: ['DOCKER_UNAVAILABLE'],
-        run: () => notImplemented('volumes orphaned'),
+        // SSD_NOT_MOUNTED is not in §6's list but is a safety requirement:
+        // with no manifests to read, every volume would look reclaimable.
+        errors: ['SSD_NOT_MOUNTED', 'DOCKER_UNAVAILABLE'],
+        run: async (inv) => {
+          noArgs(inv, 'volumes orphaned')
+          return output(await collectOrphanedVolumes(createContext()), renderOrphanedVolumes)
+        },
       },
       {
         path: ['volumes', 'rm'],
@@ -320,8 +338,14 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'volumes rm <name> [--force]',
         summary: 'Remove one orphaned volume. Confirms unless --force. Destroys data.',
         flags: [{ name: '--force', description: 'Skip the confirmation prompt.' }],
-        errors: ['VOLUME_IN_USE', 'DOCKER_UNAVAILABLE'],
-        run: () => notImplemented('volumes rm'),
+        errors: ['SSD_NOT_MOUNTED', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
+        run: async (inv) => {
+          const [name] = exactArgs(inv, byPath('volumes rm'), 1)
+          return output(
+            await runVolumeRemove(createContext(), { name, force: boolFlag(inv, 'force'), json: inv.json }),
+            renderVolumeRemove,
+          )
+        },
       },
     ],
   },
@@ -334,7 +358,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'Stop and remove all cproj containers.',
     flags: [],
     errors: ['DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('down-all'),
+    run: async (inv) => {
+      noArgs(inv, 'down-all')
+      return output(await runDownAll(createContext()), renderDownAll)
+    },
   },
   {
     path: ['eject'],
@@ -343,7 +370,10 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'down-all, check host holders via lsof, then eject the SSD. Never forces.',
     flags: [],
     errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'DOCKER_UNAVAILABLE'],
-    run: () => notImplemented('eject'),
+    run: async (inv) => {
+      noArgs(inv, 'eject')
+      return output(await runEject(createContext()), renderEject)
+    },
   },
   {
     path: ['doctor'],

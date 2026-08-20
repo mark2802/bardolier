@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/down-all.schema.json",
+  "title": "cproj down-all output",
+  "description": "Every cproj container stopped. cli-spec.md §6 (Lifecycle / SSD). Data always persists. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projects", "stopped", "stray_containers", "docker_available"],
+  "properties": {
+    "projects": {
+      "type": "array",
+      "description": "Every discovered project, sorted by name.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "was_running"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "was_running": { "type": "boolean" }
+        }
+      }
+    },
+    "stopped": {
+      "type": "array",
+      "description": "Names of the projects actually stopped by this call, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "stray_containers": {
+      "type": "array",
+      "description": "cproj-* containers removed that no manifest claims — residue of a deleted project.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "docker_available": {
+      "type": "boolean",
+      "description": "False when the daemon was unreachable; nothing can be running then, so that is a no-op success."
+    }
+  }
+}

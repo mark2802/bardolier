@@ -92,7 +92,7 @@
         "size_human": { "type": "string", "minLength": 1 },
         "last_project": {
           "type": ["string", "null"],
-          "description": "Owning project inferred from the volume name, or null when it can't be attributed."
+          "description": "Owning project, from the volume's cproj.project label, or null when it can't be attributed."
         }
       }
     }

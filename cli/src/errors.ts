@@ -35,6 +35,8 @@ const EXTENDED_ERROR_CODES = [
   'NOT_IMPLEMENTED',
   /** Config file or service catalogue present but unparseable/invalid. */
   'CONFIG_INVALID',
+  /** `volumes rm` was given a name Docker does not have. Distinct from VOLUME_IN_USE. */
+  'VOLUME_NOT_FOUND',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
 ] as const

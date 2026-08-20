@@ -113,6 +113,9 @@ bash test/phase0-done-check.sh   # Phase 0 regression check
 bash test/phase1-done-check.sh   # Phase 1 regression check (runs Phase 0's too)
 bash test/phase2-done-check.sh   # Phase 2 regression check (runs 0 and 1 too)
 bash test/phase3-done-check.sh   # Phase 3 regression check (runs 0-2 too)
+bash test/phase4-done-check.sh   # Phase 4 regression check (runs 0-3 too) — the
+                                 # contract-freeze gate: schemas are additive-only
+                                 # from here
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -139,6 +142,11 @@ that `test/contracts.test.ts` checks against the code:
 | `service add` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-add.schema.json` |
 | `service remove` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-remove.schema.json` |
 | `service list` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-list.schema.json` |
+| `shell` output (§6) | `cli/src/model/shell.ts` | `cli/schema/shell.schema.json` |
+| `volumes orphaned` output (§6) | `cli/src/model/volumes.ts` | `cli/schema/volumes-orphaned.schema.json` |
+| `volumes rm` output (§6) | `cli/src/model/volumes.ts` | `cli/schema/volumes-rm.schema.json` |
+| `down-all` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/down-all.schema.json` |
+| `eject` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/eject.schema.json` |
 
 Commands are declared in `cli/src/commands/registry.ts` and return a payload
 plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
@@ -147,9 +155,10 @@ must never write to stdout itself — that is what keeps the §2 guarantee that
 
 **The outside world reaches commands through one seam.** A command takes a
 `Context` (`cli/src/context.ts`) carrying the loaded config, a `Docker` handle,
-a deferred catalogue loader, a host-port probe, a confirmation prompt, a host
-UID/GID, and the clock — it never reads `process.env`, spawns `docker`, binds a
-socket, prompts, or hard-codes the SSD path itself. That is what lets the whole
+a deferred catalogue loader, a host-port probe, an `SsdDevice` (`lsof` +
+`diskutil`, `cli/src/device.ts`), a confirmation prompt, a host UID/GID, and the
+clock — it never reads `process.env`, spawns `docker` or `lsof`, binds a socket,
+prompts, or hard-codes the SSD path itself. That is what lets the whole
 CLI, mutations included, be tested with a temp dir for the SSD and stubs for the
 rest (`test/helpers.ts`). Anything with an observable side effect belongs on the
 Context, or the tests stop being honest. Config is read from
@@ -175,6 +184,23 @@ search starts at the catalogue's `host_port_base` and is bounded to keep bands
 readable (§5). `cli/src/services.ts` joins manifest to catalogue to describe an
 attachment; `status` and `service list` both go through it, so they cannot
 describe the same attachment differently.
+
+**An orphan is derived, never recorded.** `cli/src/volumes.ts` asks the
+manifests under `$SSD_ROOT` what is still claimed — by resolved volume name, and
+by the `cproj.project`/`cproj.service` labels the generated compose file writes
+— and everything else this tool made is reclaimable. There is no orphan
+registry to desync. Because being wrong here destroys data, the scan refuses
+(SSD_NOT_MOUNTED, CONFIG_INVALID) when it cannot read the manifests rather than
+calling every volume an orphan; `status` catches that and reports an empty list,
+because `status` must never fail.
+
+**`eject` never forces.** It stops containers, asks `lsof` who still holds the
+volume, then unmounts — and a held volume is `EJECT_BLOCKED` carrying `holders`
+for the app to render. The one exception to "report every holder" is the
+container runtime's own descriptors (`isRuntimeHolder`), which Docker Desktop
+keeps open on bind-mounted paths after its containers stop; listing those would
+make "quit Docker" the standing answer to every eject. If the volume genuinely
+will not go, `diskutil`'s own refusal is reported as it came.
 
 **Base images live in `cli/images/<image>/Dockerfile`** and are built by
 `cproj build`, which passes `HOST_UID`/`HOST_GID` so files the dev container

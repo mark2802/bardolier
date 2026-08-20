@@ -30,6 +30,7 @@
             "INVALID_ARGUMENT",
             "NOT_IMPLEMENTED",
             "CONFIG_INVALID",
+            "VOLUME_NOT_FOUND",
             "INTERNAL_ERROR"
           ]
         },

@@ -3,9 +3,10 @@
  *
  * Fakes stand in for everything outside the process: a temp directory in place
  * of the SSD, a scripted Docker, a scripted port probe, a scripted confirmation
- * prompt and a frozen clock. Together they let the whole CLI — including the
- * Phase 2 mutations — be exercised on a machine with no SSD and no daemon,
- * which is the point of the seams in `src/context.ts`.
+ * prompt, a scripted SSD device and a frozen clock. Together they let the whole
+ * CLI — including the Phase 2 mutations and Phase 4's eject — be exercised on a
+ * machine with no SSD and no daemon, which is the point of the seams in
+ * `src/context.ts`.
  *
  * The Docker stub RECORDS what it was asked to do (`docker.calls`). For the
  * lifecycle commands that is the assertion that matters: `down` must never pass
@@ -19,7 +20,8 @@ import { stringify as stringifyYaml } from 'yaml'
 
 import type { Context, ContextOptions } from '../cli/src/context.ts'
 import { createContext } from '../cli/src/context.ts'
-import type { BuildRequest, ComposeTarget, Docker, DockerContainer, DockerImage } from '../cli/src/docker.ts'
+import type { BuildRequest, ComposeTarget, Docker, DockerContainer, DockerImage, DockerVolume } from '../cli/src/docker.ts'
+import type { Holder, SsdDevice } from '../cli/src/device.ts'
 import type { ProjectManifest } from '../cli/src/model/project.ts'
 import type { PortProbe } from '../cli/src/ports.ts'
 import type { Confirm } from '../cli/src/confirm.ts'
@@ -101,12 +103,26 @@ export function manifest(name: string, overrides: Partial<ProjectManifest> = {})
   }
 }
 
+/**
+ * A volume in the stub. A bare string is a volume with no labels and no known
+ * size — what a hand-made `docker volume create` looks like. The object form is
+ * what the generated compose file produces: our labels, and a size Docker can
+ * measure.
+ */
+export type StubVolume = {
+  readonly name: string
+  /** Usually `{ 'cproj.project': 'myapp', 'cproj.service': 'postgres' }` (§9). */
+  readonly labels?: Readonly<Record<string, string>>
+  /** Omitted = Docker could not measure it, which is reported as unknown. */
+  readonly size_bytes?: number
+}
+
 export type StubDockerOptions = {
   readonly available?: boolean
   /** Container names treated as running; labels/image are rarely relevant here. */
   readonly running?: readonly string[]
   readonly images?: readonly string[]
-  readonly volumes?: readonly string[]
+  readonly volumes?: readonly (string | StubVolume)[]
   /** Volume names `removeVolume` should reject with VOLUME_IN_USE. */
   readonly volumesInUse?: readonly string[]
   /**
@@ -122,6 +138,7 @@ export type DockerCall =
   | { readonly kind: 'down'; readonly target: ComposeTarget }
   | { readonly kind: 'build'; readonly request: BuildRequest }
   | { readonly kind: 'removeVolume'; readonly name: string }
+  | { readonly kind: 'removeContainer'; readonly name: string }
 
 export type StubDocker = Docker & {
   /** Mutations in the order they were requested. */
@@ -133,7 +150,11 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
   const available = options.available ?? true
   const calls: DockerCall[] = []
   let running = new Set(options.running ?? [])
-  const volumes = new Set(options.volumes ?? [])
+  const volumes = new Map<string, StubVolume>()
+  for (const entry of options.volumes ?? []) {
+    const volume = typeof entry === 'string' ? { name: entry } : entry
+    volumes.set(volume.name, volume)
+  }
   const inUse = new Set(options.volumesInUse ?? [])
 
   const fail = async (): Promise<never> => {
@@ -154,7 +175,20 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
       ? async (): Promise<readonly DockerImage[]> =>
           (options.images ?? []).map((repository) => ({ repository, tag: 'latest' }))
       : fail,
-    volumeNames: available ? async () => [...volumes] : fail,
+    volumeNames: available ? async () => [...volumes.keys()] : fail,
+    volumes: available
+      ? async (): Promise<readonly DockerVolume[]> =>
+          [...volumes.values()].map((volume) => ({ name: volume.name, labels: volume.labels ?? {} }))
+      : fail,
+    volumeSizes: available
+      ? async () => {
+          const sizes = new Map<string, number>()
+          for (const volume of volumes.values()) {
+            if (volume.size_bytes !== undefined) sizes.set(volume.name, volume.size_bytes)
+          }
+          return sizes
+        }
+      : fail,
     refresh() {},
     async composeUp(target) {
       requireAvailable(`start ${target.project}`)
@@ -177,7 +211,47 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
       calls.push({ kind: 'removeVolume', name })
       volumes.delete(name)
     },
+    async removeContainer(name) {
+      requireAvailable(`remove container ${name}`)
+      calls.push({ kind: 'removeContainer', name })
+      running.delete(name)
+    },
   }
+}
+
+export type StubDevice = SsdDevice & {
+  /** Mount points passed to `eject`, in order. Empty means it never ejected. */
+  readonly ejected: string[]
+  /** Change who is holding the volume — a shell opened, or quit, mid-test. */
+  setHolders(holders: readonly Holder[]): void
+}
+
+/** An SSD that answers a scripted holder list instead of running `lsof`. */
+export function stubDevice(initial: readonly Holder[] = []): StubDevice {
+  let holders = [...initial]
+  const ejected: string[] = []
+  return {
+    ejected,
+    setHolders(next) {
+      holders = [...next]
+    },
+    async holders() {
+      return holders
+    },
+    async eject(mountPoint) {
+      if (holders.length > 0) {
+        // The real `diskutil` would refuse too; a stub that ejected anyway
+        // would let a bug in the ordering pass unnoticed.
+        throw new CprojError('EJECT_BLOCKED', `${mountPoint} is held by ${holders.length} process(es).`)
+      }
+      ejected.push(mountPoint)
+    },
+  }
+}
+
+/** A holder record with sensible defaults — tests usually care about one field. */
+export function holder(overrides: Partial<Holder> = {}): Holder {
+  return { pid: 4242, command: 'zsh', user: 'mark', paths: ['/tmp/ssd/claude-projects'], ...overrides }
 }
 
 /** A port probe that treats a named set of ports as squatted by someone else. */
@@ -216,6 +290,16 @@ export function makeContext(
     env: { CPROJ_SSD_ROOT: sandbox.root, ...env },
     docker,
     ports: stubPorts(),
+    // Ejecting is destructive and host-wide: a test that reaches the device
+    // without scripting one is a test that would have unmounted a real disk.
+    device: {
+      holders: async () => {
+        throw new Error('unexpected holder check: pass a stubDevice() to makeContext')
+      },
+      eject: async () => {
+        throw new Error('unexpected eject: pass a stubDevice() to makeContext')
+      },
+    },
     // Nothing in a test may block on a prompt: an unscripted question is a bug
     // in the test, not something to answer with a default.
     confirm: async (question) => {

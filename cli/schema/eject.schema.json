@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/eject.schema.json",
+  "title": "cproj eject output",
+  "description": "down-all, then a holder check, then diskutil eject. cli-spec.md §6 (Lifecycle / SSD). A held volume fails EJECT_BLOCKED with the same holder records in error.details.holders — it is never forced. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["volume", "ejected", "stopped", "holders"],
+  "properties": {
+    "volume": {
+      "type": "string",
+      "description": "The mount point that was ejected, e.g. /Volumes/ssd.",
+      "minLength": 1
+    },
+    "ejected": { "type": "boolean", "const": true },
+    "stopped": {
+      "type": "array",
+      "description": "Projects down-all stopped on the way, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "holders": {
+      "type": "array",
+      "description": "Always empty on success; populated in error.details.holders on EJECT_BLOCKED.",
+      "items": { "$ref": "#/$defs/holder" }
+    }
+  },
+  "$defs": {
+    "holder": {
+      "type": "object",
+      "description": "A process holding files open on the SSD, as lsof reports it. Rendered by the app on EJECT_BLOCKED (app-spec.md §10).",
+      "additionalProperties": false,
+      "required": ["pid", "command", "user", "paths"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 0 },
+        "command": { "type": "string", "minLength": 1 },
+        "user": { "type": ["string", "null"] },
+        "paths": {
+          "type": "array",
+          "description": "Paths under the volume it holds — enough to recognise, not a file listing.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/volumes-rm.schema.json",
+  "title": "cproj volumes rm output",
+  "description": "What reclaiming one orphaned volume destroyed. cli-spec.md §6 (Volumes / disk). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["volume", "removed", "size_bytes", "size_human", "last_project"],
+  "properties": {
+    "volume": { "type": "string", "minLength": 1 },
+    "removed": {
+      "type": "boolean",
+      "description": "False when the user declined the confirmation; nothing was touched."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "description": "Size at the moment of removal; 0 when Docker could not measure it.",
+      "minimum": 0
+    },
+    "size_human": { "type": "string", "minLength": 1 },
+    "last_project": { "type": ["string", "null"] }
+  }
+}

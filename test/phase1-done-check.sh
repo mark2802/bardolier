@@ -69,8 +69,14 @@ fi
 
 json_assert "$STATUS" 'Array.isArray(d.projects) && d.projects.length === 0' \
   && ok "projects is an empty array" || bad "projects is not empty"
-json_assert "$STATUS" 'Array.isArray(d.orphaned_volumes) && d.orphaned_volumes.length === 0' \
-  && ok "orphaned_volumes is an empty array" || bad "orphaned_volumes is not empty"
+# Phase 1 reported [] unconditionally; since Phase 4 this is derived from the
+# manifests and Docker's volumes, so a machine with leftover cproj volumes can
+# legitimately list some. What Phase 1 pinned is the SHAPE, and that every entry
+# is complete — not that the machine happens to be tidy.
+json_assert "$STATUS" 'Array.isArray(d.orphaned_volumes)' \
+  && ok "orphaned_volumes is an array" || bad "orphaned_volumes is not an array"
+json_assert "$STATUS" 'd.orphaned_volumes.every(v => typeof v.name === "string" && typeof v.size_bytes === "number" && typeof v.size_human === "string" && "last_project" in v)' \
+  && ok "every orphan carries name, size and attribution (§7)" || bad "an orphan entry is incomplete"
 json_assert "$STATUS" 'd.ssd.mounted === true' \
   && ok "ssd.mounted is true for a readable root" || bad "ssd.mounted should be true"
 json_assert "$STATUS" 'typeof d.docker.available === "boolean"' \

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/volumes-orphaned.schema.json",
+  "title": "cproj volumes orphaned output",
+  "description": "Named volumes no current project manifest claims, with sizes. cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orphaned", "total_bytes", "total_human"],
+  "properties": {
+    "orphaned": {
+      "type": "array",
+      "description": "Reclaimable volumes, sorted by name.",
+      "items": { "$ref": "#/$defs/orphanedVolume" }
+    },
+    "total_bytes": {
+      "type": "integer",
+      "description": "Sum of size_bytes — what reclaiming all of them would free.",
+      "minimum": 0
+    },
+    "total_human": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "orphanedVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "size_bytes", "size_human", "last_project"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "size_human": { "type": "string", "minLength": 1 },
+        "last_project": {
+          "type": ["string", "null"],
+          "description": "Owning project, from the volume's cproj.project label, or null when it can't be attributed."
+        }
+      }
+    }
+  }
+}

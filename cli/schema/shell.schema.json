@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/shell.schema.json",
+  "title": "cproj shell output",
+  "description": "The exec invocation for a running project's dev container. cli-spec.md §6 (Shell). The CLI names the command; the app spawns the terminal. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "container", "exec", "workdir"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "container": {
+      "type": "string",
+      "description": "The running dev container, e.g. cproj-myapp.",
+      "minLength": 1
+    },
+    "exec": {
+      "type": "array",
+      "description": "Argv to run verbatim — an array, not a string, so the app needs no quoting and no shell.",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Where the shell lands inside the container: the bind-mounted project directory.",
+      "minLength": 1
+    }
+  }
+}

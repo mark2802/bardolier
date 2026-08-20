@@ -1,9 +1,13 @@
 /**
- * Phase 0 contract tests.
+ * Contract tests — every command's payload against the schema that documents it.
  *
  * These guard the things the app will depend on from Phase 5 onward: the status
- * schema, the manifest schema, the catalogue, and the error-code list. They are
- * the machine half of the done-check — `test/phase0-done-check.sh` runs them.
+ * schema, the manifest schema, the catalogue, the error-code list, and from
+ * Phase 4 the rest of §6's surface. They are the machine half of the
+ * done-checks — `test/phase0-done-check.sh` onward run them.
+ *
+ * Phase 4 is the contract-freeze gate: once it passes, every schema here is
+ * additive-only.
  */
 
 import { test, describe } from 'node:test'
@@ -28,6 +32,9 @@ import type {
   ServiceListOutput,
   ServiceRemoveOutput,
 } from '../cli/src/model/service.ts'
+import type { ShellOutput } from '../cli/src/model/shell.ts'
+import type { OrphanedVolume, VolumesOrphanedOutput, VolumesRemoveOutput } from '../cli/src/model/volumes.ts'
+import type { DownAllOutput, EjectHolder, EjectOutput } from '../cli/src/model/ssd.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 const readText = (p: string) => readFileSync(repo(p), 'utf8')
@@ -374,7 +381,8 @@ describe('command surface (cli-spec.md §6)', () => {
   const names = leaves.map((c) => c.path.join(' '))
   /**
    * Commands with real behaviour. Phase 1: read-only core. Phase 2: lifecycle.
-   * Phase 3: services and port allocation.
+   * Phase 3: services and port allocation. Phase 4: shell, volumes, down-all,
+   * eject — which completes §6, so this set is now the whole surface.
    */
   const IMPLEMENTED = new Set([
     'status',
@@ -388,6 +396,11 @@ describe('command surface (cli-spec.md §6)', () => {
     'service add',
     'service remove',
     'service list',
+    'shell',
+    'volumes orphaned',
+    'volumes rm',
+    'down-all',
+    'eject',
   ])
 
   test('declares every command in §6', () => {
@@ -441,25 +454,10 @@ describe('command surface (cli-spec.md §6)', () => {
 
   test('the implemented set matches the phases landed so far', () => {
     // Phase 1 was the read-only core; Phase 2 the project lifecycle; Phase 3
-    // services and ports. Phase 4 adds shell, volumes, down-all and eject.
-    // Update this list as each phase lands so an accidentally-live command
-    // can't slip through.
-    assert.deepEqual(
-      [...IMPLEMENTED].sort(),
-      [
-        'build',
-        'delete',
-        'doctor',
-        'down',
-        'list',
-        'new',
-        'service add',
-        'service list',
-        'service remove',
-        'status',
-        'up',
-      ],
-    )
+    // services and ports; Phase 4 shell, volumes, down-all and eject. With
+    // Phase 4 landed this equals the declared surface — §6 is complete, and
+    // that equality is the contract-freeze gate.
+    assert.deepEqual([...IMPLEMENTED].sort(), [...names].sort())
     for (const name of IMPLEMENTED) {
       assert.ok(names.includes(name), `${name} is not a declared command`)
     }
@@ -475,5 +473,110 @@ describe('archetypes (cli-spec.md §4.3)', () => {
     for (const archetype of ARCHETYPES) {
       assert.ok(schema.properties.base_image.enum.includes(ARCHETYPE_BASE_IMAGE[archetype]))
     }
+  })
+})
+
+describe('shell contract (cli-spec.md §6, Shell)', () => {
+  test('the typed model satisfies shell.schema.json', () => {
+    const shell: ShellOutput = {
+      project: 'myapp',
+      container: 'cproj-myapp',
+      exec: ['docker', 'exec', '-it', 'cproj-myapp', 'bash'],
+      workdir: '/work',
+    }
+    assert.ok(validate('shell', shell).valid)
+  })
+
+  test('`exec` is argv, never a command string — the app runs it without a shell', () => {
+    const asString = { project: 'myapp', container: 'cproj-myapp', exec: 'docker exec -it cproj-myapp bash', workdir: '/work' }
+    assert.equal(validate('shell', asString).valid, false)
+    const empty = { project: 'myapp', container: 'cproj-myapp', exec: [], workdir: '/work' }
+    assert.equal(validate('shell', empty).valid, false)
+  })
+})
+
+describe('volumes contracts (cli-spec.md §6, Volumes / disk)', () => {
+  const orphan: OrphanedVolume = {
+    name: 'oldapp_pgdata',
+    size_bytes: 20971520,
+    size_human: '20 MB',
+    last_project: 'oldapp',
+  }
+
+  test('the orphan row is identical in status and volumes-orphaned', () => {
+    const fromStatus = (loadSchema('status') as { $defs: { orphanedVolume: unknown } }).$defs.orphanedVolume
+    const fromVolumes = (loadSchema('volumes-orphaned') as { $defs: { orphanedVolume: unknown } }).$defs.orphanedVolume
+    assert.deepEqual(fromVolumes, fromStatus, 'the duplicated $defs blocks have drifted apart')
+  })
+
+  test('the typed models satisfy the schemas they are mirrored by', () => {
+    const orphaned: VolumesOrphanedOutput = { orphaned: [orphan], total_bytes: 20971520, total_human: '20 MB' }
+    assert.ok(validate('volumes-orphaned', orphaned).valid)
+
+    const removed: VolumesRemoveOutput = {
+      volume: 'oldapp_pgdata',
+      removed: true,
+      size_bytes: 20971520,
+      size_human: '20 MB',
+      last_project: 'oldapp',
+    }
+    assert.ok(validate('volumes-rm', removed).valid)
+  })
+
+  test('nothing to reclaim is a valid answer, not an absent one', () => {
+    assert.ok(validate('volumes-orphaned', { orphaned: [], total_bytes: 0, total_human: '0 B' }).valid)
+  })
+
+  test('an unattributable volume may report a null last_project', () => {
+    const anonymous = { ...orphan, last_project: null }
+    assert.ok(validate('volumes-orphaned', { orphaned: [anonymous], total_bytes: 0, total_human: '0 B' }).valid)
+    const { name, ...rest } = anonymous
+    assert.ok(validate('volumes-rm', { ...rest, volume: name, removed: false }).valid)
+  })
+
+  test('rejects a row missing its size — the whole point of the listing', () => {
+    const bad = { orphaned: [{ name: 'x', size_human: '1 MB', last_project: null }], total_bytes: 0, total_human: '0 B' }
+    assert.equal(validate('volumes-orphaned', bad).valid, false)
+  })
+})
+
+describe('down-all and eject contracts (cli-spec.md §6, Lifecycle / SSD)', () => {
+  test('the typed models satisfy the schemas they are mirrored by', () => {
+    const downAll: DownAllOutput = {
+      projects: [
+        { name: 'alpha', was_running: true },
+        { name: 'beta', was_running: false },
+      ],
+      stopped: ['alpha'],
+      stray_containers: ['cproj-ghost'],
+      docker_available: true,
+    }
+    assert.ok(validate('down-all', downAll).valid)
+
+    const eject: EjectOutput = { volume: '/Volumes/ssd', ejected: true, stopped: ['alpha'], holders: [] }
+    assert.ok(validate('eject', eject).valid)
+  })
+
+  test('a daemon-less down-all is a no-op success, not a failure', () => {
+    const offline: DownAllOutput = { projects: [], stopped: [], stray_containers: [], docker_available: false }
+    assert.ok(validate('down-all', offline).valid)
+  })
+
+  test('`ejected` cannot be false — a refusal is EJECT_BLOCKED, not a payload', () => {
+    assert.equal(validate('eject', { volume: '/Volumes/ssd', ejected: false, stopped: [], holders: [] }).valid, false)
+  })
+
+  test('the EJECT_BLOCKED envelope carries holders the app can render (§13)', () => {
+    const holders: EjectHolder[] = [{ pid: 431, command: 'Xcode', user: 'mark', paths: ['/Volumes/ssd/claude-projects'] }]
+    const payload = new CprojError('EJECT_BLOCKED', 'The SSD is held.', { holders }).toPayload()
+    assert.ok(validate('error', payload).valid)
+    assert.deepEqual(payload.error.details?.holders, holders)
+    // The same shape the success payload declares, so the app decodes one type.
+    assert.ok(validate('eject', { volume: '/Volumes/ssd', ejected: true, stopped: [], holders }).valid)
+  })
+
+  test('a holder with an unknown user is still a holder', () => {
+    const holder = { pid: 1, command: 'launchd', user: null, paths: [] }
+    assert.ok(validate('eject', { volume: '/Volumes/ssd', ejected: true, stopped: [], holders: [holder] }).valid)
   })
 })
