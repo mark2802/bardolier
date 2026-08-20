@@ -22,6 +22,12 @@ import { renderRootHelp } from '../cli/src/render/human.ts'
 import type { Status } from '../cli/src/model/status.ts'
 import type { ProjectManifest } from '../cli/src/model/project.ts'
 import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
+import type {
+  AttachedService,
+  ServiceAddOutput,
+  ServiceListOutput,
+  ServiceRemoveOutput,
+} from '../cli/src/model/service.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 const readText = (p: string) => readFileSync(repo(p), 'utf8')
@@ -233,6 +239,73 @@ describe('list contract (cli-spec.md §6)', () => {
   })
 })
 
+describe('service contracts (cli-spec.md §6, Services)', () => {
+  /** The one row shape shared by new/service-add/service-remove/service-list. */
+  const CARRIERS = ['new', 'service-add', 'service-remove', 'service-list'] as const
+
+  const attached: AttachedService = {
+    key: 'postgres',
+    display: 'PostgreSQL',
+    host_port: 5433,
+    container_port: 5432,
+    connection_hint: 'postgresql://localhost:5433',
+    volume: 'myapp_pgdata',
+  }
+
+  test('the attached-service block is identical in every schema that carries it', () => {
+    const blocks = CARRIERS.map((name) => {
+      const schema = loadSchema(name) as { $defs?: { attached_service?: unknown } }
+      assert.ok(schema.$defs?.attached_service, `${name}.schema.json has no $defs.attached_service`)
+      return JSON.stringify(schema.$defs.attached_service)
+    })
+    assert.equal(new Set(blocks).size, 1, 'the duplicated $defs blocks have drifted apart')
+  })
+
+  test('the typed model satisfies the schema it is mirrored by', () => {
+    const add: ServiceAddOutput = {
+      project: 'myapp',
+      added: attached,
+      services: [attached],
+      compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
+      compose_regenerated: true,
+    }
+    assert.ok(validate('service-add', add).valid)
+
+    const remove: ServiceRemoveOutput = {
+      project: 'myapp',
+      removed: { key: 'postgres', host_port: 5433, volume: 'myapp_pgdata' },
+      services: [],
+      compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
+      compose_regenerated: true,
+    }
+    assert.ok(validate('service-remove', remove).valid)
+
+    const list: ServiceListOutput = { project: 'myapp', services: [attached] }
+    assert.ok(validate('service-list', list).valid)
+  })
+
+  test('a detached service whose catalogue entry vanished may report a null volume', () => {
+    const remove = {
+      project: 'myapp',
+      removed: { key: 'kafka', host_port: 9092, volume: null },
+      services: [],
+      compose_path: '/tmp/docker-compose.yml',
+      compose_regenerated: true,
+    }
+    assert.ok(validate('service-remove', remove).valid)
+  })
+
+  test('a project with nothing attached is valid everywhere', () => {
+    assert.ok(validate('service-list', { project: 'bare', services: [] }).valid)
+  })
+
+  test('rejects a row missing its host port — the whole point of the record (§5)', () => {
+    const { key, display, container_port, connection_hint, volume } = attached
+    const bad = { project: 'myapp', services: [{ key, display, container_port, connection_hint, volume }] }
+    assert.equal(validate('service-list', bad).valid, false)
+  })
+})
+
 describe('config contract (cli-spec.md §8)', () => {
   test('every §8 key is accepted and every key is optional', () => {
     assert.ok(validate('config', {}).valid)
@@ -299,8 +372,23 @@ describe('error codes (cli-spec.md §2)', () => {
 describe('command surface (cli-spec.md §6)', () => {
   const leaves = walk(ROOT)
   const names = leaves.map((c) => c.path.join(' '))
-  /** Commands with real behaviour. Phase 1: read-only core. Phase 2: lifecycle. */
-  const IMPLEMENTED = new Set(['status', 'list', 'doctor', 'new', 'up', 'down', 'delete', 'build'])
+  /**
+   * Commands with real behaviour. Phase 1: read-only core. Phase 2: lifecycle.
+   * Phase 3: services and port allocation.
+   */
+  const IMPLEMENTED = new Set([
+    'status',
+    'list',
+    'doctor',
+    'new',
+    'up',
+    'down',
+    'delete',
+    'build',
+    'service add',
+    'service remove',
+    'service list',
+  ])
 
   test('declares every command in §6', () => {
     assert.deepEqual(names.sort(), [
@@ -352,10 +440,26 @@ describe('command surface (cli-spec.md §6)', () => {
   })
 
   test('the implemented set matches the phases landed so far', () => {
-    // Phase 1 was the read-only core; Phase 2 adds the project lifecycle.
-    // Phases 3-4 add services, shell, volumes and eject. Update this list as
-    // each phase lands so an accidentally-live command can't slip through.
-    assert.deepEqual([...IMPLEMENTED].sort(), ['build', 'delete', 'doctor', 'down', 'list', 'new', 'status', 'up'])
+    // Phase 1 was the read-only core; Phase 2 the project lifecycle; Phase 3
+    // services and ports. Phase 4 adds shell, volumes, down-all and eject.
+    // Update this list as each phase lands so an accidentally-live command
+    // can't slip through.
+    assert.deepEqual(
+      [...IMPLEMENTED].sort(),
+      [
+        'build',
+        'delete',
+        'doctor',
+        'down',
+        'list',
+        'new',
+        'service add',
+        'service list',
+        'service remove',
+        'status',
+        'up',
+      ],
+    )
     for (const name of IMPLEMENTED) {
       assert.ok(names.includes(name), `${name} is not a declared command`)
     }

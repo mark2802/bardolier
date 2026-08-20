@@ -7,9 +7,10 @@
  * driven off one declaration rather than drifting apart.
  *
  * Commands land phase by phase — Phase 1 the read-only core, Phase 2 the
- * project lifecycle — and the ones still to come throw NOT_IMPLEMENTED. Nothing
- * else about a command's declaration changes when one is implemented: the
- * usage, flags and error codes are the frozen part.
+ * project lifecycle, Phase 3 services and port allocation — and the ones still
+ * to come throw NOT_IMPLEMENTED. Nothing else about a command's declaration
+ * changes when one is implemented: the usage, flags and error codes are the
+ * frozen part.
  *
  * Every `run` here is a thin adapter: validate the shape of the invocation,
  * build a Context, call the command module, pair the payload with its human
@@ -27,6 +28,14 @@ import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
 import { renderDelete, runDelete } from './delete.ts'
 import { renderBuild, runBuild } from './build.ts'
+import {
+  collectServiceList,
+  renderServiceAdd,
+  renderServiceList,
+  renderServiceRemove,
+  runServiceAdd,
+  runServiceRemove,
+} from './service.ts'
 
 export const COMMAND_GROUPS = ['Projects', 'Services', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
@@ -243,7 +252,10 @@ export const COMMANDS: readonly CommandNode[] = [
         summary: 'Attach a service, assign its host port, regenerate compose.',
         flags: [],
         errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
-        run: () => notImplemented('service add'),
+        run: async (inv) => {
+          const [project, service] = exactArgs(inv, byPath('service add'), 2)
+          return output(await runServiceAdd(createContext(), { project, service }), renderServiceAdd)
+        },
       },
       {
         path: ['service', 'remove'],
@@ -252,7 +264,10 @@ export const COMMANDS: readonly CommandNode[] = [
         summary: 'Detach a service and release its port. KEEPS the volume — it becomes an orphan.',
         flags: [],
         errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'SERVICE_NOT_ATTACHED'],
-        run: () => notImplemented('service remove'),
+        run: async (inv) => {
+          const [project, service] = exactArgs(inv, byPath('service remove'), 2)
+          return output(await runServiceRemove(createContext(), { project, service }), renderServiceRemove)
+        },
       },
       {
         path: ['service', 'list'],
@@ -261,7 +276,10 @@ export const COMMANDS: readonly CommandNode[] = [
         summary: 'Attached services with their resolved host ports.',
         flags: [],
         errors: ['PROJECT_NOT_FOUND'],
-        run: () => notImplemented('service list'),
+        run: (inv) => {
+          const [project] = exactArgs(inv, byPath('service list'), 1)
+          return output(collectServiceList(createContext(), project), renderServiceList)
+        },
       },
     ],
   },

@@ -262,11 +262,13 @@ describe('new (cli-spec.md §6, §10)', () => {
     }
   })
 
-  test('--services defers to Phase 3 rather than silently dropping them', async () => {
+  test('a --services request that cannot be honoured creates nothing', async () => {
+    // The successful path is Phase 3's (test/phase3.test.ts); what matters here
+    // is that a rejected `new` leaves no half-made project behind.
     const box = sandbox()
     await assert.rejects(
-      () => runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: 'postgres' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'NOT_IMPLEMENTED',
+      () => runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: 'toaster' }),
+      (error: unknown) => error instanceof CprojError && error.code === 'SERVICE_UNKNOWN',
     )
     assert.ok(!box.exists('myapp'), 'nothing may be created when the request cannot be honoured')
   })

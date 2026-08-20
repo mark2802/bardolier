@@ -1,12 +1,12 @@
 /**
  * Host-port probing — the machine half of `cli-spec.md` §5.
  *
- * Phase 2 needs only the PROBE: at `up`, every host port recorded in the
- * manifest must still be bindable, or the project fails PORT_UNAVAILABLE with
- * the offending port named. §5 forbids a silent remap — the user's saved
- * connection strings are the reason.
+ * The probe answers one question: is this port bindable right now? `up` asks it
+ * of every host port recorded in the manifest, and fails PORT_UNAVAILABLE with
+ * the offending port named when the answer is no. §5 forbids a silent remap —
+ * the user's saved connection strings are the reason.
  *
- * The allocator that CHOOSES ports (Phase 3) will sit on top of this same
+ * The allocator that CHOOSES ports (`allocator.ts`) sits on top of this same
  * probe, which is why it is a Context seam rather than a bare function: tests
  * script the answers instead of racing real sockets.
  */

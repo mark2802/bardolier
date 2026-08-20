@@ -23,6 +23,9 @@ export const SCHEMA_NAMES = [
   'down',
   'delete',
   'build',
+  'service-add',
+  'service-remove',
+  'service-list',
 ] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]
 

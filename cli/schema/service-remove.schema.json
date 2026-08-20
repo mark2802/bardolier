@@ -1,36 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/new.schema.json",
-  "title": "cproj new output",
-  "description": "What `cproj new` created. cli-spec.md §6 (Projects), §10 (seeded files). Additive changes only once the app ships (Phase 5+).",
+  "$id": "https://cproj.local/schema/service-remove.schema.json",
+  "title": "cproj service remove output",
+  "description": "What `cproj service remove` detached. The data volume is KEPT and becomes a listed orphan. cli-spec.md §6 (Services), §5.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["project", "manifest_path", "compose_path", "seeded", "services"],
+  "required": ["project", "removed", "services", "compose_path", "compose_regenerated"],
   "properties": {
-    "project": {
+    "project": { "type": "string", "minLength": 1 },
+    "removed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "archetype", "base_image", "dir", "created"],
+      "required": ["key", "host_port", "volume"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
-        "base_image": { "type": "string", "enum": ["claude-web", "claude-ios", "claude-and"] },
-        "dir": { "type": "string", "minLength": 1 },
-        "created": { "type": "string", "format": "date-time" }
+        "key": { "type": "string", "minLength": 1 },
+        "host_port": {
+          "type": "integer",
+          "description": "Released — free for the next allocation (§5).",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "volume": {
+          "type": ["string", "null"],
+          "description": "The kept volume, or null when the catalogue no longer defines the service."
+        }
       }
-    },
-    "manifest_path": { "type": "string", "minLength": 1 },
-    "compose_path": { "type": "string", "minLength": 1 },
-    "seeded": {
-      "type": "array",
-      "description": "File names written per §10, in write order.",
-      "items": { "type": "string", "minLength": 1 }
     },
     "services": {
       "type": "array",
-      "description": "Services attached at creation by --services, sorted by key, each with the host port assigned to it (§5).",
+      "description": "Every service still attached, sorted by key.",
       "items": { "$ref": "#/$defs/attached_service" }
-    }
+    },
+    "compose_path": { "type": "string", "minLength": 1 },
+    "compose_regenerated": { "type": "boolean" }
   },
   "$defs": {
     "attached_service": {

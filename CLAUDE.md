@@ -112,6 +112,7 @@ npm run typecheck                # tsc --noEmit
 bash test/phase0-done-check.sh   # Phase 0 regression check
 bash test/phase1-done-check.sh   # Phase 1 regression check (runs Phase 0's too)
 bash test/phase2-done-check.sh   # Phase 2 regression check (runs 0 and 1 too)
+bash test/phase3-done-check.sh   # Phase 3 regression check (runs 0-2 too)
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -135,6 +136,9 @@ that `test/contracts.test.ts` checks against the code:
 | `down` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/down.schema.json` |
 | `delete` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/delete.schema.json` |
 | `build` output (§6) | `cli/src/model/build.ts` | `cli/schema/build.schema.json` |
+| `service add` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-add.schema.json` |
+| `service remove` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-remove.schema.json` |
+| `service list` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-list.schema.json` |
 
 Commands are declared in `cli/src/commands/registry.ts` and return a payload
 plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
@@ -160,6 +164,17 @@ loses. The §10 seeds (`.gitignore`, `.dockerignore`, project `CLAUDE.md`) are
 written once by `new` and are the user's from then on. Writing goes through
 `cli/src/workspace.ts`, which also skips the write when the bytes already match —
 that is what makes determinism observable rather than merely intended.
+
+**Ports are chosen in one place and written down in one place.**
+`cli/src/allocator.ts` picks a host port by scanning every manifest under
+`$SSD_ROOT` and then probing the host socket — a port is free only when both say
+so. The chosen port is persisted in the project's `project.yml` and never
+revisited: `up` re-probes and fails `PORT_UNAVAILABLE` naming the port rather
+than remapping it, because the user has connection strings saved against it. The
+search starts at the catalogue's `host_port_base` and is bounded to keep bands
+readable (§5). `cli/src/services.ts` joins manifest to catalogue to describe an
+attachment; `status` and `service list` both go through it, so they cannot
+describe the same attachment differently.
 
 **Base images live in `cli/images/<image>/Dockerfile`** and are built by
 `cproj build`, which passes `HOST_UID`/`HOST_GID` so files the dev container

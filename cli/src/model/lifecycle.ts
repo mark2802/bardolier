@@ -9,6 +9,7 @@
  */
 
 import type { Archetype, BaseImage } from './archetype.ts'
+import type { AttachedService } from './service.ts'
 import type { ProjectState } from './status.ts'
 
 export type NewProject = {
@@ -27,8 +28,11 @@ export type NewOutput = {
   compose_path: string
   /** File names seeded per §10, in the order they were written. */
   seeded: string[]
-  /** Catalogue keys attached at creation. Empty until Phase 3 lands `--services`. */
-  services: string[]
+  /**
+   * Services attached at creation by `--services`, sorted by key, each with the
+   * host port the allocator assigned it (§5). Empty without the flag.
+   */
+  services: AttachedService[]
 }
 
 /** What `up` published. Mirrors the §7 service fields the app needs immediately. */

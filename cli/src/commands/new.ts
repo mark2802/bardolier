@@ -19,6 +19,10 @@ import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetyp
 import type { Archetype } from '../model/archetype.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { NewOutput } from '../model/lifecycle.ts'
+import type { AttachedService } from '../model/service.ts'
+import { allocatePorts } from '../allocator.ts'
+import { describeService } from '../services.ts'
+import { parseServiceList, resolveServices } from './service.ts'
 import { seededFiles } from '../scaffold.ts'
 import { probeSsd } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, writeManifest } from '../workspace.ts'
@@ -30,7 +34,7 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
 export type NewRequest = {
   readonly name: string | undefined
   readonly archetype: string | undefined
-  /** Raw `--services a,b`. Port assignment lands in Phase 3. */
+  /** Raw `--services a,b`; ports are assigned now, at creation (§5, §6). */
   readonly services: string | undefined
 }
 
@@ -59,16 +63,6 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   const name = requireName(request.name)
   const archetype = requireArchetype(request.archetype)
 
-  if (request.services !== undefined) {
-    // The flag is part of the frozen §6 surface, but honouring it needs the
-    // port allocator. Refusing is better than creating a project whose
-    // manifest quietly lacks the services the user asked for.
-    throw new CprojError(
-      'NOT_IMPLEMENTED',
-      '`cproj new --services` needs the port allocator, which lands in Phase 3. Create the project, then `cproj service add`.',
-    )
-  }
-
   const ssd = probeSsd(ctx.config)
   if (!ssd.mounted) {
     throw new CprojError(
@@ -82,11 +76,30 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     throw new CprojError('PROJECT_EXISTS', `\`${name}\` already exists at ${dir}.`)
   }
 
+  // Everything that can fail happens before the directory exists: an unknown
+  // service key or an exhausted port band must leave nothing behind (§5, §6).
+  const requested = request.services === undefined ? [] : parseServiceList(request.services)
+  const catalogue = requested.length > 0 ? ctx.catalogue().catalogue : null
+  const definitions = catalogue ? resolveServices(catalogue, requested) : []
+
   const manifest: ProjectManifest = {
     name,
     archetype,
     base_image: ARCHETYPE_BASE_IMAGE[archetype],
     created: ctx.now().toISOString(),
+  }
+
+  const attached: AttachedService[] = []
+  if (definitions.length > 0) {
+    const allocated = await allocatePorts(ctx, name, definitions)
+    const services: Record<string, { host_port: number }> = {}
+    for (const { key, definition } of definitions) {
+      const hostPort = allocated.get(key)
+      if (hostPort === undefined) throw new CprojError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
+      services[key] = { host_port: hostPort }
+      attached.push(describeService(name, key, definition, hostPort))
+    }
+    manifest.services = services
   }
 
   // Validate before writing: a manifest that fails its own schema would be
@@ -105,28 +118,39 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     seeded.push(file.name)
   }
 
-  // No services yet, so the catalogue is not consulted — `new` works with a
-  // broken catalogue, which `doctor` is the right place to complain about.
-  regenerateCompose(dir, manifest, null)
+  // Without `--services` the catalogue is never consulted, so `new` still works
+  // with a broken one — `doctor` is the right place to complain about that.
+  regenerateCompose(dir, manifest, catalogue)
 
   return {
     project: { name, archetype, base_image: manifest.base_image, dir, created: manifest.created },
     manifest_path: manifestPath(dir),
     compose_path: composePath(dir),
     seeded,
-    services: [],
+    services: attached,
   }
 }
 
 export function renderNew(output: NewOutput): string[] {
   const { project } = output
-  return [
+  const lines = [
     `Created ${project.name} [${project.archetype}] at ${project.dir}`,
     `  manifest: ${output.manifest_path}`,
     `  compose:  ${output.compose_path}  (generated — do not edit)`,
     `  seeded:   ${output.seeded.join(', ')}`,
-    '',
-    `Next: cproj service add ${project.name} postgres   # attach a service`,
-    `      cproj up ${project.name}`,
   ]
+  if (output.services.length > 0) {
+    lines.push('  services:')
+    for (const service of output.services) {
+      lines.push(`    ${service.display} (${service.key})  host :${service.host_port} → :${service.container_port}   ${service.connection_hint}`)
+    }
+  }
+  lines.push('')
+  if (output.services.length === 0) {
+    lines.push(`Next: cproj service add ${project.name} postgres   # attach a service`)
+    lines.push(`      cproj up ${project.name}`)
+  } else {
+    lines.push(`Next: cproj up ${project.name}`)
+  }
+  return lines
 }
