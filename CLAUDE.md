@@ -116,6 +116,9 @@ bash test/phase3-done-check.sh   # Phase 3 regression check (runs 0-2 too)
 bash test/phase4-done-check.sh   # Phase 4 regression check (runs 0-3 too) — the
                                  # contract-freeze gate: schemas are additive-only
                                  # from here
+bash test/phase5-done-check.sh   # Phase 5: the app's models against the frozen
+                                 # schemas, plus 0-4. Its other half is manual,
+                                 # in Xcode; the script prints that checklist
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -208,7 +211,25 @@ writes into the bind-mounted `/work` come back owned by the Mac user. The
 `claude-ios` and `claude-and` images land in Phase 8; until then `build` reports
 them `unavailable` rather than failing.
 
+**The app reads the contract; it never re-derives it.** The Swift client lives
+in `app/claude-yard/claude-yard/Cproj/` — `CprojClient` builds argv, appends
+`--json` itself (no caller may), runs the binary, and turns a non-zero exit into
+`CprojFailure.cli` carrying the stable §2 code. `CprojModels.swift` mirrors
+`cli/schema/*.json` one struct per schema object; closed string enums decode as
+open tokens so an additive schema change cannot break an older build. Because
+Xcode is host-only and nothing in this repo compiles that Swift,
+`test/app-models.test.ts` reads it as text and holds it to the same schemas in
+both directions — a required field missed, a field invented, an error code the
+CLI cannot emit, or a `Process` spawned outside the client all fail there rather
+than in the menu bar. A GUI app inherits no shell `PATH`, so
+`CprojExecutable.swift` locates `cproj` and hands the child a `PATH` that can
+find `node`, `docker`, `lsof` and `diskutil`; that is the only environment
+knowledge in Swift.
+
 - App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1.
+  Both are build settings the human sets in Xcode (`app/README.md`); the target
+  uses a synchronized folder group, so `.swift` files written to disk are in the
+  build without an "Add Files to target" step.
 
 ## Definition of done (per phase)
 
