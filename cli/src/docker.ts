@@ -109,6 +109,14 @@ export type Docker = {
   composeDown(target: ComposeTarget): Promise<void>
   /** `docker build` with host UID/GID build args. */
   build(request: BuildRequest): Promise<void>
+  /**
+   * Create a named volume if it is not there yet, with these labels.
+   *
+   * Idempotent, and deliberately not Compose's job: the toolchain cache is
+   * shared by every project on one base image, so the generated compose file
+   * declares it `external` and this is what makes it exist (`images.ts`).
+   */
+  ensureVolume(name: string, labels: Readonly<Record<string, string>>): Promise<void>
   /** Remove one named volume. Throws VOLUME_IN_USE when a container holds it. */
   removeVolume(name: string): Promise<void>
   /** `docker rm --force` one container by name. Used by `down-all` to sweep strays. */
@@ -323,6 +331,18 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
       }
       args.push(request.context)
       await ok(args, `build ${request.tag}`, MUTATION_TIMEOUT_MS)
+      docker.refresh()
+    },
+
+    async ensureVolume(name, labels) {
+      // `docker volume create` on a volume that already exists is a no-op that
+      // returns its name — so this needs no "does it exist" round trip, and two
+      // `up`s racing cannot produce two volumes.
+      const args: string[] = ['volume', 'create']
+      // Sorted, for the same reason `build` sorts its build args: one argv.
+      for (const key of Object.keys(labels).sort()) args.push('--label', `${key}=${labels[key]}`)
+      args.push(name)
+      await ok(args, `create volume ${name}`)
       docker.refresh()
     },
 

@@ -268,6 +268,23 @@ started on another either fails or silently pulls a different image. Every other
 image builds for whatever the Mac is, and emits no `platform:` key — an unpinned
 project's generated compose file must not change.
 
+**The Gradle cache is shared, and it is not project data.** `GRADLE_USER_HOME`
+in `claude-and` is `/cache/gradle` — a named volume (`cproj-gradle-cache`)
+mounted into every android dev container, not a directory under the project's
+bind mount. The Android Gradle Plugin and its transitive world are hundreds of
+megabytes, identical for every project and re-downloadable at will: exactly the
+kind of thing the disk-frugality rule keeps once, on the internal disk beside
+the image layers, rather than once per project on the SSD. `IMAGE_CACHE` in
+`cli/src/images.ts` is again the single constant, and three readers must agree
+with it — the Dockerfile's `ENV` (asserted in `test/phase8.test.ts`, because a
+Gradle writing elsewhere still works and merely re-downloads), the mount
+`compose.ts` writes, and `up`, which creates the volume. Compose is given
+`external: true` so it neither creates the volume nor stamps the first
+project's labels on something every project shares. The scan in `volumes.ts`
+knows it by its `cproj.role: cache` label: claimed while any manifest names
+that base image, reclaimable once none does, and never destroyed by
+`delete --purge`, which takes only what a project owns.
+
 **Two commands exist because the app asked, not because §6 named them.**
 `cproj catalogue` and `cproj config get|set` are Phase 6 additions under §1's
 rule that "if the app needs something, a CLI command grows to provide it". The

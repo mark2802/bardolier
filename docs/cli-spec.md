@@ -125,6 +125,16 @@ Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
 that one image runs emulated. The pin lives in `cli/src/images.ts` and is read
 by both `build` and compose generation (§9), which must agree.
 
+`claude-and` also carries a SHARED dependency cache: `GRADLE_USER_HOME` is
+`/cache/gradle`, a named volume (`cproj-gradle-cache`) mounted into every
+android dev container rather than a directory under the project's bind mount.
+The Android Gradle Plugin and its transitive dependencies are hundreds of
+megabytes of rebuildable data that is identical for every project, so it is kept
+once, on the internal disk beside the image layers, and off the SSD. Declared in
+`cli/src/images.ts` (`IMAGE_CACHE`) and read by compose generation (§9), `up`
+(which creates the volume) and the volume scan (§6), which treats it as claimed
+while any project's manifest names that base image.
+
 ## 5. Port allocation (first-class)
 
 Requirements, in priority order:
@@ -284,6 +294,12 @@ Schema stability is the contract. Additive changes only once the app ships.
   `sleep infinity`; plus `platform:` when the archetype's base image is pinned
   to one architecture (§4.3), so it starts the way `build` built it. The key is
   absent otherwise — an unpinned project's generated file must not change.
+- Dev container, cont.: plus the base image's shared toolchain cache volume
+  (§4.3) when it declares one, mounted at the image's own path. It is declared
+  `external: true` so Compose neither creates nor claims a volume every project
+  on that image shares — `up` creates it, labelled `cproj.role: cache`. Both
+  keys are absent for an image with no cache, for the same reason `platform:`
+  is: an existing project's generated file must not change.
 - Services: image from catalogue, named volume, `host_port:container_port`
   published, env interpolated (`{project}` → name).
 - Never publish the dev container's own ports unless an archetype needs it

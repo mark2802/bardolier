@@ -16,7 +16,7 @@
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
 import type { VolumesOrphanedOutput, VolumesRemoveOutput } from '../model/volumes.ts'
-import { formatBytes, scanVolumes, UNKNOWN_SIZE, volumeOwner } from '../volumes.ts'
+import { formatBytes, isCacheVolume, scanVolumes, UNKNOWN_SIZE, volumeOwner } from '../volumes.ts'
 
 // ── orphaned ─────────────────────────────────────────────────────────────────
 
@@ -63,11 +63,12 @@ export async function runVolumeRemove(ctx: Context, request: VolumeRemoveRequest
 
   const claimant = scan.claimedBy.get(name)
   if (claimant !== undefined) {
-    throw new CprojError(
-      'VOLUME_IN_USE',
-      `\`${name}\` still belongs to project \`${claimant}\`. Detach the service (\`cproj service remove ${claimant} <svc>\`) or delete the project first.`,
-      { volume: name, project: claimant },
-    )
+    // The cache volume is shared, so "detach the service" is not the way out of
+    // this one: it goes when the last project built on that image goes.
+    const message = isCacheVolume(volume)
+      ? `\`${name}\` is the shared toolchain cache that \`${claimant}\` and every other project on its base image build with. It becomes reclaimable when the last of them is deleted.`
+      : `\`${name}\` still belongs to project \`${claimant}\`. Detach the service (\`cproj service remove ${claimant} <svc>\`) or delete the project first.`
+    throw new CprojError('VOLUME_IN_USE', message, { volume: name, project: claimant })
   }
 
   const orphan = scan.orphans.find((entry) => entry.name === name)

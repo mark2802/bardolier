@@ -17,6 +17,13 @@
  * the label rule that live volume would be listed as reclaimable. Being wrong
  * in that direction destroys data, so both rules are asked and either protects.
  *
+ * A toolchain cache volume (`cproj.role: cache`, `images.ts`) is the one volume
+ * this tool makes that belongs to no project: it is shared by every project on
+ * one base image, so it is claimed while ANY manifest names that image, and
+ * reclaimable once none does. It is still ours — leaving it out entirely would
+ * hide gigabytes of rebuildable data from the one command whose job is to
+ * account for them.
+ *
  * Two refusals guard the same edge:
  *   - With the SSD unmounted there are no manifests to consult, so EVERY cproj
  *     volume would look orphaned. That is SSD_NOT_MOUNTED, never an empty
@@ -28,7 +35,7 @@
 
 import type { Context } from './context.ts'
 import { CprojError } from './errors.ts'
-import { attachedKeys, LABEL_PROJECT, LABEL_SERVICE, volumeName } from './compose.ts'
+import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, ROLE_CACHE, volumeName } from './compose.ts'
 import { discoverProjects } from './projects.ts'
 import type { DockerVolume } from './docker.ts'
 import type { ResolvedCatalogue } from './catalogue.ts'
@@ -70,9 +77,14 @@ export function volumeOwner(volume: DockerVolume): string | null {
   return project && project.length > 0 ? project : null
 }
 
-/** True for a volume this tool created — it carries our project label. */
+/** True for the shared toolchain cache volume, which has no owning project. */
+export function isCacheVolume(volume: DockerVolume): boolean {
+  return volume.labels[LABEL_ROLE] === ROLE_CACHE
+}
+
+/** True for a volume this tool created — our project label, or the cache role. */
 export function isCprojVolume(volume: DockerVolume): boolean {
-  return volumeOwner(volume) !== null
+  return volumeOwner(volume) !== null || isCacheVolume(volume)
 }
 
 type Claims = {
@@ -106,6 +118,12 @@ function claimsFromManifests(ctx: Context): Claims {
   let catalogue: ResolvedCatalogue | null = null
 
   for (const project of discovery.projects) {
+    // The cache is claimed by the base image, not by any attachment — a bare
+    // android project with no services still builds with it. `projects` is
+    // sorted, so the project named in a VOLUME_IN_USE refusal is stable.
+    const cache = cacheFor(project.manifest)
+    if (cache && !names.has(cache.volume)) names.set(cache.volume, project.name)
+
     const keys = attachedKeys(project.manifest)
     if (keys.length === 0) continue
     catalogue ??= ctx.catalogue()

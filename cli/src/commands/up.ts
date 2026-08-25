@@ -9,7 +9,11 @@
  *   2. Validate every recorded host port is still bindable (§5). A port squatted
  *      while the project was down fails PORT_UNAVAILABLE naming the port — never
  *      a silent remap, which would break saved connection strings.
- *   3. `docker compose up -d`.
+ *   3. Create the base image's shared toolchain cache volume, if it has one.
+ *      The compose file declares it `external` precisely so that Compose does
+ *      not claim a volume every android project shares (`images.ts`), which
+ *      leaves someone having to make it — and `up` is the only starter.
+ *   4. `docker compose up -d`.
  *
  * Idempotent (§2): `up` on a running project is a no-op success. The CLI never
  * spawns a terminal — `open_shell` only tells the app what the user asked for.
@@ -18,7 +22,7 @@
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../naming.ts'
-import { attachedKeys } from '../compose.ts'
+import { attachedKeys, CACHE_VOLUME_LABELS, cacheFor } from '../compose.ts'
 import type { UpOutput, UpService } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
@@ -71,6 +75,8 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
 
   if (!alreadyRunning) {
     await validatePorts(ctx, manifest, before.runningServices)
+    const cache = cacheFor(manifest)
+    if (cache) await ctx.docker.ensureVolume(cache.volume, CACHE_VOLUME_LABELS)
     await ctx.docker.composeUp({
       file: composePath(dir),
       project: composeProject(manifest.name),

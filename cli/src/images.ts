@@ -24,6 +24,22 @@ export type ImageDefinition = {
   readonly context: string
   /** Platform the image is pinned to, or null to build and run natively. */
   readonly platform: string | null
+  /** Shared dependency cache this image's toolchain needs, or null. */
+  readonly cache: ImageCache | null
+}
+
+/**
+ * A dependency cache mounted into every dev container built on one image.
+ *
+ * `volume` is a FIXED name, not a per-project one: the point is that every
+ * android project shares one Gradle cache instead of each downloading its own
+ * copy of the Android Gradle Plugin. `mount` is an absolute path that does not
+ * depend on the host user's home directory — HOST_UID may collide with a user
+ * the base image already has, which would move `~`.
+ */
+export type ImageCache = {
+  readonly volume: string
+  readonly mount: string
 }
 
 /**
@@ -38,6 +54,26 @@ export type ImageDefinition = {
  */
 export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
   'claude-and': 'linux/amd64',
+}
+
+/**
+ * The one toolchain whose dependency cache is too expensive to keep per project.
+ *
+ * A Gradle build downloads the Android Gradle Plugin and its transitive world —
+ * hundreds of megabytes — before it compiles anything. Kept under the project's
+ * bind mount that cost is paid again by every project, and again by every
+ * throwaway project a test makes, and it is paid onto the SSD, which is the
+ * scarce disk. So it lives in a NAMED VOLUME shared by every `claude-and`
+ * container: rebuildable data on the internal disk, like the image layers next
+ * to it, while the SSD keeps only what is actually the project's.
+ *
+ * It is declared HERE, in one place, because three things must agree about it:
+ * the Dockerfile's `GRADLE_USER_HOME`, the mount the generated compose file
+ * writes, and the volume `up` creates before Compose asks for it. The Dockerfile
+ * coupling is asserted in `test/phase8.test.ts` rather than trusted.
+ */
+export const IMAGE_CACHE: Readonly<Partial<Record<BaseImage, ImageCache>>> = {
+  'claude-and': { volume: 'cproj-gradle-cache', mount: '/cache/gradle' },
 }
 
 export function imagesRoot(): string {
@@ -55,6 +91,7 @@ export function baseImages(root = imagesRoot()): ImageDefinition[] {
       dockerfile: existsSync(dockerfile) ? dockerfile : null,
       context,
       platform: IMAGE_PLATFORM[image] ?? null,
+      cache: IMAGE_CACHE[image] ?? null,
     }
   })
 }

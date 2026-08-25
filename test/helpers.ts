@@ -137,6 +137,7 @@ export type DockerCall =
   | { readonly kind: 'up'; readonly target: ComposeTarget }
   | { readonly kind: 'down'; readonly target: ComposeTarget }
   | { readonly kind: 'build'; readonly request: BuildRequest }
+  | { readonly kind: 'ensureVolume'; readonly name: string; readonly labels: Readonly<Record<string, string>> }
   | { readonly kind: 'removeVolume'; readonly name: string }
   | { readonly kind: 'removeContainer'; readonly name: string }
 
@@ -205,6 +206,14 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
       requireAvailable(`build ${request.tag}`)
       calls.push({ kind: 'build', request })
     },
+    async ensureVolume(name, labels) {
+      requireAvailable(`create volume ${name}`)
+      calls.push({ kind: 'ensureVolume', name, labels })
+      // Idempotent, like `docker volume create`: an existing volume is left as
+      // it is, labels included.
+      if (!volumes.has(name)) volumes.set(name, { name, labels })
+    },
+
     async removeVolume(name) {
       requireAvailable(`remove volume ${name}`)
       if (inUse.has(name)) throw new CprojError('VOLUME_IN_USE', `Volume ${name} is still in use.`)

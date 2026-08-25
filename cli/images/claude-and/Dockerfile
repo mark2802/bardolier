@@ -95,14 +95,24 @@ RUN set -eux; \
       useradd -o -u "${HOST_UID}" -g "${HOST_GID}" -m -s /bin/bash "${USERNAME}"; \
     fi; \
     home="$(getent passwd "${HOST_UID}" | cut -d: -f6)"; \
-    mkdir -p "${home}" /work; \
-    chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work "${ANDROID_HOME}"
+    mkdir -p "${home}" /work /cache/gradle; \
+    chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work /cache "${ANDROID_HOME}"
 
-# Gradle's caches are large and are the project's, not the image's: keeping them
-# under the bind mount means they survive `cproj down`/`up` on the SSD instead of
-# being re-downloaded into a container layer on the internal disk. The seeded
-# .gitignore/.dockerignore already ignore `.gradle/` (cli-spec.md §10).
-ENV GRADLE_USER_HOME=/work/.gradle
+# Gradle's caches are large, rebuildable, and identical across projects — the
+# Android Gradle Plugin and its transitive world are hundreds of megabytes that
+# every project would otherwise download for itself, onto the SSD, which is the
+# scarce disk. So /cache/gradle is a NAMED VOLUME shared by every claude-and
+# container (cli/src/images.ts, IMAGE_CACHE): `cproj up` creates it, the
+# generated compose file mounts it, and nothing about it is the project's.
+#
+# It must exist in the image, owned by the host user: Docker seeds a new named
+# volume from the image's directory, ownership included, and there is no sudo in
+# here to fix it afterwards.
+#
+# NOT under /work: a path in the bind mount is a per-project copy on the SSD,
+# and a path under $HOME cannot be named up front — HOST_UID may collide with a
+# user the base image already has, which moves ~.
+ENV GRADLE_USER_HOME=/cache/gradle
 
 USER ${HOST_UID}:${HOST_GID}
 WORKDIR /work

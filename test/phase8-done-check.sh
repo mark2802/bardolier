@@ -19,6 +19,9 @@
 #     x86_64 container (Google ships aapt2 for x86_64 only, so the image is
 #     pinned; see cli/src/images.ts). `adb` is absent for the same reason
 #     `xcodebuild` is.
+#     Its dependencies land in the SHARED cache volume rather than on the SSD,
+#     which a second `--offline` build proves — and which is why a re-run of
+#     this check no longer re-downloads the Android Gradle Plugin.
 #   - Files the container writes come back owned by the HOST user — the reason
 #     `cproj build` passes HOST_UID/HOST_GID at all.
 #
@@ -241,6 +244,13 @@ else
   bad "the android compose file has no platform pin — aapt2 is x86_64-only, so the build would fail"
 fi
 
+if grep -q "cproj-gradle-cache:/cache/gradle" "$AND_DIR/docker-compose.yml" \
+  && grep -q "external: true" "$AND_DIR/docker-compose.yml"; then
+  ok "and mounts the shared Gradle cache as an external volume (§4.3, §9)"
+else
+  bad "the android compose file does not mount cproj-gradle-cache as an external volume"
+fi
+
 if grep -qi "emulator" "$AND_DIR/CLAUDE.md" && grep -q "adb" "$AND_DIR/CLAUDE.md"; then
   ok "its seeded CLAUDE.md keeps the emulator and adb on the host side (§10)"
 else
@@ -296,6 +306,20 @@ else
   bad "cproj up droid failed"
 fi
 
+# `up` creates the volume Compose was told is external — nobody else can, and
+# without it `compose up` fails outright rather than silently.
+if docker volume inspect cproj-gradle-cache >/dev/null 2>&1; then
+  ok "cproj up created the shared cache volume"
+  ROLE="$(docker volume inspect cproj-gradle-cache --format '{{index .Labels "cproj.role"}}' 2>/dev/null)"
+  if [ "$ROLE" = "cache" ]; then
+    ok "labelled cproj.role=cache, so the orphan scan knows it belongs to no project"
+  else
+    bad "the cache volume is labelled '$ROLE' — the volume scan would misattribute it"
+  fi
+else
+  bad "cproj up did not create cproj-gradle-cache"
+fi
+
 AND_CONTAINER="$($CPROJ status droid --json 2>/dev/null | node -e "
   let s = ''
   process.stdin.on('data', (c) => (s += c)).on('end', () => {
@@ -334,6 +358,29 @@ if [ -n "$AND_CONTAINER" ]; then
     else
       bad "the Gradle build failed:"
       tail -8 "$TMP/gradle.log" | sed 's/^/      /'
+    fi
+
+    # The point of the volume: the downloads landed in it, not on the SSD, so
+    # the next project (and the next run of this check) does not pay for them
+    # again. `--offline` is the honest test of that — it fails if anything it
+    # needs is missing from the cache.
+    if in_and 'test -d "$GRADLE_USER_HOME/caches/modules-2" && test -n "$(ls -A "$GRADLE_USER_HOME/caches/modules-2")"' >/dev/null 2>&1; then
+      ok "the downloaded dependencies are in the shared volume, not under /work"
+    else
+      bad "GRADLE_USER_HOME holds no downloaded modules — the cache is not where the volume is"
+    fi
+
+    if in_and 'test -d /work/.gradle/caches/modules-2' >/dev/null 2>&1; then
+      bad "a per-project dependency cache is on the SSD at .gradle/caches — that is what the volume replaced"
+    else
+      ok "nothing re-created a per-project dependency cache on the SSD"
+    fi
+
+    if in_and 'gradle --no-daemon --offline :app:assembleDebug' >"$TMP/gradle-offline.log" 2>&1; then
+      ok "a second build runs --offline: the cache is warm, which is the whole point"
+    else
+      bad "the offline rebuild failed — the cache did not survive the first build:"
+      tail -5 "$TMP/gradle-offline.log" | sed 's/^/      /'
     fi
 
     APK=""

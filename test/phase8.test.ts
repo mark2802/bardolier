@@ -32,10 +32,15 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { validate } from '../cli/src/schema.ts'
-import { IMAGE_PLATFORM, baseImages } from '../cli/src/images.ts'
+import { IMAGE_CACHE, IMAGE_PLATFORM, baseImages } from '../cli/src/images.ts'
 import { renderCompose } from '../cli/src/compose.ts'
 import { runBuild } from '../cli/src/commands/build.ts'
 import { runNew } from '../cli/src/commands/new.ts'
+import { runUp } from '../cli/src/commands/up.ts'
+import { runDelete } from '../cli/src/commands/delete.ts'
+import { runVolumeRemove } from '../cli/src/commands/volumes.ts'
+import { scanVolumes } from '../cli/src/volumes.ts'
+import { CprojError } from '../cli/src/errors.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from '../cli/src/model/archetype.ts'
 import { seededFiles } from '../cli/src/scaffold.ts'
 import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
@@ -237,5 +242,131 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
     const android = seededFiles('myapp', 'android').find((file) => file.name === 'CLAUDE.md')?.contents ?? ''
     assert.match(android, /Gradle builds and unit tests \*\*run in this container\*\*/)
     assert.match(android, /adb/, 'the android note must name adb, which the image does not carry')
+  })
+})
+
+// ── The Gradle cache: shared, and on the internal disk ────────────────────────
+
+describe('the android toolchain cache is shared, not per project (images.ts)', () => {
+  const CACHE = 'cproj-gradle-cache'
+  const MOUNT = '/cache/gradle'
+
+  /** A manifest for an android project, which is the only kind with a cache. */
+  function droid(name = 'droid') {
+    return manifest(name, { archetype: 'android', base_image: 'claude-and' })
+  }
+
+  test('one image declares a cache, and its Dockerfile puts Gradle in it', () => {
+    assert.deepEqual(IMAGE_CACHE, { 'claude-and': { volume: CACHE, mount: MOUNT } })
+    const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.cache?.volume ?? null]))
+    assert.deepEqual(byImage, { 'claude-web': null, 'claude-ios': null, 'claude-and': CACHE })
+
+    // The coupling that a wrong answer makes silent: Gradle writing somewhere
+    // the volume is not mounted still WORKS — it just re-downloads every run,
+    // into a container layer, which is the thing this exists to stop.
+    const text = dockerfile('claude-and')
+    assert.match(text, new RegExp(`ENV GRADLE_USER_HOME=${MOUNT}\\b`))
+    assert.ok(!/GRADLE_USER_HOME=\/work/.test(text), 'a per-project cache would sit on the SSD')
+    // Docker seeds a new named volume from the image's directory, ownership and
+    // all, and there is no sudo in there to fix a root-owned mount afterwards.
+    assert.match(text, new RegExp(`mkdir -p[^\\n]*${MOUNT}`))
+    assert.match(text, /chown -R "\$\{HOST_UID\}:\$\{HOST_GID\}"[^\n]*\/cache/)
+  })
+
+  test('the compose file mounts it, and lets Compose neither create nor claim it', () => {
+    const services = catalogue()
+    const android = renderCompose({ manifest: droid(), catalogue: services })
+    assert.match(android, new RegExp(`- ${CACHE}:${MOUNT}`))
+    // `external: true` is the whole trick: a Compose-created volume carries the
+    // FIRST project's compose labels, and every other android project then
+    // warns about it on every `up`.
+    assert.match(android, new RegExp(`${CACHE}:\\n\\s+name: ${CACHE}\\n\\s+external: true`))
+    assert.ok(!android.includes('cproj.project: droid\n    cproj.service'), 'the cache is no project’s volume')
+
+    // Nothing changes for an image without a cache — no mount, no volumes key.
+    const web = renderCompose({ manifest: manifest('site'), catalogue: services })
+    assert.ok(!web.includes(CACHE), 'an image with no cache must not gain one')
+    assert.ok(!/\nvolumes:\n/.test(web), 'a serviceless web project still declares no named volume at all')
+
+    // Same manifest, same bytes (§9).
+    assert.equal(android, renderCompose({ manifest: droid(), catalogue: services }))
+  })
+
+  test('`up` creates the volume before Compose asks for it, and only for that image', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ startsAs: ['cproj-droid'] })
+    const ctx = makeContext(box, docker)
+    await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
+    await runUp(ctx, { name: 'droid', noShell: true })
+
+    const kinds = docker.calls.map((call) => call.kind)
+    assert.deepEqual(kinds, ['ensureVolume', 'up'], 'an external volume must exist before `compose up` runs')
+    const created = docker.calls.find((call) => call.kind === 'ensureVolume')
+    assert.equal(created?.kind === 'ensureVolume' ? created.name : null, CACHE)
+    // Labelled as the cache, and NOT as any project's: that label is what makes
+    // the orphan scan treat it as shared rather than as `droid`'s to reclaim.
+    assert.deepEqual(created?.kind === 'ensureVolume' ? created.labels : null, { 'cproj.role': 'cache' })
+
+    const web = stubDocker({ startsAs: ['cproj-site'] })
+    const webCtx = makeContext(sandbox(), web)
+    await runNew(webCtx, { name: 'site', archetype: 'web', services: undefined })
+    await runUp(webCtx, { name: 'site', noShell: true })
+    assert.deepEqual(web.calls.map((call) => call.kind), ['up'], 'a web project needs no cache volume')
+  })
+
+  test('it is claimed while any android project exists, and reclaimable once none does', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'cproj.role': 'cache' }, size_bytes: 20971520 }] })
+    const ctx = makeContext(box, docker)
+    await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
+    await runNew(ctx, { name: 'site', archetype: 'web', services: undefined })
+
+    const held = await scanVolumes(ctx)
+    assert.deepEqual(held.orphans, [], 'a cache a project still builds with is not disk to reclaim')
+    assert.equal(held.claimedBy.get(CACHE), 'droid')
+
+    // The last android project goes, and with it the only reason to keep it.
+    await runDelete(ctx, { name: 'droid', force: true, keepData: true, purge: false, json: true })
+    const freed = await scanVolumes(ctx)
+    assert.deepEqual(freed.orphans.map((orphan) => orphan.name), [CACHE])
+    // No project made it, so none is named as its last — the schema allows that
+    // and inventing one would be a lie about where the data came from.
+    assert.equal(freed.orphans[0]?.last_project, null)
+    assert.equal(freed.orphans[0]?.size_human, '20 MB')
+  })
+
+  test('`volumes rm` refuses it with the reason that fits a shared volume', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'cproj.role': 'cache' }, size_bytes: 1024 }] })
+    const ctx = makeContext(box, docker)
+    await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
+
+    // Refused before Docker is asked, and with an instruction that fits: there
+    // is no service to detach from a volume no service owns.
+    await assert.rejects(
+      () => runVolumeRemove(ctx, { name: CACHE, force: true, json: true }),
+      (error: unknown) =>
+        error instanceof CprojError &&
+        error.code === 'VOLUME_IN_USE' &&
+        /shared toolchain cache/.test(error.message) &&
+        !/service remove/.test(error.message),
+    )
+    assert.deepEqual(docker.calls, [], 'Docker was never asked to remove it')
+  })
+
+  test('`delete --purge` takes the project’s data and leaves the cache', async () => {
+    const box = sandbox()
+    const docker = stubDocker({
+      volumes: [
+        { name: CACHE, labels: { 'cproj.role': 'cache' } },
+        { name: 'droid_pgdata', labels: { 'cproj.project': 'droid', 'cproj.service': 'postgres' } },
+      ],
+    })
+    const ctx = makeContext(box, docker)
+    await runNew(ctx, { name: 'droid', archetype: 'android', services: 'postgres' })
+
+    await runDelete(ctx, { name: 'droid', force: true, keepData: false, purge: true, json: true })
+    const removed = docker.calls.filter((call) => call.kind === 'removeVolume').map((call) => call.name)
+    assert.deepEqual(removed, ['droid_pgdata'], 'purge destroys what the project owns, not what it shares')
   })
 })
