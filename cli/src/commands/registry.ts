@@ -23,6 +23,8 @@ import { createContext } from '../context.ts'
 import { collectStatus, renderStatus } from './status.ts'
 import { collectList, renderList } from './list.ts'
 import { collectDoctor, renderDoctor } from './doctor.ts'
+import { collectCatalogue, renderCatalogue } from './catalogue.ts'
+import { collectConfigGet, renderConfigGet, renderConfigSet, runConfigSet } from './config.ts'
 import { renderNew, runNew } from './new.ts'
 import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
@@ -292,6 +294,19 @@ export const COMMANDS: readonly CommandNode[] = [
     ],
   },
 
+  {
+    path: ['catalogue'],
+    group: 'Services',
+    usage: 'catalogue',
+    summary: 'Every service type the catalogue defines, with its image and host-port band.',
+    flags: [],
+    errors: ['CONFIG_INVALID'],
+    run: (inv) => {
+      noArgs(inv, 'catalogue')
+      return output(collectCatalogue(createContext()), renderCatalogue)
+    },
+  },
+
   // ── Shell ──────────────────────────────────────────────────────────────────
   {
     path: ['shell'],
@@ -386,6 +401,42 @@ export const COMMANDS: readonly CommandNode[] = [
       noArgs(inv, 'doctor')
       return output(await collectDoctor(createContext()), renderDoctor)
     },
+  },
+
+  {
+    path: ['config'],
+    group: 'Lifecycle / SSD',
+    usage: 'config <get | set>',
+    summary: 'Read and write ~/.config/cproj/config.yml (§8) — the app’s Preferences write through here.',
+    flags: [],
+    errors: [],
+    run: group('config'),
+    children: [
+      {
+        path: ['config', 'get'],
+        group: 'Lifecycle / SSD',
+        usage: 'config get',
+        summary: 'The effective config — defaults, then the file, then the environment.',
+        flags: [],
+        errors: ['CONFIG_INVALID'],
+        run: (inv) => {
+          noArgs(inv, 'config get')
+          return output(collectConfigGet(createContext()), renderConfigGet)
+        },
+      },
+      {
+        path: ['config', 'set'],
+        group: 'Lifecycle / SSD',
+        usage: 'config set <key> <value>',
+        summary: 'Set one config key. An empty value clears it. Never validates that a path exists.',
+        flags: [],
+        errors: ['INVALID_ARGUMENT', 'CONFIG_INVALID'],
+        run: (inv) => {
+          const [key, value] = exactArgs(inv, byPath('config set'), 2)
+          return output(runConfigSet(createContext(), { key, value }), renderConfigSet)
+        },
+      },
+    ],
   },
 
   // ── Images ─────────────────────────────────────────────────────────────────

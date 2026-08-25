@@ -135,6 +135,13 @@ disabled) · ejected (distinct, safe-to-unplug). Derive purely from the latest
 - Terminal app for shell-open.
 - Start-auto-opens-shell toggle (default ON).
 
+The first two are read with `cproj config get` and written with
+`cproj config set` (`cli-spec.md` §8); only the toggle is the app's own, since
+the CLI has no opinion about it. When an environment variable overrides a key,
+the write still happens and the panel says the environment wins — a preference
+that appears to save and then does nothing is worse than one that explains
+itself.
+
 ## 13. Error handling
 
 - Every CLI error code maps to a short, human message; unknown codes fall back to

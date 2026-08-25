@@ -119,6 +119,12 @@ bash test/phase4-done-check.sh   # Phase 4 regression check (runs 0-3 too) — t
 bash test/phase5-done-check.sh   # Phase 5: the app's models against the frozen
                                  # schemas, plus 0-4. Its other half is manual,
                                  # in Xcode; the script prints that checklist
+bash test/phase6-done-check.sh   # Phase 6: the commands the app needed, the
+                                 # sources, the build settings, and (only when a
+                                 # Swift toolchain is present) a type-check and
+                                 # an SF Symbol check. Its other half — the
+                                 # lifecycle driven from the menu bar — is the
+                                 # checklist it prints
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -150,6 +156,9 @@ that `test/contracts.test.ts` checks against the code:
 | `volumes rm` output (§6) | `cli/src/model/volumes.ts` | `cli/schema/volumes-rm.schema.json` |
 | `down-all` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/down-all.schema.json` |
 | `eject` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/eject.schema.json` |
+| `catalogue` output (§4.1) | `cli/src/model/catalogue.ts` | `cli/schema/catalogue.schema.json` |
+| `config get` output (§8) | `cli/src/model/config.ts` | `cli/schema/config-get.schema.json` |
+| `config set` output (§8) | `cli/src/model/config.ts` | `cli/schema/config-set.schema.json` |
 
 Commands are declared in `cli/src/commands/registry.ts` and return a payload
 plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
@@ -211,13 +220,24 @@ writes into the bind-mounted `/work` come back owned by the Mac user. The
 `claude-ios` and `claude-and` images land in Phase 8; until then `build` reports
 them `unavailable` rather than failing.
 
+**Two commands exist because the app asked, not because §6 named them.**
+`cproj catalogue` and `cproj config get|set` are Phase 6 additions under §1's
+rule that "if the app needs something, a CLI command grows to provide it". The
+Services submenu ticks the attached rows of the WHOLE catalogue and the
+New-project window offers the same list, so the alternative was a copy of
+`services.yml` in Swift; Preferences writes the SSD path and the terminal, so
+the alternative was a second writer that knew only some of §8's precedence and
+path-expansion rules. Both are additive — no frozen schema changed to make room
+for them — and `status` gained `dir` the same way, so "Open folder in Finder"
+never composes a path out of `ssd.root`.
+
 **The app reads the contract; it never re-derives it.** The Swift client lives
 in `app/claude-yard/claude-yard/Cproj/` — `CprojClient` builds argv, appends
 `--json` itself (no caller may), runs the binary, and turns a non-zero exit into
 `CprojFailure.cli` carrying the stable §2 code. `CprojModels.swift` mirrors
 `cli/schema/*.json` one struct per schema object; closed string enums decode as
 open tokens so an additive schema change cannot break an older build. Because
-Xcode is host-only and nothing in this repo compiles that Swift,
+Xcode is host-only and `npm test` compiles no Swift,
 `test/app-models.test.ts` reads it as text and holds it to the same schemas in
 both directions — a required field missed, a field invented, an error code the
 CLI cannot emit, or a `Process` spawned outside the client all fail there rather
@@ -226,10 +246,24 @@ than in the menu bar. A GUI app inherits no shell `PATH`, so
 find `node`, `docker`, `lsof` and `diskutil`; that is the only environment
 knowledge in Swift.
 
-- App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1.
-  Both are build settings the human sets in Xcode (`app/README.md`); the target
-  uses a synchronized folder group, so `.swift` files written to disk are in the
-  build without an "Add Files to target" step.
+**The menu runs one thing at a time, and asks after each.** `CprojStore` names
+the running operation in `activity`; while it is set every mutating item is
+disabled, and every mutation is followed by a forced `status` refresh rather
+than a patch to the store's own copy (`app-spec.md` §4). A refusal is relayed
+verbatim — PROJECT_RUNNING on a service change becomes "Stop the project to
+change its services", never a stop-change-start the user did not ask for.
+Confirmation for anything destructive happens in the VIEW before the call,
+because `CprojClient` passes `--force` and the CLI cannot prompt with no
+terminal. `CprojTerminal` runs `cproj shell`'s argv in the user's terminal
+through AppleScript or a `.command` file — it launches no process of its own,
+so `CprojClient` remains the only thing in the app that constructs one.
+
+- App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1, plus
+  `NSAppleEventsUsageDescription` from Phase 6 (without it macOS terminates the
+  app the first time it drives a terminal). All are build settings the human sets
+  in Xcode (`app/README.md`); the target uses a synchronized folder group, so
+  `.swift` files written to disk are in the build without an "Add Files to
+  target" step.
 
 ## Definition of done (per phase)
 

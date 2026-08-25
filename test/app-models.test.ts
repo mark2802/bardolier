@@ -25,6 +25,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { ERROR_CODES } from '../cli/src/errors.ts'
+import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
+import { CONFIG_KEYS } from '../cli/src/config.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 const APP_MODEL_DIR = 'app/claude-yard/claude-yard/Cproj'
@@ -154,6 +156,11 @@ const MIRRORS: readonly (readonly [schema: string, path: string, swift: string])
   ['eject', '$defs/holder', 'SsdHolder'],
   ['build', '', 'BuildOutput'],
   ['build', 'properties/images/items', 'BaseImage'],
+  ['catalogue', '', 'CatalogueOutput'],
+  ['catalogue', '$defs/catalogue_service', 'CatalogueService'],
+  ['config-get', '', 'ConfigGetOutput'],
+  ['config-get', '$defs/effective_config', 'EffectiveConfig'],
+  ['config-set', '', 'ConfigSetOutput'],
   ['error', '', 'CprojErrorEnvelope'],
   ['error', 'properties/error', 'CprojErrorBody'],
 ]
@@ -214,6 +221,102 @@ describe('the app knows every error code', () => {
         `CprojError.swift declares \`${code}\`, which errors.ts does not define`,
       )
     }
+  })
+})
+
+describe('the app knows the tokens the CLI can emit', () => {
+  const source = readFileSync(repo(`${APP_MODEL_DIR}/CprojModels.swift`), 'utf8')
+
+  /** `static let x = Token(rawValue: "…")` constants for one token type. */
+  function constants(type: string): Set<string> {
+    const matches = [...source.matchAll(new RegExp(`${type}\\(rawValue:\\s*"([a-z_]+)"\\)`, 'g'))]
+    return new Set(matches.flatMap((match) => (match[1] === undefined ? [] : [match[1]])))
+  }
+
+  test('every catalogue origin has a CatalogueOrigin constant', () => {
+    const declared = constants('CatalogueOrigin')
+    for (const origin of CATALOGUE_ORIGINS) {
+      assert.ok(declared.has(origin), `CprojModels.swift has no CatalogueOrigin for \`${origin}\``)
+    }
+  })
+
+  test('every settable config key has a ConfigKey constant, and no others', () => {
+    const declared = constants('ConfigKey')
+    for (const key of CONFIG_KEYS) {
+      assert.ok(declared.has(key), `CprojModels.swift has no ConfigKey for \`${key}\``)
+    }
+    for (const key of declared) {
+      assert.ok(
+        (CONFIG_KEYS as readonly string[]).includes(key as string),
+        `CprojModels.swift declares ConfigKey \`${key}\`, which \`cproj config set\` would reject`,
+      )
+    }
+  })
+})
+
+describe('the app re-derives nothing the CLI reports', () => {
+  /**
+   * Swift that renders LIVE data. `DebugStatusView.swift` is excluded on
+   * purpose: its literals are a canned `cproj status` payload for `#Preview`,
+   * i.e. CLI output pasted in, which is the opposite of the app composing a
+   * value of its own.
+   */
+  const sources = new Map<string, string>(
+    readdirSync(repo('app/claude-yard/claude-yard'), { recursive: true, encoding: 'utf8' })
+      .filter((entry) => entry.endsWith('.swift') && !entry.endsWith('DebugStatusView.swift'))
+      .map((entry) => [entry, code(readFileSync(repo(`app/claude-yard/claude-yard/${entry}`), 'utf8'))]),
+  )
+
+  /** Source with comment lines removed — prose may name what code may not do. */
+  function code(source: string): string {
+    return source
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n')
+  }
+
+  test('no connection string is built in Swift (cli-spec.md §7, connection_hint)', () => {
+    for (const [file, source] of sources) {
+      // A `localhost:` literal in rendering code means the app is composing
+      // what the CLI already reported — and the prod-like topology rule
+      // (CLAUDE.md) says the app must never wire anything to localhost itself.
+      assert.doesNotMatch(source, /localhost:/, `${file} builds a localhost address; connection_hint is the CLI's`)
+    }
+  })
+
+  test('the project directory comes from status, not from ssd.root', () => {
+    const menu = sources.get('Views/MenuBarRootView.swift')
+    assert.ok(menu, 'MenuBarRootView.swift is missing')
+    assert.match(menu, /revealInFinder\(project\.dir\)/, 'Finder must be given the dir the CLI reported')
+  })
+
+  test('the app writes the config file only through the CLI (app-spec.md §12)', () => {
+    for (const [file, source] of sources) {
+      assert.doesNotMatch(source, /config\.yml/, `${file} names the config file; only \`cproj config set\` may write it`)
+    }
+  })
+})
+
+describe('the app can actually find the terminal (app-spec.md §7)', () => {
+  const source = readFileSync(repo('app/claude-yard/claude-yard/Shell/CprojTerminal.swift'), 'utf8')
+
+  // Guessing where an app lives was a real bug: Terminal.app is in
+  // /System/Applications/Utilities, so a search of the obvious folders found
+  // every terminal EXCEPT the default one. Launch Services knows where an app
+  // is; the folder list is only a fallback for names it has no id for.
+  test('it asks Launch Services where an app is', () => {
+    assert.match(source, /urlForApplication\(withBundleIdentifier:/)
+    assert.match(source, /"com\.apple\.Terminal"/, 'the default terminal needs an id to look up')
+  })
+
+  test('the fallback search covers both Utilities folders', () => {
+    assert.match(source, /"\/System\/Applications\/Utilities"/)
+    assert.match(source, /"\/Applications\/Utilities"/)
+  })
+
+  test('a terminal that cannot be found still opens a shell', () => {
+    // NSWorkspace.open(file) with no app named = whatever handles .command.
+    assert.match(source, /NSWorkspace\.shared\.open\(file\)/)
   })
 })
 

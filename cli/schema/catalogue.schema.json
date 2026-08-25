@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/catalogue.schema.json",
+  "title": "cproj catalogue output",
+  "description": "Every service type the catalogue defines (cli-spec.md §4.1), and which file answered. The app offers this list when attaching a service (app-spec.md §6) and when creating a project (§8); without it the app would have to hold its own copy of the catalogue, which is the desync §4.1 exists to prevent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "origin", "services"],
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "The services.yml that answered.",
+      "minLength": 1
+    },
+    "origin": {
+      "type": "string",
+      "description": "Which step of the §4.1 resolution chain answered.",
+      "enum": ["config", "ssd", "bundled"]
+    },
+    "services": {
+      "type": "array",
+      "description": "Every catalogue entry, sorted by key.",
+      "items": { "$ref": "#/$defs/catalogue_service" }
+    }
+  },
+  "$defs": {
+    "catalogue_service": {
+      "type": "object",
+      "description": "One service type as the catalogue defines it. Ports here are the DEFINITION (§4.1): container_port is fixed, host_port_base only starts the allocator's search (§5) — a project's actual host port comes from its manifest, never from here.",
+      "additionalProperties": false,
+      "required": ["key", "display", "image", "container_port", "host_port_base"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "display": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "container_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "host_port_base": {
+          "type": "integer",
+          "description": "Start of this service's host-port band (§5). NOT an assigned port.",
+          "minimum": 1024,
+          "maximum": 65535
+        }
+      }
+    }
+  }
+}

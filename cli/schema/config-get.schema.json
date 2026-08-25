@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/config-get.schema.json",
+  "title": "cproj config get output",
+  "description": "The EFFECTIVE configuration (cli-spec.md §8) — defaults, then the file, then the environment — plus where it came from. What Preferences (app-spec.md §12) shows before it writes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "exists", "config", "overrides"],
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "The config file consulted, whether or not it exists.",
+      "minLength": 1
+    },
+    "exists": { "type": "boolean" },
+    "config": { "$ref": "#/$defs/effective_config" },
+    "overrides": {
+      "type": "array",
+      "description": "Environment variables that overrode a value, e.g. CPROJ_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "effective_config": {
+      "type": "object",
+      "description": "Every §8 key, resolved. Paths are absolute and tilde-expanded. This block is duplicated verbatim in config-get and config-set; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["ssd_root", "ssd_volume", "catalogue_path", "terminal"],
+      "properties": {
+        "ssd_root": { "type": "string", "minLength": 1 },
+        "ssd_volume": { "type": "string", "minLength": 1 },
+        "catalogue_path": {
+          "type": ["string", "null"],
+          "description": "null when unset — the §4.1 fallback chain applies."
+        },
+        "terminal": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@
   "projects": [
     {
       "name": "myapp",
+      "dir": "/Volumes/ssd/claude-projects/myapp",
       "archetype": "web",
       "state": "running",
       "services": [

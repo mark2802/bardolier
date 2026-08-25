@@ -54,6 +54,7 @@ function buildProject(
 
   return {
     name,
+    dir: project.dir,
     archetype: manifest.archetype,
     state: observed.state,
     services,

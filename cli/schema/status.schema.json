@@ -40,9 +40,14 @@
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "archetype", "state", "services", "dev_container"],
+      "required": ["name", "archetype", "state", "services", "dev_container", "dir"],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
+        "dir": {
+          "type": "string",
+          "description": "The project's directory under $SSD_ROOT. Reported rather than composed so the app can reveal it in Finder without knowing the layout (§3).",
+          "minLength": 1
+        },
         "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
         "state": {
           "type": "string",

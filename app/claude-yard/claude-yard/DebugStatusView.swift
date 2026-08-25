@@ -11,9 +11,11 @@
 //  is what the dev app actually connects to over the internal Docker network
 //  (cli-spec.md §5). Seeing both, correctly, is the done-check.
 //
-//  The real menu (app-spec.md §5) replaces this view in Phase 6. The rendering
-//  helpers below deliberately hold no logic worth keeping — they only lay out
-//  values the CLI already decided.
+//  Phase 6 moved the menu proper into MenuBarRootView; this view stayed, behind
+//  "Diagnostics…", because what it proves is still worth being able to check:
+//  the raw decode of every field, next to what `cproj status --json` prints in
+//  a terminal. The rendering helpers below deliberately hold no logic worth
+//  keeping — they only lay out values the CLI already decided.
 //
 
 import AppKit
@@ -22,6 +24,9 @@ import SwiftUI
 
 struct DebugStatusView: View {
     @EnvironmentObject private var store: CprojStore
+
+    /// Back to the menu (app-spec.md §5).
+    var back: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,13 +56,18 @@ struct DebugStatusView: View {
             footer
         }
         .padding(12)
-        .frame(width: 380)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task { await store.appear() }
     }
 
     private var header: some View {
         HStack {
-            Text("claude-yard").font(.headline)
+            Button(action: back) {
+                Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .help("Back to the menu")
+            Text("Diagnostics").font(.headline)
             Spacer()
             if store.isBusy {
                 ProgressView().controlSize(.small)

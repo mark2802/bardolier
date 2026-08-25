@@ -204,6 +204,28 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 - `cproj build [--archetype <a>]` — build base image(s) with host UID/GID build
   args. No arg builds all archetypes' bases.
 
+### App support
+
+Added in Phase 6 under §1 ("if the app needs something, a CLI command grows to
+provide it"), not part of the original surface. Additive: no existing schema
+changed to accommodate them.
+
+- `cproj catalogue` — every service type the catalogue defines, with its image,
+  container port and host-port band, plus the `services.yml` that answered and
+  which step of §4.1's chain it came from. The app's Services submenu and
+  New-project window render this rather than keeping a copy of the catalogue.
+  Reports the BAND START only; an assigned port comes from a manifest.
+  Errors: `CONFIG_INVALID`.
+- `cproj config get` — the effective configuration (§8): defaults, then the
+  file, then the environment, plus the file path and which env vars overrode a
+  value. Errors: `CONFIG_INVALID`.
+- `cproj config set <key> <value>` — set one §8 key; an empty value clears it.
+  Paths are expanded on the way in, keys are written in a stable order, and the
+  effective config after the write is reported. Never validates that a path
+  exists — the SSD is routinely absent, and refusing to record where it will be
+  would make the setting unusable exactly when it is needed. Errors:
+  `INVALID_ARGUMENT`, `CONFIG_INVALID`.
+
 ## 7. `status` JSON schema (the app's primary contract)
 
 ```json
@@ -244,6 +266,9 @@ Schema stability is the contract. Additive changes only once the app ships.
   Keys: `ssd_root`, `ssd_volume`, `catalogue_path`, `terminal` (for the app's
   shell-open preference, surfaced here for a single source).
 - CLI reads env overrides `CPROJ_SSD_ROOT`, `CPROJ_SSD_VOLUME`.
+- The app never edits this file itself: it reads it with `cproj config get` and
+  writes it with `cproj config set`, so precedence, path expansion and the
+  "`ssd_root` defaults inside `ssd_volume`" rule have one implementation.
 
 ## 9. Compose generation rules
 

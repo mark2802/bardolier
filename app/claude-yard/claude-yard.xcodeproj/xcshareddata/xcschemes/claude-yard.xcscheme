@@ -59,7 +59,7 @@
          <EnvironmentVariable
             key = "CPROJ_SSD_ROOT"
             value = "/Volumes/ExtremeSSD"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>

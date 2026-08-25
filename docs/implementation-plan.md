@@ -165,7 +165,16 @@ Deliverables (all per `app-spec.md`):
 - Error mapping §13.
 
 ⚠️ **MANUAL:** repeat the "Add Files to target" step for any new `.swift` files
-each time this phase's goal generates them; ⌘B to confirm.
+each time this phase's goal generates them; ⌘B to confirm. Also add
+`NSAppleEventsUsageDescription` (target → Info → "Privacy - AppleEvents Sending
+Usage Description") — opening a shell drives Terminal/iTerm with Apple events,
+and without the string macOS terminates the app instead of asking.
+
+Note: this phase also grew the CLI, under §1's rule that a need of the app
+becomes a command — `catalogue` (the Services submenu and New-project offer the
+whole catalogue), `config get|set` (Preferences writes the SSD path and terminal
+to the one config), and `dir` on `status`'s projects (Open folder in Finder).
+All additive; the Phase 4 freeze holds.
 
 Done-check: perform the entire lifecycle **from the menu bar** — create a
 project, add a service, start (shell opens), inspect ports, stop, remove service,

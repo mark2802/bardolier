@@ -54,6 +54,26 @@ nonisolated struct CprojClient: Sendable {
         try await run(["doctor"])
     }
 
+    /// Every service type the catalogue defines — the list the Services submenu
+    /// ticks against (§6) and the New-project window offers (§8). Asking the
+    /// CLI is the point: a copy of `services.yml` in Swift is the desync a
+    /// single editable catalogue exists to prevent.
+    func catalogue() async throws -> CatalogueOutput {
+        try await run(["catalogue"])
+    }
+
+    /// The effective CLI config — what Preferences shows before it writes (§12).
+    func configGet() async throws -> ConfigGetOutput {
+        try await run(["config", "get"])
+    }
+
+    /// Write one config key. An empty value clears it. Preferences goes through
+    /// here rather than editing `config.yml`, so precedence and path expansion
+    /// stay the CLI's (cli-spec.md §8).
+    func configSet(_ key: ConfigKey, to value: String) async throws -> ConfigSetOutput {
+        try await run(["config", "set", key.rawValue, value])
+    }
+
     func new(name: String, archetype: Archetype, services: [String] = []) async throws -> NewOutput {
         var argv = ["new", name, "--archetype", archetype.rawValue]
         if !services.isEmpty {

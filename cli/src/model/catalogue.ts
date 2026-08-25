@@ -36,3 +36,30 @@ export type CatalogueService = {
 export type ServiceCatalogue = {
   services: Record<string, CatalogueService>
 }
+
+/**
+ * `cproj catalogue` output — what the app offers when attaching a service
+ * (`app-spec.md` §6) or creating a project (§8).
+ *
+ * A projection of the file above, not a second definition: `key` is the record
+ * key made explicit for an array, and the ports are the DEFINITION's ports.
+ * `host_port_base` is where the allocator starts looking (§5), never a port a
+ * project holds — that only ever comes from a manifest.
+ */
+export type CatalogueServiceRow = {
+  key: string
+  display: string
+  image: string
+  container_port: number
+  /** Start of this service's host-port band (§5). NOT an assigned port. */
+  host_port_base: number
+}
+
+export type CatalogueOutput = {
+  /** The `services.yml` that answered. */
+  path: string
+  /** Which step of the §4.1 resolution chain it came from. */
+  origin: 'config' | 'ssd' | 'bundled'
+  /** Every catalogue entry, sorted by key. */
+  services: CatalogueServiceRow[]
+}

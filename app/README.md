@@ -16,19 +16,32 @@ with ⌘B; that is all it takes.
 ```
 claude-yard/claude-yard/
   claude_yardApp.swift     MenuBarExtra scene — the whole app
-  CprojStore.swift         the last answer the CLI gave, plus refresh/debounce
-  DebugStatusView.swift    Phase 5's deliverable: the decoded status, dumped
+  CprojStore.swift         the last answer the CLI gave, and the one place an
+                           action runs (one at a time, refresh after each)
+  DebugStatusView.swift    the decoded status, dumped — now behind "Diagnostics…"
   Cproj/
     CprojClient.swift      process exec, --json, error envelope → CprojFailure
     CprojModels.swift      Codable mirrors of cli/schema/*.json
     CprojError.swift       stable codes (§2) → short human messages (§13)
     CprojExecutable.swift  finding cproj, and a PATH its children can work in
+  Preferences/
+    AppPreferences.swift   the ONE setting that is the app's (auto-open shell);
+                           SSD path and terminal live in the CLI config (§12)
+  Shell/
+    CprojTerminal.swift    runs `cproj shell`'s argv in the chosen terminal
+  Views/
+    MenuChrome.swift       rows, banners, confirmations — the shapes
+    MenuBarRootView.swift  the menu of app-spec.md §5, and its panels
+    ServicesPanel.swift    §6 — catalogue with the attached rows ticked
+    NewProjectPanel.swift  §8
+    ReclaimPanel.swift     §9
+    PreferencesPanel.swift §12
 ```
 
-## Two build settings the template does not default to
+## Three build settings the template does not default to
 
-Both are the human's, in Xcode, and `test/phase5-done-check.sh` reports whether
-they have been done:
+All three are the human's, in Xcode, and the done-checks report whether they
+have been done (`test/phase5-done-check.sh`, `test/phase6-done-check.sh`):
 
 - **App Sandbox OFF** (target → Signing & Capabilities → remove the capability).
   The app's only ability is to run `cproj`; a sandboxed app cannot exec a helper
@@ -36,6 +49,11 @@ they have been done:
   tool, so this is fine (`app-spec.md` §1).
 - **`LSUIElement` = YES** (target → Info → "Application is agent (UIElement)"),
   so there is a menu-bar item and no dock icon.
+- **`NSAppleEventsUsageDescription`** (target → Info → "Privacy - AppleEvents
+  Sending Usage Description", e.g. "claude-yard opens a shell in your
+  terminal."). Opening a shell drives Terminal or iTerm with Apple events
+  (`app-spec.md` §7); without the string macOS **terminates the app** rather
+  than asking for permission, the first time you use Open shell.
 
 ## Making `cproj` reachable
 
@@ -55,6 +73,13 @@ ln -s "$PWD/cli/bin/cproj.js" /usr/local/bin/cproj   # or install it properly
 
 The app is a **thin client**: it shells out to `cproj … --json` and renders the
 result. No orchestration logic lives in Swift — if the app appears to need
-logic, a CLI command grows to provide it. `test/app-models.test.ts` holds the
-Swift models to the frozen schemas in both directions and asserts nothing here
-spawns anything but `cproj`.
+logic, a CLI command grows to provide it — which is exactly what Phase 6 did:
+the Services submenu and the New-project window needed the catalogue, and
+Preferences needed to write the config, so `cproj catalogue` and
+`cproj config get|set` exist rather than a copy of `services.yml` and a YAML
+writer in Swift.
+
+`test/app-models.test.ts` holds the Swift models to the frozen schemas in both
+directions, asserts nothing here spawns anything but `cproj`, and asserts the
+app composes no connection string, no project path and no config file of its
+own.

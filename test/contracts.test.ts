@@ -18,6 +18,8 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
 import { ERROR_CODES, CprojError, isErrorCode } from '../cli/src/errors.ts'
 import { SCHEMA_NAMES, loadSchema, validate } from '../cli/src/schema.ts'
+import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
+import { CONFIG_KEYS } from '../cli/src/config.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE } from '../cli/src/model/archetype.ts'
 import { DOCTOR_CHECKS, type DoctorReport } from '../cli/src/model/doctor.ts'
 import type { ListOutput } from '../cli/src/model/list.ts'
@@ -87,7 +89,16 @@ describe('status contract (cli-spec.md §7)', () => {
     const stopped: Status = {
       ssd: { mounted: false, root: '/Volumes/ssd/claude-projects' },
       docker: { available: false },
-      projects: [{ name: 'idle', archetype: 'ios', state: 'stopped', services: [], dev_container: null }],
+      projects: [
+        {
+          name: 'idle',
+          dir: '/Volumes/ssd/claude-projects/idle',
+          archetype: 'ios',
+          state: 'stopped',
+          services: [],
+          dev_container: null,
+        },
+      ],
       orphaned_volumes: [],
     }
     assert.ok(validate('status', stopped).valid)
@@ -331,6 +342,50 @@ describe('config contract (cli-spec.md §8)', () => {
   })
 })
 
+describe('catalogue + config commands (app-spec.md §6, §8, §12)', () => {
+  test('catalogue origins agree with the §4.1 resolution chain in code', () => {
+    const schema = loadSchema('catalogue') as { properties: { origin: { enum: string[] } } }
+    assert.deepEqual([...schema.properties.origin.enum].sort(), [...CATALOGUE_ORIGINS].sort())
+  })
+
+  test('the effective-config block is identical in config-get and config-set', () => {
+    const get = (loadSchema('config-get') as { $defs: Record<string, unknown> }).$defs.effective_config
+    const set = (loadSchema('config-set') as { $defs: Record<string, unknown> }).$defs.effective_config
+    assert.deepEqual(get, set, 'the two copies have drifted')
+  })
+
+  test('every settable key is a key the config file schema accepts', () => {
+    const file = loadSchema('config') as { properties: Record<string, unknown> }
+    assert.deepEqual([...CONFIG_KEYS].sort(), Object.keys(file.properties).sort())
+  })
+
+  test('`config set` reports changes only for keys it can actually set', () => {
+    const schema = loadSchema('config-set') as { properties: { changed: { items: { enum: string[] } } } }
+    assert.deepEqual([...schema.properties.changed.items.enum].sort(), [...CONFIG_KEYS].sort())
+  })
+
+  test('the effective config carries every §8 key, catalogue_path nullable', () => {
+    const effective = (loadSchema('config-get') as { $defs: { effective_config: { required: string[] } } }).$defs
+      .effective_config
+    assert.deepEqual([...effective.required].sort(), [...CONFIG_KEYS].sort())
+
+    const valid = {
+      path: '/home/me/.config/cproj/config.yml',
+      exists: false,
+      config: { ssd_root: '/Volumes/ssd/claude-projects', ssd_volume: '/Volumes/ssd', catalogue_path: null, terminal: 'Terminal' },
+      overrides: [],
+    }
+    assert.ok(validate('config-get', valid).valid, validate('config-get', valid).errors.join('\n'))
+  })
+
+  test('a catalogue row carries the band start, and nothing that looks like an assignment', () => {
+    const row = (loadSchema('catalogue') as { $defs: { catalogue_service: { properties: Record<string, unknown> } } })
+      .$defs.catalogue_service.properties
+    assert.ok('host_port_base' in row, 'the band start is what the app may show (§5)')
+    assert.ok(!('host_port' in row), 'an assigned port comes from a manifest, never from the catalogue')
+  })
+})
+
 describe('error codes (cli-spec.md §2)', () => {
   test('every code named in §2 is defined', () => {
     const spec = [
@@ -379,49 +434,53 @@ describe('error codes (cli-spec.md §2)', () => {
 describe('command surface (cli-spec.md §6)', () => {
   const leaves = walk(ROOT)
   const names = leaves.map((c) => c.path.join(' '))
-  /**
-   * Commands with real behaviour. Phase 1: read-only core. Phase 2: lifecycle.
-   * Phase 3: services and port allocation. Phase 4: shell, volumes, down-all,
-   * eject — which completes §6, so this set is now the whole surface.
-   */
-  const IMPLEMENTED = new Set([
-    'status',
-    'list',
-    'doctor',
-    'new',
-    'up',
-    'down',
-    'delete',
+
+  /** Every command §6 itself names. Phase 4 completed this set. */
+  const SPEC_COMMANDS = [
     'build',
-    'service add',
-    'service remove',
-    'service list',
-    'shell',
-    'volumes orphaned',
-    'volumes rm',
+    'delete',
+    'doctor',
+    'down',
     'down-all',
     'eject',
-  ])
+    'list',
+    'new',
+    'service add',
+    'service list',
+    'service remove',
+    'shell',
+    'status',
+    'up',
+    'volumes orphaned',
+    'volumes rm',
+  ]
+
+  /**
+   * Commands §6 does not name, grown for the app under §1's rule that "if the
+   * app needs something, a CLI command grows to provide it" (Phase 6):
+   *
+   *   catalogue   — the Services submenu ticks the attached rows of the WHOLE
+   *                 catalogue (app-spec.md §6), and New-project offers it (§8).
+   *                 The alternative was a second copy of services.yml in Swift.
+   *   config get  — Preferences shows the effective config (§12) …
+   *   config set  — … and writes it through the CLI, so precedence and path
+   *                 expansion stay in one place.
+   *
+   * Additive, so the freeze holds: no existing schema changed to make room.
+   */
+  const APP_COMMANDS = ['catalogue', 'config get', 'config set']
+
+  /** Commands with real behaviour — everything, since Phase 4. */
+  const IMPLEMENTED = new Set([...SPEC_COMMANDS, ...APP_COMMANDS])
 
   test('declares every command in §6', () => {
-    assert.deepEqual(names.sort(), [
-      'build',
-      'delete',
-      'doctor',
-      'down',
-      'down-all',
-      'eject',
-      'list',
-      'new',
-      'service add',
-      'service list',
-      'service remove',
-      'shell',
-      'status',
-      'up',
-      'volumes orphaned',
-      'volumes rm',
-    ])
+    for (const command of SPEC_COMMANDS) {
+      assert.ok(names.includes(command), `\`${command}\` is named in §6 but not declared`)
+    }
+  })
+
+  test('declares nothing beyond §6 but the app-support commands', () => {
+    assert.deepEqual(names.sort(), [...SPEC_COMMANDS, ...APP_COMMANDS].sort())
   })
 
   test('`cproj --help` lists all of them', () => {
@@ -454,13 +513,10 @@ describe('command surface (cli-spec.md §6)', () => {
 
   test('the implemented set matches the phases landed so far', () => {
     // Phase 1 was the read-only core; Phase 2 the project lifecycle; Phase 3
-    // services and ports; Phase 4 shell, volumes, down-all and eject. With
-    // Phase 4 landed this equals the declared surface — §6 is complete, and
-    // that equality is the contract-freeze gate.
+    // services and ports; Phase 4 shell, volumes, down-all and eject, which
+    // completed §6 and froze the contract. Phase 6 added the app-support
+    // commands above — additively, which is why the freeze survives it.
     assert.deepEqual([...IMPLEMENTED].sort(), [...names].sort())
-    for (const name of IMPLEMENTED) {
-      assert.ok(names.includes(name), `${name} is not a declared command`)
-    }
   })
 })
 

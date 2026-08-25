@@ -31,6 +31,12 @@ export type StatusService = {
 
 export type StatusProject = {
   name: string
+  /**
+   * The project's directory (§3). Reported rather than left to the caller to
+   * compose from `ssd.root`: "Open folder in Finder" must not require the app
+   * to know the on-disk layout.
+   */
+  dir: string
   archetype: Archetype
   state: ProjectState
   services: StatusService[]

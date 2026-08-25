@@ -31,6 +31,11 @@ export const SCHEMA_NAMES = [
   'volumes-rm',
   'down-all',
   'eject',
+  // Phase 6: the two commands the app needed that §6 did not name (§1 — "if
+  // the app needs something, a CLI command grows to provide it").
+  'catalogue',
+  'config-get',
+  'config-set',
 ] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]
 

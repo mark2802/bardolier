@@ -92,6 +92,24 @@ nonisolated struct ServiceState: CprojToken {
     static let stopped = ServiceState(rawValue: "stopped")
 }
 
+/// `config | ssd | bundled` — which step of the §4.1 chain answered.
+nonisolated struct CatalogueOrigin: CprojToken {
+    let rawValue: String
+    static let config = CatalogueOrigin(rawValue: "config")
+    static let ssd = CatalogueOrigin(rawValue: "ssd")
+    static let bundled = CatalogueOrigin(rawValue: "bundled")
+}
+
+/// A settable key of the CLI config file (cli-spec.md §8) — what Preferences
+/// writes through `cproj config set` (app-spec.md §12).
+nonisolated struct ConfigKey: CprojToken {
+    let rawValue: String
+    static let ssdRoot = ConfigKey(rawValue: "ssd_root")
+    static let ssdVolume = ConfigKey(rawValue: "ssd_volume")
+    static let cataloguePath = ConfigKey(rawValue: "catalogue_path")
+    static let terminal = ConfigKey(rawValue: "terminal")
+}
+
 /// Stable `doctor` finding ids the app may key UI off.
 nonisolated struct DoctorFindingID: CprojToken {
     let rawValue: String
@@ -133,6 +151,9 @@ nonisolated struct DockerStatus: Codable, Hashable, Sendable {
 
 nonisolated struct CprojProject: Codable, Hashable, Identifiable, Sendable {
     let name: String
+    /// The project's directory (cli-spec.md §3), reported by the CLI rather
+    /// than composed here — "Open folder in Finder" must not encode the layout.
+    let dir: String
     let archetype: Archetype
     let state: ProjectState
     let services: [ProjectService]
@@ -395,4 +416,62 @@ nonisolated struct BaseImage: Codable, Hashable, Identifiable, Sendable {
 
 nonisolated struct VersionOutput: Codable, Hashable, Sendable {
     let version: String
+}
+
+// MARK: - catalogue (app-spec.md §6, §8 — what may be attached)
+
+/// Every service type the catalogue defines. The Services submenu ticks the
+/// attached rows of THIS list, and New-project offers it; the app keeps no
+/// copy of `services.yml` of its own.
+nonisolated struct CatalogueOutput: Codable, Hashable, Sendable {
+    /// The `services.yml` that answered.
+    let path: String
+    let origin: CatalogueOrigin
+    /// Every catalogue entry, sorted by key.
+    let services: [CatalogueService]
+}
+
+nonisolated struct CatalogueService: Codable, Hashable, Identifiable, Sendable {
+    let key: String
+    let display: String
+    let image: String
+    let containerPort: Int
+    /// Start of this service's host-port band (cli-spec.md §5). NOT a port any
+    /// project holds — an assigned port only ever comes from a manifest, which
+    /// means from `status` or a `service add` response.
+    let hostPortBase: Int
+
+    var id: String { key }
+}
+
+// MARK: - config get / set (app-spec.md §12)
+
+/// Every §8 key, resolved: defaults, then the file, then the environment.
+nonisolated struct EffectiveConfig: Codable, Hashable, Sendable {
+    let ssdRoot: String
+    let ssdVolume: String
+    /// nil when unset — the §4.1 fallback chain applies.
+    let cataloguePath: String?
+    let terminal: String
+}
+
+nonisolated struct ConfigGetOutput: Codable, Hashable, Sendable {
+    /// The config file consulted, whether or not it exists.
+    let path: String
+    let exists: Bool
+    let config: EffectiveConfig
+    /// Environment variables that overrode a value. A key named here cannot be
+    /// changed by writing the file, so Preferences says so instead of
+    /// appearing to succeed.
+    let overrides: [String]
+}
+
+nonisolated struct ConfigSetOutput: Codable, Hashable, Sendable {
+    let path: String
+    let created: Bool
+    /// Keys whose stored value actually changed; empty means a no-op write.
+    let changed: [ConfigKey]
+    /// The effective config AFTER the write.
+    let config: EffectiveConfig
+    let overrides: [String]
 }
