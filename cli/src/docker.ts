@@ -77,6 +77,8 @@ export type BuildRequest = {
   readonly dockerfile: string
   /** `--build-arg` pairs; the host UID/GID live here (implementation plan, Phase 2). */
   readonly args: Readonly<Record<string, string>>
+  /** `--platform`, for an image whose toolchain exists for one architecture only (`images.ts`). */
+  readonly platform?: string | null
 }
 
 export type Docker = {
@@ -312,6 +314,8 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
 
     async build(request) {
       const args: string[] = ['build', '--tag', `${request.tag}:latest`, '--file', request.dockerfile]
+      // Before the build args, so the argv reads the way the docs write it.
+      if (request.platform) args.push('--platform', request.platform)
       // Sorted so the same build twice is the same argv — one less reason for a
       // rebuild to differ from the build it is meant to reproduce.
       for (const key of Object.keys(request.args).sort()) {

@@ -2,9 +2,10 @@
  * Base images on disk — the other half of the §4.3 archetype map.
  *
  * `model/archetype.ts` says WHICH image an archetype uses; this says whether
- * that image's Dockerfile exists yet. The `ios` and `android` bases land in
- * Phase 8, so "declared but not written" is a normal state that `build` and
- * `doctor` both have to describe honestly rather than treat as an error.
+ * that image's Dockerfile exists on disk, and on which platform it has to be
+ * built and run. "Declared but not written" stays a describable state rather
+ * than an error: `build` and `doctor` report it, so a Dockerfile that has not
+ * been added yet (or was deleted) is explained rather than crashing the CLI.
  */
 
 import { existsSync } from 'node:fs'
@@ -17,10 +18,26 @@ export type ImageDefinition = {
   readonly image: BaseImage
   /** Archetypes this image serves, sorted; §4.3 maps several onto one image. */
   readonly archetypes: readonly Archetype[]
-  /** Path to its Dockerfile, or null when it does not exist yet (Phase 8). */
+  /** Path to its Dockerfile, or null when the file does not exist. */
   readonly dockerfile: string | null
   /** Build context: the image's own directory. */
   readonly context: string
+  /** Platform the image is pinned to, or null to build and run natively. */
+  readonly platform: string | null
+}
+
+/**
+ * The one image that cannot be built for the machine it runs on.
+ *
+ * Google publishes the Linux Android SDK build tools — aapt2 above all — for
+ * x86_64 only, so on Apple Silicon `claude-and` is built and run emulated. It
+ * is pinned HERE, in one place, because `build` and the generated compose file
+ * must agree: an image built `linux/amd64` and started without the pin either
+ * fails to start or silently pulls a different image. Everything else builds
+ * for whatever the Mac is.
+ */
+export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
+  'claude-and': 'linux/amd64',
 }
 
 export function imagesRoot(): string {
@@ -37,6 +54,7 @@ export function baseImages(root = imagesRoot()): ImageDefinition[] {
       archetypes: ARCHETYPES.filter((archetype) => ARCHETYPE_BASE_IMAGE[archetype] === image),
       dockerfile: existsSync(dockerfile) ? dockerfile : null,
       context,
+      platform: IMAGE_PLATFORM[image] ?? null,
     }
   })
 }

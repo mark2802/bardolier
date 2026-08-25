@@ -1,9 +1,9 @@
 /**
  * Archetype → base image map. `cli-spec.md` §4.3.
  *
- * Base images carry the per-archetype toolchain only. The `ios` and `android`
- * base images are built in Phase 8; the map is frozen here because
- * `project.yml` records `base_image` and the app renders `archetype`.
+ * Base images carry the per-archetype toolchain only. The map is frozen here
+ * because `project.yml` records `base_image` and the app renders `archetype`;
+ * whether an image's Dockerfile exists on disk is `images.ts`'s question.
  */
 
 export const ARCHETYPES = ['web', 'ios', 'android', 'library'] as const

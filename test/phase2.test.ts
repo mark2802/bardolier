@@ -655,15 +655,15 @@ describe('build (cli-spec.md §6, Images)', () => {
     assert.deepEqual(result.images[0]?.archetypes, ['web', 'library'])
   })
 
-  test('no argument considers every base image, reporting the ones Phase 8 owns', async () => {
+  test('no argument builds every base image, in §4.3 order', async () => {
     const box = sandbox()
     const result = await runBuild(makeContext(box, stubDocker()), undefined)
     assert.deepEqual(
       result.images.map((i) => [i.image, i.status]),
       [
         ['claude-web', 'built'],
-        ['claude-ios', 'unavailable'],
-        ['claude-and', 'unavailable'],
+        ['claude-ios', 'built'],
+        ['claude-and', 'built'],
       ],
     )
     for (const image of result.images) {
@@ -671,12 +671,14 @@ describe('build (cli-spec.md §6, Images)', () => {
     }
   })
 
-  test('asking for an image that does not exist yet says so', async () => {
+  test('an image with no Dockerfile behind it is described, not thrown away', () => {
+    // The state `build` reports as `unavailable`: reachable through the images
+    // root, which is what makes a deleted or not-yet-written Dockerfile an
+    // explanation rather than a crash.
     const box = sandbox()
-    await assert.rejects(
-      () => runBuild(makeContext(box, stubDocker()), 'ios'),
-      (error: unknown) => error instanceof CprojError && error.code === 'NOT_IMPLEMENTED',
-    )
+    for (const definition of baseImages(join(box.root, 'no-images'))) {
+      assert.equal(definition.dockerfile, null)
+    }
   })
 
   test('a dead daemon is DOCKER_UNAVAILABLE, and an unknown archetype is refused', async () => {

@@ -23,7 +23,11 @@
           },
           "status": { "type": "string", "enum": ["built", "unavailable"] },
           "dockerfile": { "type": ["string", "null"] },
-          "reason": { "type": "string", "description": "Why the image is unavailable; absent on success." }
+          "reason": { "type": "string", "description": "Why the image is unavailable; absent on success." },
+          "platform": {
+            "type": "string",
+            "description": "Platform the image is pinned to (e.g. linux/amd64); absent when it builds for the host's own architecture."
+          }
         }
       }
     }

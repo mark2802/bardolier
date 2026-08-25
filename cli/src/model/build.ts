@@ -1,10 +1,10 @@
 /**
  * `cproj build` output — `cli-spec.md` §6 (Images).
  *
- * One entry per base image, whether or not it could be built: an archetype
- * whose image is not written yet (ios/android, Phase 8) is reported as
- * `unavailable` rather than silently skipped, so `doctor`'s "base images
- * missing" finding always has a matching explanation here.
+ * One entry per base image, whether or not it could be built: an image with no
+ * Dockerfile behind it is reported as `unavailable` rather than silently
+ * skipped, so `doctor`'s "base images missing" finding always has a matching
+ * explanation here.
  */
 
 import type { Archetype, BaseImage } from './archetype.ts'
@@ -21,6 +21,8 @@ export type BuiltImage = {
   dockerfile: string | null
   /** Why it is unavailable; absent on success. */
   reason?: string
+  /** Platform the image is pinned to; absent when it builds for the host's own. */
+  platform?: string
 }
 
 export type BuildOutput = {

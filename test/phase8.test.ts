@@ -1,0 +1,241 @@
+/**
+ * Phase 8 tests — the mobile base images, and the boundary they encode.
+ *
+ * Phase 8's done-check builds `claude-ios` and `claude-and` for real and looks
+ * inside them (`test/phase8-done-check.sh`); that takes a daemon, a network and
+ * several gigabytes, so it is not what `npm test` runs. What a fast test CAN
+ * own is everything the built image is judged against:
+ *
+ *   - THE MAP IS COMPLETE. Every archetype in §4.3 now resolves to a Dockerfile
+ *     that exists, so `build` has no `unavailable` left to report and `doctor`'s
+ *     "base images missing" finding means "not built yet", never "never will be".
+ *   - THE BUILD-ARG CONTRACT. Each Dockerfile takes HOST_UID/HOST_GID and drops
+ *     to that user at /work, which is the whole reason `cproj build` exists
+ *     rather than `docker build`. An image that skipped it would hand the Mac
+ *     back root-owned files, and only a real build would notice.
+ *   - THE ARCHITECTURE PIN AGREES WITH ITSELF. `claude-and` is x86_64-only
+ *     because Google's aapt2 is; `build` and the generated compose file both
+ *     have to say so, or the image is built for one platform and started on
+ *     another. One constant, two readers, checked here.
+ *   - THE BOUNDARY IS IN THE IMAGE, not only in prose. The ios base carries no
+ *     `xcodebuild` and the android base no `adb`, because CLAUDE.md's rule that
+ *     the agent must not attempt host-only steps is worth more when there is
+ *     nothing in the container to attempt them with.
+ *
+ * The seeded CLAUDE.md that tells the agent all this is Phase 2's (§10); what
+ * is asserted here is that the image and that text agree.
+ */
+
+import { test, describe, afterEach } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { validate } from '../cli/src/schema.ts'
+import { IMAGE_PLATFORM, baseImages } from '../cli/src/images.ts'
+import { renderCompose } from '../cli/src/compose.ts'
+import { runBuild } from '../cli/src/commands/build.ts'
+import { runNew } from '../cli/src/commands/new.ts'
+import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from '../cli/src/model/archetype.ts'
+import { seededFiles } from '../cli/src/scaffold.ts'
+import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
+import { makeContext, makeSandbox, manifest, stubDocker, type Sandbox } from './helpers.ts'
+
+const sandboxes: Sandbox[] = []
+function sandbox(): Sandbox {
+  const created = makeSandbox()
+  sandboxes.push(created)
+  return created
+}
+afterEach(() => {
+  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
+})
+
+/** The bundled catalogue, which is what a real run resolves to (§4.1). */
+function catalogue(): ServiceCatalogue {
+  return makeContext(sandbox()).catalogue().catalogue
+}
+
+/** The Dockerfile text of a base image, read the way `docker build` would. */
+function dockerfile(image: string): string {
+  const definition = baseImages().find((candidate) => candidate.image === image)
+  assert.ok(definition?.dockerfile, `${image} has no Dockerfile`)
+  return readFileSync(definition.dockerfile, 'utf8')
+}
+
+// ── The §4.3 map, completed ───────────────────────────────────────────────────
+
+describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
+  test('each declared image is written, and each archetype resolves to one', () => {
+    for (const definition of baseImages()) {
+      assert.ok(definition.dockerfile, `${definition.image} is declared in §4.3 but has no Dockerfile`)
+    }
+    for (const archetype of ARCHETYPES) {
+      const image = ARCHETYPE_BASE_IMAGE[archetype]
+      assert.ok(BASE_IMAGES.includes(image), `${archetype} maps to an image that does not exist`)
+    }
+    // ios and android are the two the map has been waiting on.
+    assert.equal(ARCHETYPE_BASE_IMAGE.ios, 'claude-ios')
+    assert.equal(ARCHETYPE_BASE_IMAGE.android, 'claude-and')
+  })
+
+  test('`build` with no argument reports nothing unavailable', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), undefined)
+
+    assert.ok(validate('build', result).valid, 'build output must match build.schema.json')
+    assert.deepEqual(
+      result.images.map((image) => [image.image, image.status]),
+      [
+        ['claude-web', 'built'],
+        ['claude-ios', 'built'],
+        ['claude-and', 'built'],
+      ],
+    )
+    // Every build carries the host identity — the point of the command.
+    for (const call of docker.calls) {
+      assert.ok(call.kind === 'build')
+      assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20' })
+    }
+  })
+
+  test('`build --archetype ios` and `--archetype android` reach their own Dockerfiles', async () => {
+    for (const [archetype, image] of [
+      ['ios', 'claude-ios'],
+      ['android', 'claude-and'],
+    ] as const) {
+      const box = sandbox()
+      const docker = stubDocker()
+      const result = await runBuild(makeContext(box, docker), archetype)
+      assert.deepEqual(result.images.map((entry) => entry.image), [image])
+
+      const call = docker.calls[0]
+      assert.ok(call?.kind === 'build')
+      assert.equal(call.request.tag, image)
+      assert.ok(call.request.dockerfile.endsWith(join(image, 'Dockerfile')))
+    }
+  })
+})
+
+// ── The build-arg contract every base image keeps ─────────────────────────────
+
+describe('the base images keep the ownership contract (implementation plan, Phase 2)', () => {
+  for (const image of BASE_IMAGES) {
+    test(`${image} takes the host identity and works at /work as that user`, () => {
+      const text = dockerfile(image)
+      // These four are what `cproj build` and `compose.ts` assume between them.
+      assert.match(text, /ARG HOST_UID/, 'no HOST_UID build arg: files would come back root-owned')
+      assert.match(text, /ARG HOST_GID/)
+      assert.match(text, /USER \$\{HOST_UID\}:\$\{HOST_GID\}/, 'the image still runs as root')
+      assert.match(text, /WORKDIR \/work/, 'the bind mount lands at /work (compose.ts WORKDIR)')
+      // `-o` is what lets the container reuse macOS's uid 501 / gid 20 even
+      // when the distro already owns them.
+      assert.match(text, /groupadd -o/)
+      assert.match(text, /useradd -o/)
+    })
+  }
+})
+
+// ── The one architecture pin, read by two writers ─────────────────────────────
+
+describe('claude-and is pinned to linux/amd64, consistently (images.ts)', () => {
+  test('only the android base is pinned, and it is pinned to x86_64', () => {
+    assert.deepEqual(IMAGE_PLATFORM, { 'claude-and': 'linux/amd64' })
+    const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.platform]))
+    assert.deepEqual(byImage, {
+      'claude-web': null,
+      'claude-ios': null,
+      'claude-and': 'linux/amd64',
+    })
+  })
+
+  test('`build` passes --platform for it, and for nothing else', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), undefined)
+
+    const platforms = docker.calls.map((call) => (call.kind === 'build' ? call.request.platform ?? null : null))
+    assert.deepEqual(platforms, [null, null, 'linux/amd64'])
+
+    // And it says so in the output, only where it is true.
+    const reported = Object.fromEntries(result.images.map((image) => [image.image, image.platform ?? null]))
+    assert.deepEqual(reported, {
+      'claude-web': null,
+      'claude-ios': null,
+      'claude-and': 'linux/amd64',
+    })
+  })
+
+  test('the generated compose file starts the dev container on the same platform', () => {
+    const services = catalogue()
+    const android = renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'claude-and' }), catalogue: services })
+    assert.match(android, /platform: linux\/amd64/)
+
+    // …and adds nothing for an unpinned image, so no existing project's
+    // generated file gains a diff (§9 determinism).
+    const web = renderCompose({ manifest: manifest('site'), catalogue: services })
+    assert.ok(!web.includes('platform:'), 'an unpinned base image must not emit a platform key')
+
+    // Same manifest, same bytes — the pin is not a new source of drift.
+    assert.equal(android, renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'claude-and' }), catalogue: services }))
+  })
+
+  test('`new android` writes a compose file the daemon can actually start', async () => {
+    const box = sandbox()
+    await runNew(makeContext(box), { name: 'droid', archetype: 'android', services: undefined })
+    const compose = readFileSync(join(box.root, 'droid', 'docker-compose.yml'), 'utf8')
+    assert.match(compose, /image: claude-and:latest/)
+    assert.match(compose, /platform: linux\/amd64/)
+  })
+})
+
+// ── The boundary, as a fact about the image ───────────────────────────────────
+
+describe('the mobile images encode the host/container boundary (CLAUDE.md)', () => {
+  test('claude-ios carries the Swift toolchain and swiftlint, and no host-only build', () => {
+    const text = dockerfile('claude-ios')
+    assert.match(text, /^FROM swift:/m, 'the ios base must be the open-source Swift toolchain')
+    assert.match(text, /swiftlint/, 'swiftlint is half of what the ios archetype can do in here (§4.3)')
+    // Nothing in here may look like a way to build the app: those steps are the
+    // human's, on the Mac.
+    assert.ok(!/^\s*RUN[^\n]*xcodebuild/m.test(text), 'the ios base must not invoke xcodebuild')
+    assert.ok(!/simulator|xcrun simctl/i.test(text.replace(/^#.*$/gm, '')), 'no simulator belongs in a Linux image')
+  })
+
+  test('claude-and carries the SDK and Gradle, and no adb', () => {
+    const text = dockerfile('claude-and')
+    assert.match(text, /^FROM eclipse-temurin:/m, 'the android base needs a JDK')
+    assert.match(text, /sdkmanager/, 'the Android SDK is installed with sdkmanager')
+    assert.match(text, /gradle-\$\{GRADLE_VERSION\}/, 'a Gradle on PATH for projects without a wrapper')
+    assert.match(text, /ANDROID_HOME=/)
+    // platform-tools exists to talk to a device or emulator; both are host-side,
+    // so leaving it out makes the boundary a property of the image.
+    const instructions = text.replace(/^#.*$/gm, '')
+    assert.ok(!/platform-tools/.test(instructions), 'platform-tools (adb) must not be installed')
+    assert.ok(!/emulator/.test(instructions), 'the emulator is host-side')
+  })
+
+  test('every base image pins its toolchain version, so the same file builds the same image', () => {
+    // A floating `latest` would make two builds of one Dockerfile differ —
+    // the same determinism rule the compose file is held to (§9).
+    assert.match(dockerfile('claude-web'), /ARG NODE_VERSION=\d/)
+    assert.match(dockerfile('claude-ios'), /ARG SWIFT_VERSION=\d/)
+    assert.match(dockerfile('claude-ios'), /ARG SWIFTLINT_VERSION=\d/)
+    const android = dockerfile('claude-and')
+    for (const arg of ['JAVA_VERSION', 'ANDROID_CMDLINE_TOOLS', 'ANDROID_PLATFORM', 'ANDROID_BUILD_TOOLS', 'GRADLE_VERSION']) {
+      assert.match(android, new RegExp(`ARG ${arg}=`), `${arg} is not pinned`)
+    }
+  })
+
+  test('the seeded CLAUDE.md steers the agent the same way the image does (§10)', () => {
+    const ios = seededFiles('myapp', 'ios').find((file) => file.name === 'CLAUDE.md')?.contents ?? ''
+    assert.match(ios, /xcodebuild/, 'the ios note must name the command it is forbidding')
+    assert.match(ios, /swiftlint/, 'and what the container CAN do instead')
+    assert.match(ios, /logic tests/)
+
+    const android = seededFiles('myapp', 'android').find((file) => file.name === 'CLAUDE.md')?.contents ?? ''
+    assert.match(android, /Gradle builds and unit tests \*\*run in this container\*\*/)
+    assert.match(android, /adb/, 'the android note must name adb, which the image does not carry')
+  })
+})

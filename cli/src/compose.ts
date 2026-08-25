@@ -17,6 +17,7 @@
 
 import { stringify as stringifyYaml } from 'yaml'
 import { CprojError } from './errors.ts'
+import { IMAGE_PLATFORM } from './images.ts'
 import { composeProject, devContainerName, serviceContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
@@ -71,9 +72,15 @@ export function attachedKeys(manifest: ProjectManifest): string[] {
 type ComposeService = Record<string, unknown>
 
 function devService(manifest: ProjectManifest): ComposeService {
+  // Present only when the base image is pinned (`claude-and`, whose SDK tools
+  // are x86_64-only): the key is absent otherwise, so no existing project's
+  // generated file gains a spurious diff.
+  const platform = IMAGE_PLATFORM[manifest.base_image]
+
   return {
     container_name: devContainerName(manifest.name),
     image: `${manifest.base_image}:latest`,
+    ...(platform ? { platform } : {}),
     // The dev container is a place to exec into, not a process to supervise.
     // `up` starts it and it waits; the agent's work happens through `exec`.
     command: ['sleep', 'infinity'],

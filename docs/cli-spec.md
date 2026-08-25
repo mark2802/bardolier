@@ -120,6 +120,11 @@ created: 2026-08-19T10:00:00Z
 
 Base images carry the per-archetype toolchain only. See CLAUDE.md.
 
+`claude-and` is built and run as `linux/amd64`: Google publishes the Linux
+Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
+that one image runs emulated. The pin lives in `cli/src/images.ts` and is read
+by both `build` and compose generation (§9), which must agree.
+
 ## 5. Port allocation (first-class)
 
 Requirements, in priority order:
@@ -276,7 +281,9 @@ Schema stability is the contract. Additive changes only once the app ships.
   ordering, so regeneration produces no spurious diffs).
 - One user-defined network per project; services + dev container attached.
 - Dev container: base image for the archetype, bind-mount project dir → `/work`,
-  `sleep infinity`.
+  `sleep infinity`; plus `platform:` when the archetype's base image is pinned
+  to one architecture (§4.3), so it starts the way `build` built it. The key is
+  absent otherwise — an unpinned project's generated file must not change.
 - Services: image from catalogue, named volume, `host_port:container_port`
   published, env interpolated (`{project}` → name).
 - Never publish the dev container's own ports unless an archetype needs it

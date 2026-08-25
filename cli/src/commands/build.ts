@@ -26,11 +26,11 @@ export async function runBuild(ctx: Context, archetype: string | undefined): Pro
   const selected = baseImages().filter((definition) => wanted === null || definition.image === wanted)
 
   if (wanted !== null && selected[0]?.dockerfile === null) {
-    // Asked for by name and not written yet: say so rather than reporting a
-    // successful build of nothing.
+    // Asked for by name and there is no Dockerfile behind it: say so rather
+    // than reporting a successful build of nothing.
     throw new CprojError(
       'NOT_IMPLEMENTED',
-      `The \`${wanted}\` base image is not written yet — the ios/android bases land in Phase 8.`,
+      `The \`${wanted}\` base image has no Dockerfile at ${selected[0]?.context ?? 'its image directory'}.`,
     )
   }
 
@@ -48,7 +48,7 @@ export async function runBuild(ctx: Context, archetype: string | undefined): Pro
         archetypes: [...definition.archetypes],
         status: 'unavailable',
         dockerfile: null,
-        reason: 'No Dockerfile yet — this base image lands in Phase 8.',
+        reason: `No Dockerfile at ${definition.context}.`,
       })
       continue
     }
@@ -58,14 +58,19 @@ export async function runBuild(ctx: Context, archetype: string | undefined): Pro
       context: definition.context,
       dockerfile: definition.dockerfile,
       args: { HOST_UID: String(uid), HOST_GID: String(gid) },
+      platform: definition.platform,
     })
 
-    images.push({
+    const built: BuiltImage = {
       image: definition.image,
       archetypes: [...definition.archetypes],
       status: 'built',
       dockerfile: definition.dockerfile,
-    })
+    }
+    // Reported only where it is true, so the common case says nothing about
+    // architecture and the pinned one cannot be missed (`images.ts`).
+    if (definition.platform) built.platform = definition.platform
+    images.push(built)
   }
 
   return { uid, gid, images }
@@ -75,9 +80,10 @@ export function renderBuild(output: BuildOutput): string[] {
   const lines = [`Host identity: uid=${output.uid} gid=${output.gid} (files under /work will be yours)`, '']
   for (const image of output.images) {
     const serves = image.archetypes.join(', ')
+    const platform = image.platform ? `, ${image.platform}` : ''
     lines.push(
       image.status === 'built'
-        ? `✓ ${image.image}:latest  built  (serves: ${serves})`
+        ? `✓ ${image.image}:latest  built  (serves: ${serves}${platform})`
         : `· ${image.image}  skipped  (serves: ${serves}) — ${image.reason ?? 'unavailable'}`,
     )
   }

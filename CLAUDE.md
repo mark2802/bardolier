@@ -131,7 +131,30 @@ bash test/phase7-done-check.sh   # Phase 7: the two flows that leave the app —
                                  # device (a done-check must never reach a real
                                  # `diskutil`); its other half is a soak with a
                                  # real disk and a real Xcode, which it prints
+bash test/phase8-done-check.sh   # Phase 8: the mobile base images, for real —
+                                 # it builds them if they are missing, then
+                                 # drives an ios and an android project through
+                                 # `new`/`up` and works inside the container:
+                                 # swift build/test + swiftlint, and a Gradle
+                                 # assembleDebug + unit test that must produce
+                                 # an APK owned by you. It needs the network and
+                                 # its Gradle leg is emulated on Apple Silicon;
+                                 # PHASE8_QUICK=1 keeps everything but the two
+                                 # toolchain runs
+bash test/regression.sh          # every phase's check, each run ONCE, in order
+bash test/regression.sh --through 7   # …up to a phase (7 skips Phase 8's
+                                 # image builds and Gradle run: ~1 minute)
 ```
+
+**The ladder is walked once.** Each phase's check used to end by re-running all
+of its predecessors — and each of those did the same, so phase 0's containers
+came up dozens of times per invocation and `phase7-done-check.sh` took the
+better part of an hour for a minute of distinct work. `test/regression.sh` now
+owns that walk: it runs each phase's own sections in order, exactly once, with
+`CPROJ_REGRESSION` set, and a phase check that sees that flag skips its own
+"earlier phases" section instead of recursing. Run a phase check on its own and
+it still covers everything below it — it just asks the runner rather than
+rebuilding the pyramid. Same coverage, linear cost (0-7 is ~60s).
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
 `ajv-formats` (schema validation). Tests use the built-in `node:test` runner.
@@ -222,9 +245,28 @@ will not go, `diskutil`'s own refusal is reported as it came.
 
 **Base images live in `cli/images/<image>/Dockerfile`** and are built by
 `cproj build`, which passes `HOST_UID`/`HOST_GID` so files the dev container
-writes into the bind-mounted `/work` come back owned by the Mac user. The
-`claude-ios` and `claude-and` images land in Phase 8; until then `build` reports
-them `unavailable` rather than failing.
+writes into the bind-mounted `/work` come back owned by the Mac user. All three
+exist: `claude-web` (Node), `claude-ios` (the Swift toolchain plus swiftlint)
+and `claude-and` (JDK, Android SDK, Gradle). An image with no Dockerfile behind
+it is still reported `unavailable` rather than failing — that state now means a
+missing file, not an unfinished phase.
+
+**The boundary is built into the mobile images, not just written down.** The
+ios base has no `xcodebuild`, `xcrun` or simulator and the android base no
+`adb`, so the host-only steps the seeded `CLAUDE.md` forbids cannot be attempted
+from inside — advice the container cannot disobey. What each CAN do is what
+§4.3 promises: `swift build`/`swift test`/`swiftlint` there, Gradle builds and
+unit tests here.
+
+**One image is pinned to an architecture, in one place.** Google ships the Linux
+Android SDK build tools (aapt2) for x86_64 only, so `claude-and` is built and
+run `linux/amd64` — emulated on Apple Silicon, which is slower but is the
+difference between building and not. `IMAGE_PLATFORM` in `cli/src/images.ts` is
+the single constant; `build` turns it into `--platform` and `compose.ts` into
+the dev service's `platform:`, because an image built for one platform and
+started on another either fails or silently pulls a different image. Every other
+image builds for whatever the Mac is, and emits no `platform:` key — an unpinned
+project's generated compose file must not change.
 
 **Two commands exist because the app asked, not because §6 named them.**
 `cproj catalogue` and `cproj config get|set` are Phase 6 additions under §1's

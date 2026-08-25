@@ -1,0 +1,4 @@
+# The build context for this image is the directory holding its Dockerfile and
+# nothing else — kept explicit so a stray file can never be pulled into a layer.
+*
+!Dockerfile

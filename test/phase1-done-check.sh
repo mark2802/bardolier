@@ -185,10 +185,21 @@ head "6. Test suites and typecheck"
 
 if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
 if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-if bash test/phase0-done-check.sh >/dev/null 2>&1; then
-  ok "test/phase0-done-check.sh still passes"
+# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
+# Recursing here — each check re-running all its predecessors, which did the
+# same — made phase 0 come up dozens of times per invocation and turned this
+# section into most of the run.
+if [ -n "${CPROJ_REGRESSION:-}" ]; then
+  ok "phases 0-0: already being walked, in order, by test/regression.sh"
 else
-  bad "test/phase0-done-check.sh regressed"
+  LADDER="$(mktemp)"
+  if bash test/regression.sh --through 0 >"$LADDER" 2>&1; then
+    ok "phases 0-0 still pass (test/regression.sh)"
+  else
+    bad "an earlier phase regressed — from test/regression.sh:"
+    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
+  fi
+  rm -f "$LADDER"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

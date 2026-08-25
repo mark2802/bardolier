@@ -410,6 +410,8 @@ nonisolated struct BaseImage: Codable, Hashable, Identifiable, Sendable {
     let dockerfile: String?
     /// Why the image is unavailable; absent on success.
     let reason: String?
+    /// Platform the image is pinned to; absent when it builds for this Mac's own.
+    let platform: String?
 
     var id: String { image }
 }

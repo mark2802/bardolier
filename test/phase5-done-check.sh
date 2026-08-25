@@ -92,13 +92,22 @@ if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm
 # ── 4. The CLI the app is a client of ────────────────────────────────────────
 head "4. Earlier phases"
 
-for phase in 0 1 2 3 4; do
-  if bash "test/phase${phase}-done-check.sh" >/dev/null 2>&1; then
-    ok "test/phase${phase}-done-check.sh still passes"
+# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
+# Recursing here — each check re-running all its predecessors, which did the
+# same — made phase 0 come up dozens of times per invocation and turned this
+# section into most of the run.
+if [ -n "${CPROJ_REGRESSION:-}" ]; then
+  ok "phases 0-4: already being walked, in order, by test/regression.sh"
+else
+  LADDER="$(mktemp)"
+  if bash test/regression.sh --through 4 >"$LADDER" 2>&1; then
+    ok "phases 0-4 still pass (test/regression.sh)"
   else
-    bad "test/phase${phase}-done-check.sh regressed"
+    bad "an earlier phase regressed — from test/regression.sh:"
+    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
   fi
-done
+  rm -f "$LADDER"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 printf '\n\033[1mPhase 5: %d passed, %d failed, %d manual\033[0m\n' "$pass" "$fail" "$manual"

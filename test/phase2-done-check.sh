@@ -277,8 +277,22 @@ head "7. Test suites, typecheck, and earlier done-checks"
 
 if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
 if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-if bash test/phase0-done-check.sh >/dev/null 2>&1; then ok "test/phase0-done-check.sh still passes"; else bad "test/phase0-done-check.sh regressed"; fi
-if bash test/phase1-done-check.sh >/dev/null 2>&1; then ok "test/phase1-done-check.sh still passes"; else bad "test/phase1-done-check.sh regressed"; fi
+# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
+# Recursing here — each check re-running all its predecessors, which did the
+# same — made phase 0 come up dozens of times per invocation and turned this
+# section into most of the run.
+if [ -n "${CPROJ_REGRESSION:-}" ]; then
+  ok "phases 0-1: already being walked, in order, by test/regression.sh"
+else
+  LADDER="$(mktemp)"
+  if bash test/regression.sh --through 1 >"$LADDER" 2>&1; then
+    ok "phases 0-1 still pass (test/regression.sh)"
+  else
+    bad "an earlier phase regressed — from test/regression.sh:"
+    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
+  fi
+  rm -f "$LADDER"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf '\n\033[1mPhase 2: %d passed, %d failed\033[0m\n' "$pass" "$fail"
