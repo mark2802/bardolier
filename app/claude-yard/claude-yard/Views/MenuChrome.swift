@@ -190,13 +190,11 @@ struct ErrorBanner: View {
                     .textSelection(.enabled)
             }
 
-            // EJECT_BLOCKED's holders (§10): who to quit, by name.
+            // EJECT_BLOCKED's holders (§10): who to quit, by name. The same
+            // rows the eject panel shows, so a holder reads identically
+            // wherever it surfaces.
             if !failure.holders.isEmpty {
-                ForEach(failure.holders) { holder in
-                    Text("• \(holder.command) (pid \(holder.pid))")
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                }
+                HolderList(holders: failure.holders)
             }
 
             if let suggestion = failure.recoverySuggestion {
@@ -286,6 +284,79 @@ struct CopyButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+/// Who still holds the SSD (app-spec.md §10).
+///
+/// The CLI's answer, rendered and not interpreted: `lsof` named a command, a
+/// pid, the user and the paths, and the app's whole job is to make "quit Xcode"
+/// the obvious next move. It never offers to kill anything — cproj will not
+/// force an unmount, and neither will the menu that drives it.
+struct HolderList: View {
+    var holders: [SsdHolder]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(holders) { holder in
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "macwindow")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                        Text(holder.command).font(.caption.weight(.medium))
+                        Text("pid \(String(holder.pid))\(holder.user.map { " · \($0)" } ?? "")")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    // One path is enough to recognise WHY it is holding the
+                    // disk; the CLI already limits how many it reports.
+                    if let path = holder.paths.first {
+                        Text(path)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A menu row whose whole width copies a value — the click-to-copy §5 asks for.
+///
+/// The icon is FEEDBACK, not the target. A 10pt button is a poor thing to aim
+/// at when the connection string is the reason the row exists, so the row takes
+/// the click and the icon only says it landed.
+struct CopyRow<Content: View>: View {
+    var value: String
+    var help: String
+    @ViewBuilder var content: () -> Content
+
+    @State private var copied = false
+
+    var body: some View {
+        MenuRow(action: copy) {
+            HStack(spacing: 6) {
+                content()
+                Spacer(minLength: 0)
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10))
+                    .foregroundStyle(copied ? Color.green : Color.secondary)
+            }
+        }
+        .help(help)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            copied = false
+        }
     }
 }
 

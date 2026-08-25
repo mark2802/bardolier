@@ -26,6 +26,11 @@
 //  `CprojClient` passes `--force`, because the CLI cannot prompt with no
 //  terminal (app-spec.md §6, §9).
 //
+//  Phase 7 adds the two states that outlive a command: `ejectPhase`, because a
+//  blocked eject is something the user goes away and fixes before retrying
+//  (§10), and `cprojMissing`, because an app that cannot find its CLI has
+//  nothing to say about anything else and should say THAT once (§13).
+//
 
 // Combine is imported directly, not by way of SwiftUI: the target builds with
 // MemberImportVisibility, under which a transitively-imported module's members
@@ -34,6 +39,31 @@
 import Combine
 import Foundation
 import SwiftUI
+
+/// Where Close all & eject has got to (app-spec.md §10).
+///
+/// A phase rather than a plain error, because §10 describes a flow with a
+/// shape: stop everything, ask who still holds the disk, unmount. "Something
+/// still holds it" is not a failure to dismiss — it is a state the user acts on
+/// (quit Xcode) and then RETRIES, and the holder list has to survive on screen
+/// long enough for them to do that. Reducing it to `lastError` would put it in
+/// a banner that the next refresh's success wipes.
+nonisolated enum EjectPhase: Equatable, Sendable {
+    /// Nothing attempted yet, or the SSD came back.
+    case ready
+    /// `cproj eject` is running: down-all, then the holder check, then diskutil.
+    case working
+    /// EJECT_BLOCKED. `holders` is the CLI's answer, rendered verbatim; the app
+    /// never forces and offers Retry instead (§10).
+    case blocked(holders: [SsdHolder], message: String)
+    /// Unmounted. The "safe to unplug" state (§10, §11).
+    case ejected(volume: String, stopped: [String])
+    /// Something else went wrong — the SSD already gone, Docker refusing.
+    case failed(message: String)
+
+    var isBlocked: Bool { if case .blocked = self { return true }; return false }
+    var isEjected: Bool { if case .ejected = self { return true }; return false }
+}
 
 @MainActor
 final class CprojStore: ObservableObject {
@@ -60,6 +90,16 @@ final class CprojStore: ObservableObject {
     /// Set by a successful eject and cleared the moment the SSD is seen
     /// mounted again — the "safe to unplug" icon state (§10, §11).
     @Published private(set) var ejected = false
+    /// Where Close all & eject has got to (§10). Survives a refresh so the
+    /// holder list is still there when the user comes back from quitting Xcode.
+    @Published private(set) var ejectPhase: EjectPhase = .ready
+    /// True when `cproj` could not be found at all — the first-run state (§13).
+    /// Nothing the menu offers can work until it is false, so the menu says so
+    /// instead of failing one command at a time.
+    @Published private(set) var cprojMissing = false
+    /// Everywhere `cproj` was looked for, in order — shown by the first-run
+    /// message so what the user is told matches what was actually tried (§13).
+    @Published private(set) var cprojSearchedLocations: [String] = []
 
     private let client: CprojClient
     private var refreshTask: Task<Void, Never>?
@@ -163,14 +203,33 @@ final class CprojStore: ObservableObject {
             // Re-resolved every time, like the client does: installing `cproj`
             // or setting the preference then fixes a first-run failure on the
             // next menu open rather than on the next launch.
-            executablePath = try? CprojExecutable.resolve().path
+            do {
+                executablePath = try CprojExecutable.resolve().path
+                cprojMissing = false
+            } catch {
+                // Not `lastError`: a missing binary is not a failed command,
+                // it is the app having nothing to talk to (§13). The menu
+                // renders the first-run message instead of a banner.
+                executablePath = nil
+                cprojMissing = true
+                cprojSearchedLocations = CprojExecutable.searchedLocations
+            }
             do {
                 let fresh = try await client.status()
                 status = fresh
                 // The SSD coming back is the only thing that clears "ejected";
                 // deriving it from status is what keeps §11 honest when the
                 // user replugs the disk without touching the menu.
-                if fresh.ssd.mounted { ejected = false }
+                if fresh.ssd.mounted {
+                    ejected = false
+                    // Only the "safe to unplug" state is retired by the disk
+                    // coming back. A BLOCKED eject must survive this: the disk
+                    // still being mounted is precisely what blocked means, so
+                    // clearing on `mounted` would wipe the holder list on the
+                    // very next menu open — the one after the user went off to
+                    // quit Xcode (§10).
+                    if ejectPhase.isEjected { ejectPhase = .ready }
+                }
                 lastRefresh = Date()
                 lastError = nil
             } catch let failure as CprojFailure {
@@ -318,6 +377,10 @@ final class CprojStore: ObservableObject {
 
     /// Open a shell in the configured terminal (§7). The CLI names the command;
     /// the app is what runs it.
+    ///
+    /// Both halves can fail differently and are reported differently: `cproj
+    /// shell` refusing (the project is stopped) is a CLI failure, while the
+    /// terminal refusing is a Preferences problem and says so.
     func openShell(project name: String) async {
         do {
             let invocation = try await client.shell(project: name)
@@ -329,7 +392,7 @@ final class CprojStore: ObservableObject {
         } catch let failure as CprojFailure {
             lastError = failure
         } catch let failure as TerminalFailure {
-            lastError = .launchFailed(path: terminalName, underlying: failure.message)
+            lastError = .terminalFailed(terminal: terminalName, underlying: failure.message)
         } catch {
             lastError = .unexpectedFailure(exitCode: -1, stdout: "", stderr: String(describing: error))
         }
@@ -376,15 +439,50 @@ final class CprojStore: ObservableObject {
     }
 
     /// Close all & eject (§10). Never forces; on EJECT_BLOCKED the failure
-    /// carries `holders`, which the view renders.
+    /// carries `holders`, which the view renders — and the flow stays on that
+    /// state so Retry is a click rather than a fresh start.
+    ///
+    /// Retry IS this method: `cproj eject` is idempotent in the way that
+    /// matters (it stops what is up, checks again, unmounts), so a second call
+    /// after the user quits Xcode is the whole recovery.
     func closeAllAndEject() async {
+        guard !isBusy else { return }
+        ejectPhase = .working
+
         let result = await perform("Ejecting") { client in
             try await client.eject()
         }
-        guard let result else { return }
-        ejected = result.ejected
-        let stopped = result.stopped.isEmpty ? "" : " Stopped \(result.stopped.joined(separator: ", "))."
-        notice = "\(result.volume) ejected — safe to unplug.\(stopped)"
+
+        if let result {
+            ejected = result.ejected
+            ejectPhase = .ejected(volume: result.volume, stopped: result.stopped)
+            let stopped = result.stopped.isEmpty ? "" : " Stopped \(result.stopped.joined(separator: ", "))."
+            notice = "\(result.volume) ejected — safe to unplug.\(stopped)"
+            return
+        }
+
+        // `perform` left the failure in `lastError`. A blocked eject is not a
+        // banner: the panel renders the holders and offers Retry, so the error
+        // is moved into the phase rather than shown twice (§10, §13).
+        guard let failure = lastError else {
+            ejectPhase = .ready
+            return
+        }
+        if failure.code == .ejectBlocked {
+            ejectPhase = .blocked(
+                holders: failure.holders,
+                message: failure.failureReason ?? "Something is still holding the SSD."
+            )
+            lastError = nil
+        } else {
+            ejectPhase = .failed(message: failure.errorDescription ?? "The eject didn’t happen.")
+        }
+    }
+
+    /// Leave the eject flow without retrying — the user changed their mind, or
+    /// the disk is out and the panel has been read.
+    func resetEject() {
+        if ejectPhase != .working { ejectPhase = .ready }
     }
 
     /// Preferences (§12). Writes through the CLI so the config file has one

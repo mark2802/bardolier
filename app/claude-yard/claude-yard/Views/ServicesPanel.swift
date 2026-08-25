@@ -54,7 +54,12 @@ struct ServicesPanel: View {
                     .padding(.bottom, 4)
             }
 
-            if let catalogue = store.catalogue {
+            if let catalogue = store.catalogue, catalogue.services.isEmpty {
+                Text("The catalogue at \(catalogue.path) defines no services.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+            } else if let catalogue = store.catalogue {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(catalogue.services) { service in
@@ -100,33 +105,39 @@ struct ServicesPanel: View {
         let attached = project.services.first { $0.key == service.key }
         let canChange = !store.isBusy && !project.state.isUp && !store.isDegraded
 
-        return MenuRow(isDisabled: !canChange) {
-            if let attached {
-                confirmation = detachConfirmation(service: service, attached: attached)
-            } else {
-                Task { await store.attach(service: service.key, to: projectName) }
-            }
-        } content: {
-            HStack(spacing: 6) {
-                Image(systemName: attached == nil ? "circle" : "checkmark.circle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(attached == nil ? Color.secondary : Color.accentColor)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(service.display)
-                    if let attached {
-                        Text("host :\(String(attached.hostPort)) → :\(String(attached.containerPort))")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("\(service.image) · band from :\(String(service.hostPortBase))")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+        // The copy control sits OUTSIDE the row's button, not inside its
+        // label. Inside, it inherited the row's `disabled` — so the connection
+        // string became uncopyable exactly while the project was RUNNING,
+        // which is when a GUI client needs it (§5, §6).
+        return HStack(spacing: 0) {
+            MenuRow(isDisabled: !canChange) {
+                if let attached {
+                    confirmation = detachConfirmation(service: service, attached: attached)
+                } else {
+                    Task { await store.attach(service: service.key, to: projectName) }
+                }
+            } content: {
+                HStack(spacing: 6) {
+                    Image(systemName: attached == nil ? "circle" : "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(attached == nil ? Color.secondary : Color.accentColor)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(service.display)
+                        if let attached {
+                            Text("host :\(String(attached.hostPort)) → :\(String(attached.containerPort))")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(service.image) · band from :\(String(service.hostPortBase))")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
-                Spacer(minLength: 0)
-                if let attached {
-                    CopyButton(value: attached.connectionHint, help: "Copy \(attached.connectionHint)")
-                }
+            }
+            if let attached {
+                CopyButton(value: attached.connectionHint, help: "Copy \(attached.connectionHint)")
+                    .padding(.trailing, 10)
             }
         }
     }

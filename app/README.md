@@ -30,18 +30,21 @@ claude-yard/claude-yard/
   Shell/
     CprojTerminal.swift    runs `cproj shell`'s argv in the chosen terminal
   Views/
-    MenuChrome.swift       rows, banners, confirmations — the shapes
+    MenuChrome.swift       rows, banners, confirmations, holder list — shapes
     MenuBarRootView.swift  the menu of app-spec.md §5, and its panels
     ServicesPanel.swift    §6 — catalogue with the attached rows ticked
     NewProjectPanel.swift  §8
     ReclaimPanel.swift     §9
+    EjectPanel.swift       §10 — close all & eject, holders, Retry
     PreferencesPanel.swift §12
+    FirstRunPanel.swift    §13 — shown instead of the menu when cproj is missing
 ```
 
 ## Three build settings the template does not default to
 
 All three are the human's, in Xcode, and the done-checks report whether they
-have been done (`test/phase5-done-check.sh`, `test/phase6-done-check.sh`):
+have been done (`test/phase5-done-check.sh`, `test/phase6-done-check.sh`,
+`test/phase7-done-check.sh`):
 
 - **App Sandbox OFF** (target → Signing & Capabilities → remove the capability).
   The app's only ability is to run `cproj`; a sandboxed app cannot exec a helper
@@ -82,4 +85,8 @@ writer in Swift.
 `test/app-models.test.ts` holds the Swift models to the frozen schemas in both
 directions, asserts nothing here spawns anything but `cproj`, and asserts the
 app composes no connection string, no project path and no config file of its
-own.
+own. `test/phase7.test.ts` adds the two flows that leave the app: a blocked
+eject keeps its holders on screen for a Retry instead of reducing them to a
+banner, nothing in Swift can force an unmount or kill a holder, the auto-shell
+preference reaches `up`, and a missing `cproj` is a first-run state rather than
+one failed command.

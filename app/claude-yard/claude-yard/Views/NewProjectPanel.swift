@@ -107,8 +107,15 @@ struct NewProjectPanel: View {
                 .toggleStyle(.checkbox)
                 .disabled(store.isBusy)
             }
-        } else {
+        } else if store.lastError == nil {
             Text("Reading the catalogue…").font(.caption2).foregroundStyle(.secondary)
+        } else {
+            // A catalogue that won't read must not leave a spinner-in-words on
+            // screen: a project can still be created without services.
+            Text("The catalogue couldn’t be read — you can still create the project and attach services later.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

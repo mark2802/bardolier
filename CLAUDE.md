@@ -125,6 +125,12 @@ bash test/phase6-done-check.sh   # Phase 6: the commands the app needed, the
                                  # an SF Symbol check. Its other half — the
                                  # lifecycle driven from the menu bar — is the
                                  # checklist it prints
+bash test/phase7-done-check.sh   # Phase 7: the two flows that leave the app —
+                                 # shell-open and eject. Drives the eject flow
+                                 # through the context seam with a scripted
+                                 # device (a done-check must never reach a real
+                                 # `diskutil`); its other half is a soak with a
+                                 # real disk and a real Xcode, which it prints
 ```
 
 Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
@@ -245,6 +251,22 @@ than in the menu bar. A GUI app inherits no shell `PATH`, so
 `CprojExecutable.swift` locates `cproj` and hands the child a `PATH` that can
 find `node`, `docker`, `lsof` and `diskutil`; that is the only environment
 knowledge in Swift.
+
+**A blocked eject is a place to come back to, not a banner.** `cproj eject`
+answers EJECT_BLOCKED with `holders`, and the user's next move is to leave, quit
+Xcode, and try again — so `CprojStore.ejectPhase` holds that state (blocked with
+its holders, working, ejected, failed) instead of `lastError`, which the next
+refresh clears. `EjectPanel` renders the phase, offers **Retry** — which is
+simply the same call again — and the menu row says where the flow got to, so
+closing the popover loses nothing. Nothing in Swift can force an unmount or kill
+a holder, and there is no `--force` on `eject` to reach for
+(`test/phase7.test.ts`).
+
+**A missing `cproj` is the state of the whole menu.** With nothing to run there
+is no status to show and no action to offer, so `CprojStore.cprojMissing` puts
+`FirstRunPanel` in place of the menu — with the locations
+`CprojExecutable` actually searched, not a plausible-looking list — rather than
+letting each item fail its own way (`app-spec.md` §13).
 
 **The menu runs one thing at a time, and asks after each.** `CprojStore` names
 the running operation in `activity`; while it is set every mutating item is

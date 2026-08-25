@@ -29,6 +29,7 @@ enum MenuPanel: Equatable {
     case services(project: String)
     case newProject
     case reclaim
+    case eject
     case preferences
     case diagnostics
 }
@@ -55,6 +56,8 @@ struct MenuBarRootView: View {
                     NewProjectPanel { panel = .root }
                 case .reclaim:
                     ReclaimPanel(confirm: request) { panel = .root }
+                case .eject:
+                    EjectPanel { panel = .root }
                 case .preferences:
                     PreferencesPanel { panel = .root }
                 case .diagnostics:
@@ -73,6 +76,23 @@ struct MenuBarRootView: View {
         VStack(alignment: .leading, spacing: 0) {
             statusLine
             Divider().padding(.vertical, 4)
+
+            // §13: with no `cproj` there is nothing to show and nothing to
+            // offer, so the menu says THAT rather than failing item by item.
+            if store.cprojMissing {
+                FirstRunPanel()
+                Divider().padding(.vertical, 4)
+                MenuTextRow(title: "Preferences…", systemImage: "gearshape") { panel = .preferences }
+                MenuTextRow(title: "Quit", systemImage: "power") { NSApplication.shared.terminate(nil) }
+            } else {
+                fullMenu
+            }
+        }
+        .padding(.bottom, 6)
+    }
+
+    private var fullMenu: some View {
+        VStack(alignment: .leading, spacing: 0) {
             banners
 
             ScrollView {
@@ -91,8 +111,11 @@ struct MenuBarRootView: View {
             MenuTextRow(title: reclaimTitle, systemImage: "internaldrive", isDisabled: !canMutate) {
                 panel = .reclaim
             }
-            MenuTextRow(title: "Close all & eject", systemImage: "eject", isDisabled: !canEject) {
-                request(ejectConfirmation)
+            // §10 is a FLOW, not a single click: it can come back blocked with
+            // a holder list the user acts on and retries. It gets a panel, and
+            // the row says where that flow got to.
+            MenuTextRow(title: ejectTitle, systemImage: ejectSymbol, isDisabled: !canOpenEject) {
+                panel = .eject
             }
 
             Divider().padding(.vertical, 4)
@@ -179,8 +202,10 @@ struct MenuBarRootView: View {
     private var canMutate: Bool { !store.isBusy && !store.isDegraded }
 
     /// Eject is the exception: it is what you reach for when things are wrong,
-    /// so it only needs the SSD to be there and nothing else running.
-    private var canEject: Bool { !store.isBusy && store.status?.ssd.mounted == true }
+    /// so it needs neither Docker nor an idle app to be OPENED — the panel
+    /// itself decides whether the button inside it can be pressed, and reading
+    /// a holder list while the eject is still running is exactly the point.
+    private var canOpenEject: Bool { store.status?.ssd.mounted == true || store.ejectPhase != .ready }
 
     private func toggle(_ name: String) {
         if expanded.contains(name) {
@@ -196,18 +221,28 @@ struct MenuBarRootView: View {
         confirmation = prepared
     }
 
-    /// Close all & eject (§10). Confirmed because it stops every project.
-    private var ejectConfirmation: ConfirmationRequest {
-        ConfirmationRequest(
-            title: "Close all & eject?",
-            detail: "Every running project is stopped, then the SSD is unmounted. "
-                + "If something still holds the disk, cproj reports it and does not force.",
-            confirmLabel: "Eject",
-            toggleLabel: nil,
-            perform: { _ in
-                Task { await store.closeAllAndEject() }
-            }
-        )
+    /// The eject row's words, taken from where the flow got to (§10, §11).
+    /// A blocked eject must not disappear from the menu just because the panel
+    /// was closed — that is the state the user comes back to.
+    private var ejectTitle: String {
+        switch store.ejectPhase {
+        case .blocked(let holders, _):
+            return holders.isEmpty ? "Eject was blocked…" : "Eject blocked — \(holders.count) holder\(holders.count == 1 ? "" : "s")…"
+        case .ejected:
+            return "Ejected — safe to unplug"
+        case .working:
+            return "Ejecting…"
+        default:
+            return "Close all & eject"
+        }
+    }
+
+    private var ejectSymbol: String {
+        switch store.ejectPhase {
+        case .blocked: return "exclamationmark.triangle"
+        case .ejected: return "eject.circle"
+        default: return "eject"
+        }
     }
 }
 
@@ -251,7 +286,13 @@ struct ProjectRow: View {
                             Task { await store.openShell(project: project.name) }
                         }
                     } else {
-                        MenuTextRow(title: "Start", systemImage: "play.circle", isDisabled: !canMutate) {
+                        // §7: the auto-shell preference is invisible until it
+                        // surprises you, so the item that obeys it says so.
+                        MenuTextRow(
+                            title: preferences.startOpensShell ? "Start & open shell" : "Start",
+                            systemImage: "play.circle",
+                            isDisabled: !canMutate
+                        ) {
                             Task {
                                 await store.start(project: project.name, openShell: preferences.startOpensShell)
                             }
@@ -284,7 +325,7 @@ struct ProjectRow: View {
         if !project.services.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(project.services) { service in
-                    HStack(spacing: 6) {
+                    CopyRow(value: service.connectionHint, help: "Copy \(service.connectionHint)") {
                         Circle()
                             .fill(service.state == .running ? Color.green : Color.secondary.opacity(0.5))
                             .frame(width: 6, height: 6)
@@ -292,12 +333,9 @@ struct ProjectRow: View {
                         Text(":\(String(service.hostPort))")
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                        CopyButton(value: service.connectionHint, help: "Copy \(service.connectionHint)")
                     }
                 }
             }
-            .padding(.horizontal, 10)
             .padding(.top, 4)
         }
     }

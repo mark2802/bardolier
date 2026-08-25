@@ -144,6 +144,10 @@ nonisolated enum CprojFailure: Error, Sendable {
     case executableNotFound(searched: [String])
     /// The process could not be launched at all.
     case launchFailed(path: String, underlying: String)
+    /// The CLI answered fine and the terminal is what wouldn't open (§7).
+    /// Kept apart from `launchFailed` because the fix is different: nothing is
+    /// wrong with `cproj`, and Preferences is where the terminal is chosen.
+    case terminalFailed(terminal: String, underlying: String)
     /// Exit status said failure but stdout held no `{"error":…}` envelope —
     /// a crash, or something that wrote to stdout that shouldn't have.
     case unexpectedFailure(exitCode: Int32, stdout: String, stderr: String)
@@ -176,6 +180,8 @@ nonisolated extension CprojFailure: LocalizedError {
             return "Can’t find the `cproj` command. Looked in: \(searched.joined(separator: ", "))."
         case .launchFailed(let path, let underlying):
             return "Couldn’t run \(path): \(underlying)"
+        case .terminalFailed(let terminal, let underlying):
+            return "Couldn’t open a shell in \(terminal). \(underlying)"
         case .unexpectedFailure(let exitCode, _, let stderr):
             let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty
@@ -202,6 +208,9 @@ nonisolated extension CprojFailure: LocalizedError {
         case .executableNotFound:
             return "Install it with `npm link` in the repo’s cli/ directory, or set its path with:\n"
                 + "defaults write \(CprojExecutable.defaultsSuite) \(CprojExecutable.pathDefaultsKey) /path/to/cproj"
+        case .terminalFailed:
+            return "Pick a different terminal in Preferences. Terminal and iTerm are driven directly; "
+                + "anything else opens through a .command file."
         default:
             return nil
         }
