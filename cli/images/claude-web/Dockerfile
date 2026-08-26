@@ -65,6 +65,31 @@ RUN set -eux; \
     CLAUDE_CONFIG_DIR=/tmp/claude-build claude --version; \
     rm -rf /tmp/claude-build
 
+# uv — the Python toolchain this archetype's projects need for a Python API
+# alongside their React frontend (docs/phases/11-python-web-toolchain.md). It
+# manages Python installs itself, so there is no separate `apt-get install
+# python3`. Pinned and checksum-verified against the release's own `.sha256`
+# sidecar, like the Claude Code binary above.
+ARG UV_VERSION=0.12.6
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) target="x86_64-unknown-linux-gnu" ;; \
+      arm64) target="aarch64-unknown-linux-gnu" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    tmp="$(mktemp -d)"; \
+    asset="uv-${target}.tar.gz"; \
+    base="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"; \
+    curl -fsSL -o "${tmp}/${asset}" "${base}/${asset}"; \
+    curl -fsSL -o "${tmp}/${asset}.sha256" "${base}/${asset}.sha256"; \
+    (cd "${tmp}" && sha256sum -c "${asset}.sha256"); \
+    tar -xzf "${tmp}/${asset}" -C "${tmp}"; \
+    install -m 0755 "$(find "${tmp}" -name uv -type f)" /usr/local/bin/uv; \
+    install -m 0755 "$(find "${tmp}" -name uvx -type f)" /usr/local/bin/uvx; \
+    rm -rf "${tmp}"; \
+    uv --version
+
 # `-o` (non-unique) matters: the node image already ships uid/gid 1000, and macOS
 # gid 20 collides with Debian's `dialout`. Sharing an id is fine and is exactly
 # what makes the bind mount line up; refusing to would break the whole point.
@@ -74,8 +99,20 @@ RUN set -eux; \
       useradd -o -u "${HOST_UID}" -g "${HOST_GID}" -m -s /bin/bash "${USERNAME}"; \
     fi; \
     home="$(getent passwd "${HOST_UID}" | cut -d: -f6)"; \
-    mkdir -p "${home}" /work; \
-    chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work
+    mkdir -p "${home}" /work /cache/uv/python; \
+    chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work /cache
+
+# uv's downloaded wheels — and the Python interpreters `uv python install` pulls
+# down — are rebuildable and identical across projects, the same argument as
+# /cache/gradle in claude-and (cli/src/images.ts, IMAGE_CACHE): they belong once,
+# on the internal disk, not per-project on the SSD. `cproj up` creates this as a
+# named volume and the generated compose file mounts it at ONE path (IMAGE_CACHE
+# is one volume per image), so the Python install dir is a subdirectory of the
+# wheel cache rather than a second mount. Owned by the host user in the image:
+# Docker seeds a new named volume from the image directory and there is no sudo
+# in here to fix it afterwards. NOT under /work: that path is the project's own.
+ENV UV_CACHE_DIR=/cache/uv
+ENV UV_PYTHON_INSTALL_DIR=/cache/uv/python
 
 # Global npm installs go somewhere the unprivileged user owns, so `npm i -g`
 # works in the container without sudo.

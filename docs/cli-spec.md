@@ -116,7 +116,7 @@ created: 2026-08-19T10:00:00Z
 
 | Archetype | Base image   | In-container build?          | Host build step        |
 |-----------|--------------|------------------------------|------------------------|
-| web       | `claude-web` | full (Node/Next, services)   | none                   |
+| web       | `claude-web` | full (Node/Next + Python via `uv`, services) | none    |
 | ios       | `claude-ios` | edit + swiftlint + logic test| Xcode (build/sim/sign) |
 | android   | `claude-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `claude-web` | full                         | none                   |
@@ -141,6 +141,11 @@ once, on the internal disk beside the image layers, and off the SSD. Declared in
 `cli/src/images.ts` (`IMAGE_CACHE`) and read by compose generation (§9), `up`
 (which creates the volume) and the volume scan (§6), which treats it as claimed
 while any project's manifest names that base image.
+
+`claude-web` carries the same shape of cache for `uv`, the Python toolchain it
+gained so a project can run a Python API alongside its React frontend in the
+one dev container: `UV_CACHE_DIR=/cache/uv`, volume `cproj-uv-cache`, same
+`IMAGE_CACHE` mechanism. `library` shares the image and the cache.
 
 ## 5. Port allocation (first-class)
 

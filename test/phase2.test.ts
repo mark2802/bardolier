@@ -116,7 +116,8 @@ describe('compose generation (cli-spec.md §9)', () => {
     // The bind mount, then $HOME as a per-project named volume: `down` removes
     // the container, so a home in its writable layer would lose the shell
     // history and the `claude login` on every stop (images.ts, CONTAINER_HOME).
-    assert.deepEqual(dev.volumes, ['.:/work', 'cproj-myapp-home:/state/home'])
+    // Last, the shared `uv` cache every claude-web project mounts (Phase 11).
+    assert.deepEqual(dev.volumes, ['.:/work', 'cproj-myapp-home:/state/home', 'cproj-uv-cache:/cache/uv'])
     assert.equal(dev.working_dir, '/work')
     assert.deepEqual(dev.command, ['sleep', 'infinity'])
     assert.equal(dev.ports, undefined, 'the dev container must not publish host ports')
@@ -128,8 +129,12 @@ describe('compose generation (cli-spec.md §9)', () => {
     assert.ok(!rendered.includes('/tmp'))
   })
 
-  test('a bare project declares exactly one volume: the dev container home', () => {
-    const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
+  test('a bare project on an image with no cache declares exactly one volume: the dev container home', () => {
+    // claude-ios has no toolchain cache (images.ts); claude-web's `uv` cache
+    // would otherwise be a second volume here, so this is the one archetype
+    // that isolates the claim being tested.
+    const ios = manifest('myapp', { archetype: 'ios', base_image: 'claude-ios' })
+    const doc = parseYaml(renderCompose({ manifest: ios, catalogue: null })) as Record<string, any>
     // Every project has a home volume, so a `volumes:` block is no longer the
     // sign that services are attached — the KEYS are.
     assert.deepEqual(Object.keys(doc.volumes), ['cproj-myapp-home'])
@@ -334,7 +339,8 @@ describe('up (cli-spec.md §6)', () => {
     )
     assert.deepEqual(
       docker.calls.map((c) => c.kind),
-      ['up'],
+      // claude-web's shared `uv` cache volume (Phase 11) is ensured before `up`.
+      ['ensureVolume', 'up'],
     )
   })
 
@@ -347,7 +353,7 @@ describe('up (cli-spec.md §6)', () => {
     assert.equal(result.compose_regenerated, true)
     assert.ok(box.exists('myapp', COMPOSE_FILENAME))
 
-    const call = docker.calls[0]
+    const call = docker.calls.find((c) => c.kind === 'up')
     assert.ok(call?.kind === 'up')
     assert.equal(call.target.file, box.path('myapp', COMPOSE_FILENAME))
     assert.equal(call.target.project, composeProject('myapp'))
@@ -414,7 +420,8 @@ describe('up (cli-spec.md §6)', () => {
     const ctx = makeContext(box, docker, { ports: stubPorts([5433]) })
 
     const result = await runUp(ctx, { name: 'myapp', noShell: false })
-    assert.equal(docker.calls.length, 1)
+    // claude-web's shared `uv` cache volume (Phase 11) is ensured, then `up`.
+    assert.equal(docker.calls.length, 2)
     assert.equal(result.already_running, false)
   })
 

@@ -236,55 +236,76 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
 
 // ── The Gradle cache: shared, and on the internal disk ────────────────────────
 
-describe('the android toolchain cache is shared, not per project (images.ts)', () => {
+describe('toolchain caches are shared, not per project (images.ts)', () => {
   const CACHE = 'cproj-gradle-cache'
   const MOUNT = '/cache/gradle'
+  const UV_CACHE = 'cproj-uv-cache'
+  const UV_MOUNT = '/cache/uv'
 
-  /** A manifest for an android project, which is the only kind with a cache. */
+  /** A manifest for an android project, which shares Gradle's cache. */
   function droid(name = 'droid') {
     return manifest(name, { archetype: 'android', base_image: 'claude-and' })
   }
 
-  test('one image declares a cache, and its Dockerfile puts Gradle in it', () => {
-    assert.deepEqual(IMAGE_CACHE, { 'claude-and': { volume: CACHE, mount: MOUNT } })
-    const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.cache?.volume ?? null]))
-    assert.deepEqual(byImage, { 'claude-web': null, 'claude-ios': null, 'claude-and': CACHE })
+  /** A manifest for the one archetype with no cache at all. */
+  function swiftbits(name = 'swiftbits') {
+    return manifest(name, { archetype: 'ios', base_image: 'claude-ios' })
+  }
 
-    // The coupling that a wrong answer makes silent: Gradle writing somewhere
-    // the volume is not mounted still WORKS — it just re-downloads every run,
-    // into a container layer, which is the thing this exists to stop.
-    const text = dockerfile('claude-and')
-    assert.match(text, new RegExp(`ENV GRADLE_USER_HOME=${MOUNT}\\b`))
-    assert.ok(!/GRADLE_USER_HOME=\/work/.test(text), 'a per-project cache would sit on the SSD')
-    // Docker seeds a new named volume from the image's directory, ownership and
-    // all, and there is no sudo in there to fix a root-owned mount afterwards.
-    assert.match(text, new RegExp(`mkdir -p[^\\n]*${MOUNT}`))
-    assert.match(text, /chown -R "\$\{HOST_UID\}:\$\{HOST_GID\}"[^\n]*\/cache/)
+  test('two images declare a cache, and each Dockerfile puts its toolchain in it', () => {
+    assert.deepEqual(IMAGE_CACHE, {
+      'claude-web': { volume: UV_CACHE, mount: UV_MOUNT },
+      'claude-and': { volume: CACHE, mount: MOUNT },
+    })
+    const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.cache?.volume ?? null]))
+    assert.deepEqual(byImage, { 'claude-web': UV_CACHE, 'claude-ios': null, 'claude-and': CACHE })
+
+    // The coupling that a wrong answer makes silent: a toolchain writing
+    // somewhere the volume is not mounted still WORKS — it just re-downloads
+    // every run, into a container layer, which is the thing this exists to stop.
+    for (const [image, envVar, mount] of [
+      ['claude-and', 'GRADLE_USER_HOME', MOUNT],
+      ['claude-web', 'UV_CACHE_DIR', UV_MOUNT],
+    ] as const) {
+      const text = dockerfile(image)
+      assert.match(text, new RegExp(`ENV ${envVar}=${mount}\\b`))
+      assert.ok(!new RegExp(`${envVar}=/work`).test(text), 'a per-project cache would sit on the SSD')
+      // Docker seeds a new named volume from the image's directory, ownership
+      // and all, and there is no sudo in there to fix a root-owned mount after.
+      assert.match(text, new RegExp(`mkdir -p[^\\n]*${mount}`))
+      assert.match(text, /chown -R "\$\{HOST_UID\}:\$\{HOST_GID\}"[^\n]*\/cache/)
+    }
   })
 
-  test('the compose file mounts it, and lets Compose neither create nor claim it', () => {
+  test('the compose file mounts each, and lets Compose neither create nor claim them', () => {
     const services = catalogue()
     const android = renderCompose({ manifest: droid(), catalogue: services })
     assert.match(android, new RegExp(`- ${CACHE}:${MOUNT}`))
     // `external: true` is the whole trick: a Compose-created volume carries the
-    // FIRST project's compose labels, and every other android project then
-    // warns about it on every `up`.
+    // FIRST project's compose labels, and every other project on that image
+    // then warns about it on every `up`.
     assert.match(android, new RegExp(`${CACHE}:\\n\\s+name: ${CACHE}\\n\\s+external: true`))
     assert.ok(!android.includes('cproj.project: droid\n    cproj.service'), 'the cache is no project’s volume')
+    assert.ok(!android.includes(UV_CACHE), 'android shares no volume with the web image')
 
-    // Nothing changes for an image without a cache — no mount, no volumes key.
     const web = renderCompose({ manifest: manifest('site'), catalogue: services })
-    assert.ok(!web.includes(CACHE), 'an image with no cache must not gain one')
-    // It DOES declare its own home volume — every project has one — but nothing
-    // shared: the cache is the android image's, and a web project never sees it.
-    assert.match(web, /\nvolumes:\n/)
-    assert.ok(!web.includes('external: true'), 'a web project shares no volume with anyone')
+    assert.match(web, new RegExp(`- ${UV_CACHE}:${UV_MOUNT}`))
+    assert.match(web, new RegExp(`${UV_CACHE}:\\n\\s+name: ${UV_CACHE}\\n\\s+external: true`))
+    assert.ok(!web.includes(CACHE), 'web shares no volume with the android image')
+
+    // Nothing changes for the one image with no cache — no mount, no volumes key.
+    const ios = renderCompose({ manifest: swiftbits(), catalogue: services })
+    assert.ok(!ios.includes(CACHE) && !ios.includes(UV_CACHE), 'an image with no cache must not gain one')
+    // It DOES declare its own home volume — every project has one — but no
+    // `external: true`: nothing on that image is shared with anyone.
+    assert.match(ios, /\nvolumes:\n/)
+    assert.ok(!ios.includes('external: true'), 'an ios project shares no volume with anyone')
 
     // Same manifest, same bytes (§9).
     assert.equal(android, renderCompose({ manifest: droid(), catalogue: services }))
   })
 
-  test('`up` creates the volume before Compose asks for it, and only for that image', async () => {
+  test('`up` creates each cache volume before Compose asks for it, and only for its own image', async () => {
     const box = sandbox()
     const docker = stubDocker({ startsAs: ['cproj-droid'] })
     const ctx = makeContext(box, docker)
@@ -303,7 +324,14 @@ describe('the android toolchain cache is shared, not per project (images.ts)', (
     const webCtx = makeContext(sandbox(), web)
     await runNew(webCtx, { name: 'site', archetype: 'web', services: undefined })
     await runUp(webCtx, { name: 'site', noShell: true })
-    assert.deepEqual(web.calls.map((call) => call.kind), ['up'], 'a web project needs no cache volume')
+    const webCreated = web.calls.find((call) => call.kind === 'ensureVolume')
+    assert.equal(webCreated?.kind === 'ensureVolume' ? webCreated.name : null, UV_CACHE)
+
+    const ios = stubDocker({ startsAs: ['cproj-swiftbits'] })
+    const iosCtx = makeContext(sandbox(), ios)
+    await runNew(iosCtx, { name: 'swiftbits', archetype: 'ios', services: undefined })
+    await runUp(iosCtx, { name: 'swiftbits', noShell: true })
+    assert.deepEqual(ios.calls.map((call) => call.kind), ['up'], 'ios needs no cache volume at all')
   })
 
   test('it is claimed while any android project exists, and reclaimable once none does', async () => {

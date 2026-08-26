@@ -71,8 +71,14 @@ export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
  * the Dockerfile's `GRADLE_USER_HOME`, the mount the generated compose file
  * writes, and the volume `up` creates before Compose asks for it. The Dockerfile
  * coupling is asserted in `test/phase8.test.ts` rather than trusted.
+ *
+ * `claude-web` carries the same shape of cache for `uv`'s downloaded wheels
+ * (docs/phases/11-python-web-toolchain.md) — Python projects migrated onto this
+ * archetype pay the same "rebuildable, identical across projects" cost Gradle
+ * does, just smaller. `library` shares the image and so shares the cache.
  */
 export const IMAGE_CACHE: Readonly<Partial<Record<BaseImage, ImageCache>>> = {
+  'claude-web': { volume: 'cproj-uv-cache', mount: '/cache/uv' },
   'claude-and': { volume: 'cproj-gradle-cache', mount: '/cache/gradle' },
 }
 

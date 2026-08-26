@@ -194,6 +194,9 @@ constant: the Dockerfile `ENV`, the mount `compose.ts` writes, and `up`, which
 creates the volume. Compose marks it `external: true` so no project stamps its
 labels on it. `volumes.ts` knows it by `cproj.role: cache`: claimed while any
 manifest names that base image, never taken by `delete --purge`.
+`claude-web` carries the same for `uv`'s wheels (`cproj-uv-cache`,
+`/cache/uv`) — a Python API and its React frontend run in one dev container,
+no second port published; the dev server proxies to it (Phase 11).
 
 **The agent ships in the base image.** All three install Claude Code — pinned
 binary, checksum-verified, into `/usr/local/bin`. Not a catalogue service (the

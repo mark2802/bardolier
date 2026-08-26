@@ -22,12 +22,16 @@ import { WORKDIR } from './compose.ts'
 const COMMON_IGNORE = ['.cproj/', '.DS_Store', '*.log', '.env', '.env.local']
 
 const NODE_IGNORE = ['node_modules/', 'dist/', 'build/', '.next/', 'coverage/']
+// A project's own Python backend (§4.3, claude-web now carries `uv`) keeps its
+// venv under /work like any other project file — bind-mounted, per-project,
+// never shipped in a build context or committed.
+const PYTHON_IGNORE = ['.venv/', '__pycache__/', '*.pyc']
 const SWIFT_IGNORE = ['.build/', '.swiftpm/', 'DerivedData/', '*.xcuserstate', 'xcuserdata/']
 const ANDROID_IGNORE = ['.gradle/', 'build/', 'local.properties', '*.apk', '*.aab']
 
 const ARCHETYPE_IGNORE: Readonly<Record<Archetype, readonly string[]>> = {
-  web: NODE_IGNORE,
-  library: NODE_IGNORE,
+  web: [...NODE_IGNORE, ...PYTHON_IGNORE],
+  library: [...NODE_IGNORE, ...PYTHON_IGNORE],
   ios: [...SWIFT_IGNORE, ...NODE_IGNORE],
   android: [...ANDROID_IGNORE, ...NODE_IGNORE],
 }
@@ -107,6 +111,10 @@ or an equivalent setting.
 
 This is the ONLY port this container publishes. Services are the other way
 round — you reach them by name over the network, as below.
+
+Running a second process in here too (e.g. a Python API on \`localhost\`)?
+Don't publish a second port — have the dev server's own proxy config forward
+to it, the same way a browser only ever talks to the one port above.
 `
 }
 
