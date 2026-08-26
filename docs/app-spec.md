@@ -131,6 +131,11 @@ Small modal:
    offer. The engine is already down, so the panel renders the CLI's own
    sentence and leaves **Retry**; a button that repeats what just failed is a
    loop, not a move.
+2d. On `EJECT_NOT_APPLICABLE` (`ssd_root` is a plain directory, not a
+   removable volume — phase 10), this isn't a failure to show in a banner:
+   render it once, then dim the menu row itself with the reason, the same
+   treatment a missing archetype Dockerfile gets. There is no Retry — it would
+   fail the same way every time.
 3. On success, switch the icon to the **ejected** state ("safe to unplug"). If
    the payload says `docker_stopped`, say so: the engine has to be started
    again before the next `up`.

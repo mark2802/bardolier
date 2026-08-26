@@ -128,7 +128,12 @@ struct MenuBarRootView: View {
             // §10 is a FLOW, not a single click: it can come back blocked with
             // a holder list the user acts on and retries. It gets a panel, and
             // the row says where that flow got to.
-            MenuTextRow(title: ejectTitle, systemImage: ejectSymbol, isDisabled: !canOpenEject) {
+            MenuTextRow(
+                title: ejectTitle,
+                systemImage: ejectSymbol,
+                isDisabled: !canOpenEject,
+                disabledReason: ejectDisabledReason
+            ) {
                 panel = .eject
             }
 
@@ -232,7 +237,23 @@ struct MenuBarRootView: View {
     /// so it needs neither Docker nor an idle app to be OPENED — the panel
     /// itself decides whether the button inside it can be pressed, and reading
     /// a holder list while the eject is still running is exactly the point.
-    private var canOpenEject: Bool { store.status?.ssd.mounted == true || store.ejectPhase != .ready }
+    ///
+    /// `.notApplicable` (phase 10) is the one phase that closes the row instead
+    /// of opening a panel: `ssd_root` is a plain local directory, so there is
+    /// nothing a panel could offer beyond the reason, and the row already has
+    /// somewhere to put that (`disabledReason`) — the same treatment a missing
+    /// archetype Dockerfile gets, not a failure to click into.
+    private var canOpenEject: Bool {
+        if case .notApplicable = store.ejectPhase { return false }
+        return store.status?.ssd.mounted == true || store.ejectPhase != .ready
+    }
+
+    /// Why the eject row is dimmed, once `.notApplicable` has been learned —
+    /// nil otherwise, so the row carries no help text most of the time.
+    private var ejectDisabledReason: String? {
+        if case .notApplicable(let message) = store.ejectPhase { return message }
+        return nil
+    }
 
     private func toggle(_ name: String) {
         if expanded.contains(name) {
@@ -263,6 +284,8 @@ struct MenuBarRootView: View {
             return "Ejected — safe to unplug"
         case .working:
             return "Ejecting…"
+        case .notApplicable:
+            return "Nothing to eject"
         default:
             return "Close all & eject"
         }

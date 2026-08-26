@@ -85,6 +85,9 @@ try_eject() {
     const unmounted = []
     const device = {
       holders: (mount) => real.holders(mount),
+      // Not under test here (see test/phase10-done-check.sh) — this temp dir
+      // stands in for a removable SSD, same fiction as every other check.
+      removable: async () => true,
       eject: async (mount) => { unmounted.push(mount) },
     }
     try {

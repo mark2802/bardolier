@@ -42,6 +42,7 @@ nonisolated struct CprojErrorCode: CprojToken {
     static let notImplemented = CprojErrorCode(rawValue: "NOT_IMPLEMENTED")
     static let configInvalid = CprojErrorCode(rawValue: "CONFIG_INVALID")
     static let volumeNotFound = CprojErrorCode(rawValue: "VOLUME_NOT_FOUND")
+    static let ejectNotApplicable = CprojErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
     static let internalError = CprojErrorCode(rawValue: "INTERNAL_ERROR")
 
     /// A short line for the UI, or nil when only the CLI's own message will do.
@@ -63,6 +64,7 @@ nonisolated struct CprojErrorCode: CprojToken {
         case .dockerUnavailable: return "Docker isn’t running."
         case .configInvalid: return "The cproj config or service catalogue is invalid."
         case .volumeNotFound: return "Docker doesn’t have a volume with that name."
+        case .ejectNotApplicable: return "This isn’t a removable volume, so there’s nothing to eject."
         // INVALID_ARGUMENT, NOT_IMPLEMENTED and INTERNAL_ERROR are bugs in the
         // app's own invocation or in the CLI; the CLI's message is the useful
         // text, so don't paper over it.

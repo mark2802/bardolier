@@ -503,8 +503,12 @@ describe('eject (cli-spec.md §6)', () => {
       ejected: [],
       setHolders() {},
       setRuntimeHolders() {},
+      setRemovable() {},
       releaseRuntimeAfter() {},
       runtimeProbes: () => 0,
+      async removable() {
+        return true
+      },
       async holders() {
         order.push('holders')
         return []

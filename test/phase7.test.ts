@@ -102,12 +102,17 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
   // Below: the real device, driven by a scripted `lsof`/`diskutil`. The stub
   // above answers a holder LIST; these two are about which holders count, which
   // is a decision the stub does not make.
+  //
+  // `removable()` reads this out of `diskutil info -plist` before any of that
+  // runs (phase 10); every test below is about what happens once eject applies,
+  // so their scripted `diskutil` answers this the same way for every call: yes.
+  const REMOVABLE_PLIST = '<key>Ejectable</key><true/><key>Internal</key><false/>'
   function scriptedDevice(box: Sandbox, lsof: string, diskutil: { code: number; stderr: string }): SsdDevice {
-    return createSsdDevice(async (command) =>
-      command === 'lsof'
-        ? { code: 0, stdout: lsof, stderr: '' }
-        : { code: diskutil.code, stdout: '', stderr: diskutil.stderr },
-    )
+    return createSsdDevice(async (command, args) => {
+      if (command === 'lsof') return { code: 0, stdout: lsof, stderr: '' }
+      if (args[0] === 'info') return { code: 0, stdout: REMOVABLE_PLIST, stderr: '' }
+      return { code: diskutil.code, stdout: '', stderr: diskutil.stderr }
+    })
   }
 
   const spotlightOnly = (root: string) =>
@@ -336,8 +341,9 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const box = sandbox()
     let vmAlive = true
     const lsof = ['p900', 'ccom.docker.backend', 'Lmark', `n${box.root}/alpha`].join('\n')
-    const device = createSsdDevice(async (command) => {
+    const device = createSsdDevice(async (command, args) => {
       if (command === 'lsof') return { code: 0, stdout: vmAlive ? lsof : '', stderr: '' }
+      if (args[0] === 'info') return { code: 0, stdout: REMOVABLE_PLIST, stderr: '' }
       return vmAlive
         ? {
             code: 1,
@@ -376,8 +382,9 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     let vmAlive = true
     let unmounted = false
     const lsof = ['p74033', 'ccom.apple.Virtualization.Virtua', 'Lmark', `n${box.root}`].join('\n')
-    const device = createSsdDevice(async (command) => {
+    const device = createSsdDevice(async (command, args) => {
       if (command === 'lsof') return { code: 0, stdout: vmAlive ? lsof : '', stderr: '' }
+      if (args[0] === 'info') return { code: 0, stdout: REMOVABLE_PLIST, stderr: '' }
       if (vmAlive) return { code: 1, stdout: '', stderr: dissent }
       unmounted = true
       return { code: 0, stdout: '', stderr: '' }

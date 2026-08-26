@@ -69,6 +69,12 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     case blockedByDocker(holders: [SsdHolder], message: String, engineStopped: Bool)
     /// Unmounted. The "safe to unplug" state (§10, §11).
     case ejected(volume: String, stopped: [String])
+    /// EJECT_NOT_APPLICABLE (phase 10): `ssd_root` is a plain directory on the
+    /// internal disk, not a removable volume. Kept apart from `failed` because
+    /// it isn't one — nothing is wrong, there is simply nothing to eject, so the
+    /// row goes quiet with a reason instead of a Retry that would fail the same
+    /// way forever (the same treatment as a missing archetype Dockerfile).
+    case notApplicable(message: String)
     /// Something else went wrong — the SSD already gone, Docker refusing.
     case failed(message: String)
 
@@ -503,6 +509,9 @@ final class CprojStore: ObservableObject {
                 holders: failure.holders,
                 message: failure.failureReason ?? "Something is still holding the SSD."
             )
+            lastError = nil
+        } else if failure.code == .ejectNotApplicable {
+            ejectPhase = .notApplicable(message: failure.failureReason ?? failure.errorDescription ?? "There’s nothing to eject.")
             lastError = nil
         } else {
             ejectPhase = .failed(message: failure.errorDescription ?? "The eject didn’t happen.")

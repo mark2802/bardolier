@@ -45,6 +45,13 @@ export type SsdDevice = {
   runtimeHolders(mountPoint: string): Promise<readonly Holder[]>
   /** Unmount and power down the volume. Throws EJECT_BLOCKED if it will not go. */
   eject(mountPoint: string): Promise<void>
+  /**
+   * True when `mountPoint` is a removable volume `diskutil` can eject — false
+   * for an ordinary directory on the internal disk, and false (never a throw)
+   * on any probe failure, matching the "never force" posture: a probe that
+   * cannot tell is refused as inapplicable, not attempted anyway.
+   */
+  removable(mountPoint: string): Promise<boolean>
 }
 
 export type HostResult = {
@@ -258,6 +265,22 @@ export function parseDissenter(text: string): Holder[] {
   return [...byPid.values()].sort((a, b) => a.pid - b.pid)
 }
 
+/**
+ * Read a `<key>NAME</key>` boolean out of `diskutil info -plist` output.
+ *
+ * A full plist parser is more than this needs: the two keys that matter
+ * (`Ejectable`, `Internal`) are always emitted as a `<key>`/`<true/>`|`<false/>`
+ * pair, so a regex finds them without pulling in an XML parser for one probe.
+ * Null means the key was not there at all — a plain directory that is not a
+ * distinct volume at all, which `diskutil info` answers about the containing
+ * disk (or not at all), never with these two keys both present and false.
+ */
+function plistBool(plist: string, key: string): boolean | null {
+  const match = plist.match(new RegExp(`<key>${key}</key>\\s*<(true|false)/>`))
+  if (!match) return null
+  return match[1] === 'true'
+}
+
 /** `command [pid n]`, the one shape both this file and `eject`'s renderer use. */
 function nameHolders(holders: readonly Holder[]): string {
   return holders.map((holder) => `${holder.command} [pid ${holder.pid}]`).join('; ')
@@ -315,6 +338,15 @@ export function createSsdDevice(runner: HostRunner = execHost(), selfPid: number
 
     async runtimeHolders(mountPoint) {
       return (await scan(mountPoint)).filter((holder) => isRuntimeHolder(holder.command))
+    },
+
+    async removable(mountPoint) {
+      const result = await runner('diskutil', ['info', '-plist', mountPoint])
+      if (result.code !== 0) return false
+      const ejectable = plistBool(result.stdout, 'Ejectable')
+      const internalDisk = plistBool(result.stdout, 'Internal')
+      if (ejectable === null || internalDisk === null) return false
+      return ejectable && !internalDisk
     },
 
     async eject(mountPoint) {

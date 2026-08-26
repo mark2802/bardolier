@@ -273,6 +273,12 @@ export type StubDeviceOptions = {
    * naming anyone. Defaults to `runtime`.
    */
   readonly dissenters?: readonly Holder[]
+  /**
+   * Whether the stubbed volume is removable — true unless a test says
+   * otherwise, so the existing eject suite (all of it about holders) keeps
+   * behaving as if the volume were a real SSD (phase 10's `removable`).
+   */
+  readonly removable?: boolean
 }
 
 export type StubDevice = SsdDevice & {
@@ -282,6 +288,8 @@ export type StubDevice = SsdDevice & {
   setHolders(holders: readonly Holder[]): void
   /** Change the runtime's hold — what stopping the Docker engine amounts to. */
   setRuntimeHolders(holders: readonly Holder[]): void
+  /** Change whether the volume is removable — a local-root test going non-SSD. */
+  setRemovable(removable: boolean): void
   /**
    * Let go of the volume on the `probes`th call to `runtimeHolders`, not at
    * once — the real thing after `docker desktop stop`, where the command has
@@ -297,6 +305,7 @@ export type StubDevice = SsdDevice & {
 export function stubDevice(initial: readonly Holder[] = [], options: StubDeviceOptions = {}): StubDevice {
   let holders = [...initial]
   let runtime = [...(options.runtime ?? [])]
+  let removable = options.removable ?? true
   let releaseAfter: number | null = null
   let probes = 0
   const ejected: string[] = []
@@ -307,6 +316,12 @@ export function stubDevice(initial: readonly Holder[] = [], options: StubDeviceO
     },
     setRuntimeHolders(next) {
       runtime = [...next]
+    },
+    setRemovable(next) {
+      removable = next
+    },
+    async removable() {
+      return removable
     },
     releaseRuntimeAfter(next) {
       releaseAfter = next
@@ -412,6 +427,11 @@ export function makeContext(
       eject: async () => {
         throw new Error('unexpected eject: pass a stubDevice() to makeContext')
       },
+      // Unlike holders/eject this is a read-only probe `doctor` calls on every
+      // run, so it answers rather than throws — true, matching the fiction the
+      // whole suite maintains that the sandbox temp dir stands in for a real
+      // SSD (§8). Tests of phase 10's local-root mode pass a stubDevice().
+      removable: async () => true,
     },
     // Nothing in a test may block on a prompt: an unscripted question is a bug
     // in the test, not something to answer with a default.

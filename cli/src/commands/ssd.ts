@@ -1,10 +1,14 @@
 /**
  * `cproj down-all` and `cproj eject` — `cli-spec.md` §6 (Lifecycle / SSD).
  *
- * `eject` is `down-all`, then a holder check, then `diskutil eject`, in that
- * order and with no way to skip a step. The order is the point: containers
- * bind-mounting the SSD are holders too, so they come down first; and the check
- * happens after, when what remains is genuinely the user's own Xcode or shell.
+ * `eject` is a removability check, then `down-all`, then a holder check, then
+ * `diskutil eject`, in that order and with no way to skip a step. The order
+ * among the last three is the point: containers bind-mounting the SSD are
+ * holders too, so they come down first; and the holder check happens after,
+ * when what remains is genuinely the user's own Xcode or shell. The
+ * removability check comes first of all — `ssd_root` may be a plain directory
+ * on the internal disk (phase 10), and there is no point stopping every
+ * project on the way to a `diskutil eject` that was never going to apply.
  *
  * **It never forces.** A held volume is EJECT_BLOCKED carrying `holders`, and
  * the user decides what to close (CLAUDE.md: safety over convenience). Forcing
@@ -138,6 +142,17 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
   const ssd = probeSsd(ctx.config)
   if (!ssd.volumePresent) {
     throw new CprojError('SSD_NOT_MOUNTED', `Nothing is mounted at ${ssd.volume}; there is nothing to eject.`)
+  }
+
+  if (!(await ctx.device.removable(ssd.volume))) {
+    // A local `ssd_root` (phase 10) is a fully supported mode, but `eject`
+    // means `diskutil eject` — asked of `/` or another ordinary directory,
+    // that is at best a no-op and at worst a request to unmount the wrong
+    // thing. Checked before down-all, so a refusal here touches no container.
+    throw new CprojError(
+      'EJECT_NOT_APPLICABLE',
+      `${ssd.volume} is not a removable volume, so there is nothing to eject. Use \`cproj down-all\` to stop every project instead.`,
+    )
   }
 
   const down = await runDownAll(ctx)

@@ -33,7 +33,8 @@ grows to provide it.
 - **Stable error codes** (not exhaustive): `SSD_NOT_MOUNTED`,
   `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_RUNNING`, `PROJECT_STOPPED`,
   `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
-  `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `DOCKER_UNAVAILABLE`.
+  `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
+  `DOCKER_UNAVAILABLE`.
 - **No partial mutation of a running project:** service add/remove require the
   project stopped and fail `PROJECT_RUNNING` otherwise.
 - **Idempotency:** `up` on a running project is a no-op success; `down` on a
@@ -215,7 +216,14 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Lifecycle / SSD
 - `cproj down-all` — stop + remove all cproj containers.
-- `cproj eject` — `down-all`, then check host holders (Xcode, Simulator, shells
+- `cproj eject` — first checks that `ssd_volume` is actually a removable
+  volume (`diskutil info -plist`). It may not be: `ssd_root` is a fully
+  supported, first-class mode when it's an ordinary directory on the internal
+  disk (§8), and `diskutil eject`-ing `/` or another non-removable mount is
+  not a smaller version of ejecting, it's the wrong command. Not removable
+  fails `EJECT_NOT_APPLICABLE` immediately — no project is stopped on the way
+  to that refusal — naming `cproj down-all` as the thing to run instead.
+  Otherwise: `down-all`, then check host holders (Xcode, Simulator, shells
   cd'd into the SSD via `lsof`), then `diskutil eject`. If held, fail
   `EJECT_BLOCKED` with `{ holders: [...] }` and do not force.
   A holder is only something the user can act on. The container runtime and the
@@ -323,6 +331,11 @@ Schema stability is the contract. Additive changes only once the app ships.
 - The app never edits this file itself: it reads it with `cproj config get` and
   writes it with `cproj config set`, so precedence, path expansion and the
   "`ssd_root` defaults inside `ssd_volume`" rule have one implementation.
+- `ssd_root` may be any local directory — an external SSD is not required. The
+  project lifecycle (`new`/`up`/`down`/services/volumes) never assumes a
+  removable volume; only `eject` does, and it is simply unavailable
+  (`EJECT_NOT_APPLICABLE`) when `ssd_volume` isn't one. Use `cproj down-all` to
+  stop everything in that mode.
 
 ## 9. Compose generation rules
 

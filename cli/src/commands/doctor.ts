@@ -31,10 +31,20 @@ function configFinding(ctx: Context): DoctorFinding {
   }
 }
 
-function ssdFinding(ctx: Context): DoctorFinding {
+async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
   const ssd = probeSsd(ctx.config)
   if (ssd.mounted) {
-    return { id: 'ssd', title: 'SSD mounted', ok: true, detail: `${ssd.root} is readable (volume ${ssd.volume}).` }
+    if (await ctx.device.removable(ssd.volume)) {
+      return { id: 'ssd', title: 'SSD mounted', ok: true, detail: `${ssd.root} is readable (volume ${ssd.volume}).` }
+    }
+    // A local `ssd_root` (phase 10) is a supported, first-class mode, not a
+    // fault — no "plug in" remedy, because there is nothing to plug in.
+    return {
+      id: 'ssd',
+      title: 'SSD mounted',
+      ok: true,
+      detail: `${ssd.root} is readable, on the internal disk rather than a removable volume — \`cproj eject\` does not apply; use \`cproj down-all\` to stop everything instead.`,
+    }
   }
   return {
     id: 'ssd',
@@ -168,7 +178,7 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
 }
 
 export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
-  const findings: DoctorFinding[] = [configFinding(ctx), ssdFinding(ctx)]
+  const findings: DoctorFinding[] = [configFinding(ctx), await ssdFinding(ctx)]
 
   const docker = await dockerFinding(ctx)
   findings.push(docker)

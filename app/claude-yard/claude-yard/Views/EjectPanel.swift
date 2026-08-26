@@ -55,6 +55,8 @@ struct EjectPanel: View {
                         dockerHoldState(holders: holders, message: message, engineStopped: engineStopped)
                     case .ejected(let volume, let stopped):
                         ejectedState(volume: volume, stopped: stopped)
+                    case .notApplicable(let message):
+                        notApplicableState(message: message)
                     case .failed(let message):
                         failedState(message: message)
                     }
@@ -269,6 +271,28 @@ struct EjectPanel: View {
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Not applicable (phase 10: a local, non-removable `ssd_root`)
+
+    /// Nothing is wrong — there is simply nothing to eject, so this reads as
+    /// information rather than a failure: no warning triangle, no Retry (it
+    /// would fail the same way every time). The row itself goes quiet the next
+    /// time the menu is drawn (`MenuBarRootView.canOpenEject`).
+    @ViewBuilder
+    private func notApplicableState(message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "internaldrive").foregroundStyle(.secondary)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        // Deliberately not `store.resetEject()`: staying in `.notApplicable`
+        // is what keeps the menu row disabled after this panel closes.
+        Button("OK") { back() }
+            .controlSize(.small)
     }
 
     @ViewBuilder

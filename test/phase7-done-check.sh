@@ -107,6 +107,9 @@ if node --input-type=module -e "
     },
     device: {
       holders: async () => holders,
+      // Not under test here (see test/phase10-done-check.sh) — this temp dir
+      // stands in for a removable SSD, same fiction as every other check.
+      removable: async () => true,
       eject: async (mount) => { if (holders.length) throw new Error('forced!'); ejected.push(mount) },
     },
     confirm: async () => { throw new Error('unexpected prompt') },
