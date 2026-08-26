@@ -18,7 +18,7 @@
 
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { parse as parseYaml } from 'yaml'
 
 import { CONTAINER_HOME, baseImages } from '../cli/src/images.ts'
@@ -367,6 +367,21 @@ describe('the handoff note', () => {
     assert.ok(!box.exists('myapp', HANDOFF_DIR), 'no directory either')
   })
 
+  test('a later stop with nothing new to say still appends, not skips', async () => {
+    const box = sandbox()
+    const { ctx } = await stoppedProject(box, { git: stubGit(null) })
+    const dir = box.path('myapp', HANDOFF_DIR)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(box.path('myapp', HANDOFF_DIR, HANDOFF_FILENAME), 'entry from three weeks ago')
+
+    const result = await runDown(ctx, 'myapp')
+
+    assert.ok(result.handoff_path, 'once a note exists, every stop still adds to it')
+    const note = box.read('myapp', HANDOFF_DIR, HANDOFF_FILENAME) ?? ''
+    assert.match(note, /entry from three weeks ago/, 'a quiet session must not erase what came before')
+    assert.match(note, /No summary/)
+  })
+
   test('delete never writes one — the directory is about to go', async () => {
     const box = sandbox()
     const { docker, ctx } = await stoppedProject(box, { exec: answered('a summary') })
@@ -377,7 +392,7 @@ describe('the handoff note', () => {
     assert.ok(!docker.calls.some((call) => call.kind === 'exec'))
   })
 
-  test('the note is regenerated, not appended to', async () => {
+  test('the note accumulates entries — nothing is ever overwritten', async () => {
     const box = sandbox()
     const { ctx } = await stoppedProject(box, { exec: answered('### First\nOne.') })
     await runDown(ctx, 'myapp')
@@ -386,7 +401,8 @@ describe('the handoff note', () => {
     await runDown(second.ctx, 'myapp')
 
     const note = box.read('myapp', HANDOFF_DIR, HANDOFF_FILENAME) ?? ''
+    assert.match(note, /One\./, 'a later, quieter session must not erase an earlier substantive one')
     assert.match(note, /Two\./)
-    assert.ok(!note.includes('One.'), 'the stop before last is git history, not a growing file')
+    assert.ok(note.indexOf('One.') < note.indexOf('Two.'), 'newest entry is appended at the bottom')
   })
 })

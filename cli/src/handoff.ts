@@ -23,12 +23,15 @@
  * `down`. A stop that refused because it could not write a memo would be a
  * worse tool than one that never wrote memos, and the user asked for a stop.
  *
- * The file is DERIVED but not regenerated: unlike the compose file it is a log
- * of a moment, so each `down` overwrites it with the newer moment rather than
- * appending forever. Git history is the archive; this is the top of the stack.
+ * The file is APPENDED, never overwritten. A trivial "just said hello" session,
+ * asked to summarise itself, honestly reports that nothing happened — and a
+ * note that replaced the substantive entry above it with that would destroy
+ * real history for no reason: `.cproj/` is gitignored by default (`scaffold.ts`),
+ * so there is usually no git history underneath to fall back on. Each `down`
+ * adds one entry; none is ever rewritten or dropped.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from './context.ts'
 import type { GitFacts } from './git.ts'
@@ -108,9 +111,9 @@ async function askAgent(ctx: Context, project: string): Promise<string | null> {
 }
 
 function repositorySection(facts: GitFacts | null): string[] {
-  if (facts === null) return ['## The repository', '', 'Not a git repository.']
+  if (facts === null) return ['### The repository', '', 'Not a git repository.']
 
-  const lines = ['## The repository', '']
+  const lines = ['### The repository', '']
   lines.push(`- Branch: \`${facts.branch ?? '(detached or unborn)'}\``)
   lines.push(
     facts.status.length === 0
@@ -120,12 +123,12 @@ function repositorySection(facts: GitFacts | null): string[] {
   if (facts.diffstat !== null) lines.push(`- Since HEAD:${facts.diffstat.replace(/^\s*/, ' ')}`)
 
   if (facts.commits.length > 0) {
-    lines.push('', '### Recent commits', '', '```')
+    lines.push('', '#### Recent commits', '', '```')
     lines.push(...facts.commits)
     lines.push('```')
   }
   if (facts.status.length > 0) {
-    lines.push('', '### Uncommitted', '', '```')
+    lines.push('', '#### Uncommitted', '', '```')
     lines.push(...facts.status.slice(0, MAX_STATUS_LISTED))
     const hidden = facts.status.length - MAX_STATUS_LISTED
     if (hidden > 0) lines.push(`… and ${hidden} more`)
@@ -134,22 +137,26 @@ function repositorySection(facts: GitFacts | null): string[] {
   return lines
 }
 
-function render(project: string, when: Date, summary: string | null, facts: GitFacts | null): string {
-  const lines = [
+/** Written once, the first time a project ever gets a note. */
+function header(project: string): string {
+  return [
     `# Handoff — ${project}`,
     '',
-    `Written by \`cproj down\` at ${when.toISOString()}.`,
-    'Regenerated on every stop; the previous one is in git history if this directory is tracked.',
+    'Written by `cproj down`. Each stop appends an entry below — none is ever',
+    'rewritten or removed; the newest is at the bottom.',
     '',
-    '## Where the work was',
-    '',
-  ]
+  ].join('\n')
+}
+
+/** One stop's entry — everything a single note used to hold, now under its own timestamp. */
+function renderEntry(when: Date, summary: string | null, facts: GitFacts | null): string {
+  const lines = [`## ${when.toISOString()}`, '', '### Where the work was', '']
   lines.push(
     summary ??
       'No summary: there was no Claude Code session in the dev container to continue, ' +
         'or the agent could not be reached before the stop timed out.',
   )
-  lines.push('', ...repositorySection(facts), '')
+  lines.push('', ...repositorySection(facts))
   return `${lines.join('\n')}\n`
 }
 
@@ -173,15 +180,19 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
   const facts = await ctx.git.facts(dir)
   const summary = devRunning ? await askAgent(ctx, manifest.name) : null
 
-  // Nothing to say and nobody said it — don't leave an empty file behind on a
-  // project that has never been a repository and has never run an agent.
-  if (facts === null && summary === null) return null
+  const path = handoffPath(dir)
+  const existing = existsSync(path)
+
+  // Nothing to say and nobody said it — don't create a note for a project that
+  // has never been a repository and has never run an agent. Once one exists,
+  // every stop still appends: a trivial session's honest "nothing happened" is
+  // itself worth recording, not a reason to drop the entry above it.
+  if (facts === null && summary === null && !existing) return null
 
   try {
-    const directory = join(dir, HANDOFF_DIR)
-    mkdirSync(directory, { recursive: true })
-    const path = join(directory, HANDOFF_FILENAME)
-    writeFileSync(path, render(manifest.name, ctx.now(), summary, facts))
+    mkdirSync(join(dir, HANDOFF_DIR), { recursive: true })
+    const prefix = existing ? `${readFileSync(path, 'utf8').replace(/\n*$/, '\n')}\n---\n\n` : header(manifest.name)
+    writeFileSync(path, prefix + renderEntry(ctx.now(), summary, facts))
     return { path, summarised: summary !== null }
   } catch {
     // A read-only or vanished SSD. The stop still succeeded; say nothing here

@@ -414,7 +414,10 @@ true and still reachable — so the note is written there, into
   not write a memo would be worse than a tool that never wrote memos — the user
   asked for a stop. A non-zero exit or empty output is not a summary; the note
   says so rather than pasting a refusal under the heading.
-- **Regenerated, not appended.** Each stop overwrites with the newer moment.
-  Git history is the archive.
+- **Appended, not overwritten.** Each stop adds a new entry, newest at the
+  bottom; none is ever rewritten or dropped — a quiet "just said hello" session
+  reporting no work honestly must not destroy a substantive entry above it, and
+  `.cproj/` is gitignored by default (§10), so there is usually no git history
+  underneath to fall back on.
 - `--no-handoff` skips it. `delete` always passes it — there is no point
   summarising a project a second before its directory is removed.
