@@ -234,6 +234,20 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     assert.deepEqual(device.ejected, [box.root])
   })
 
+  test('`--stop-docker` on the actual command line reaches the flag runEject reads', async () => {
+    // The suite above calls runEject directly with `{ stopDocker: true }`,
+    // which never exercises argv parsing. `parse()` camelCases `--stop-docker`
+    // to `stopDocker`; registry.ts's `run` must read it back under that same
+    // key, or a real invocation silently never sets consent (it did once —
+    // the lookup used the hyphenated form and always missed).
+    const { parse } = await import('../cli/src/argv.ts')
+    const { COMMANDS } = await import('../cli/src/commands/registry.ts')
+    const eject = COMMANDS.find((c) => c.path.join(' ') === 'eject')
+    assert.ok(eject, 'eject is registered')
+    const parsed = parse(['--stop-docker'], eject)
+    assert.equal(parsed.flags.stopDocker, true)
+  })
+
   test('a refusal that names nobody still names Docker, from lsof', async () => {
     // diskutil often refuses without a dissenter. The runtime's hold is only
     // visible in lsof — which is why the device still answers that question

@@ -20,6 +20,7 @@
 import type { ErrorCode } from '../errors.ts'
 import { CprojError, notImplemented } from '../errors.ts'
 import { createContext } from '../context.ts'
+import { flagKey } from '../argv.ts'
 import { collectStatus, renderStatus } from './status.ts'
 import { collectList, renderList } from './list.ts'
 import { collectDoctor, renderDoctor } from './doctor.ts'
@@ -125,13 +126,20 @@ function exactArgs(inv: Invocation, command: CommandNode, count: number): string
   return [...inv.args]
 }
 
-function stringFlag(inv: Invocation, key: string): string | undefined {
-  const value = inv.flags[key]
+/**
+ * `name` is the flag's declared form (`--stop-docker`, matching `flags:`
+ * below) rather than a hand-typed camelCase key — `flagKey` derives the one
+ * `parse()` actually used, so a call site can't drift from its declaration
+ * the way `boolFlag(inv, 'stop-docker')` once silently did (it never matched
+ * `parse()`'s `stopDocker`, so the flag was always false).
+ */
+function stringFlag(inv: Invocation, name: string): string | undefined {
+  const value = inv.flags[flagKey(name)]
   return typeof value === 'string' ? value : undefined
 }
 
-function boolFlag(inv: Invocation, key: string): boolean {
-  return inv.flags[key] === true
+function boolFlag(inv: Invocation, name: string): boolean {
+  return inv.flags[flagKey(name)] === true
 }
 
 function noArgs(inv: Invocation, command: string): void {
@@ -164,8 +172,8 @@ export const COMMANDS: readonly CommandNode[] = [
       return output(
         await runNew(createContext(), {
           name,
-          archetype: stringFlag(inv, 'archetype'),
-          services: stringFlag(inv, 'services'),
+          archetype: stringFlag(inv, '--archetype'),
+          services: stringFlag(inv, '--services'),
         }),
         renderNew,
       )
@@ -204,7 +212,7 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('up'), 1)
-      return output(await runUp(createContext(), { name, noShell: boolFlag(inv, 'noShell') }), renderUp)
+      return output(await runUp(createContext(), { name, noShell: boolFlag(inv, '--no-shell') }), renderUp)
     },
   },
   {
@@ -221,7 +229,7 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('down'), 1)
-      return output(await runDown(createContext(), name, { noHandoff: boolFlag(inv, 'noHandoff') }), renderDown)
+      return output(await runDown(createContext(), name, { noHandoff: boolFlag(inv, '--no-handoff') }), renderDown)
     },
   },
   {
@@ -240,9 +248,9 @@ export const COMMANDS: readonly CommandNode[] = [
       return output(
         await runDelete(createContext(), {
           name,
-          force: boolFlag(inv, 'force'),
-          keepData: boolFlag(inv, 'keepData'),
-          purge: boolFlag(inv, 'purge'),
+          force: boolFlag(inv, '--force'),
+          keepData: boolFlag(inv, '--keep-data'),
+          purge: boolFlag(inv, '--purge'),
           json: inv.json,
         }),
         renderDelete,
@@ -324,7 +332,7 @@ export const COMMANDS: readonly CommandNode[] = [
       const [name] = exactArgs(inv, byPath('shell'), 1)
       // Same payload either way; `--print` only chooses the human renderer, so
       // the machine contract cannot drift from the flag (§2).
-      return output(await runShell(createContext(), name), boolFlag(inv, 'print') ? renderShellPrint : renderShell)
+      return output(await runShell(createContext(), name), boolFlag(inv, '--print') ? renderShellPrint : renderShell)
     },
   },
 
@@ -362,7 +370,7 @@ export const COMMANDS: readonly CommandNode[] = [
         run: async (inv) => {
           const [name] = exactArgs(inv, byPath('volumes rm'), 1)
           return output(
-            await runVolumeRemove(createContext(), { name, force: boolFlag(inv, 'force'), json: inv.json }),
+            await runVolumeRemove(createContext(), { name, force: boolFlag(inv, '--force'), json: inv.json }),
             renderVolumeRemove,
           )
         },
@@ -397,7 +405,7 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       noArgs(inv, 'eject')
-      return output(await runEject(createContext(), { stopDocker: boolFlag(inv, 'stop-docker') }), renderEject)
+      return output(await runEject(createContext(), { stopDocker: boolFlag(inv, '--stop-docker') }), renderEject)
     },
   },
   {
@@ -459,7 +467,7 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       noArgs(inv, 'build')
-      return output(await runBuild(createContext(), stringFlag(inv, 'archetype')), renderBuild)
+      return output(await runBuild(createContext(), stringFlag(inv, '--archetype')), renderBuild)
     },
   },
 ]
