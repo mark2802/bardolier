@@ -31,6 +31,12 @@ export type ExecResult = {
 export type RunOptions = {
   /** Per-call override; a build needs far longer than a `docker ps`. */
   readonly timeoutMs?: number
+  /**
+   * Extra variables for the child, MERGED over the parent environment rather
+   * than replacing it — `docker` still needs its own PATH and DOCKER_HOST.
+   * `up` uses it to lend the dev container the host's git identity (§9).
+   */
+  readonly env?: Readonly<Record<string, string>>
 }
 
 export type DockerRunner = (args: readonly string[], options?: RunOptions) => Promise<ExecResult>
@@ -66,6 +72,21 @@ export type ComposeTarget = {
   readonly project: string
   /** Directory the compose file lives in — relative bind mounts resolve here. */
   readonly cwd: string
+  /**
+   * Variables for the `compose` process itself, which is what resolves the
+   * generated file's bare `environment:` entries (`PASSTHROUGH_ENV`). A name
+   * absent here is left UNSET in the container rather than set empty — see the
+   * note on that constant.
+   */
+  readonly env?: Readonly<Record<string, string>>
+}
+
+/** One command to run inside an already-running container. */
+export type ContainerExec = {
+  readonly container: string
+  /** argv, run without a shell — no quoting rules to get wrong. */
+  readonly argv: readonly string[]
+  readonly timeoutMs?: number
 }
 
 export type BuildRequest = {
@@ -75,7 +96,7 @@ export type BuildRequest = {
   readonly context: string
   /** Absolute path to the Dockerfile. */
   readonly dockerfile: string
-  /** `--build-arg` pairs; the host UID/GID live here (implementation plan, Phase 2). */
+  /** `--build-arg` pairs; the host UID/GID live here. */
   readonly args: Readonly<Record<string, string>>
   /** `--platform`, for an image whose toolchain exists for one architecture only (`images.ts`). */
   readonly platform?: string | null
@@ -121,9 +142,39 @@ export type Docker = {
   removeVolume(name: string): Promise<void>
   /** `docker rm --force` one container by name. Used by `down-all` to sweep strays. */
   removeContainer(name: string): Promise<void>
+  /**
+   * Stop the Docker engine itself — the VM, not a container (`docker desktop
+   * stop`).
+   *
+   * The one Docker call that is not about this tool's own containers, and it
+   * exists for exactly one caller: `eject`. Docker Desktop shares the host's
+   * `/Volumes` into its VM and keeps descriptors on the SSD for as long as the
+   * VM is alive, so a disk that every container has released can still be
+   * dissented by the runtime — and no retry, and no quitting of any visible
+   * app, moves it. Stopping the engine does, and `docker desktop start` brings
+   * it back in seconds, which is why this and not "quit Docker Desktop" is what
+   * `eject` offers.
+   *
+   * It is never called without consent: `eject` asks first, or is given
+   * `--stop-docker`. Throws DOCKER_UNAVAILABLE when the CLI plugin is absent
+   * (Docker Engine without Desktop), which `eject` turns back into advice.
+   */
+  stopEngine(): Promise<void>
+  /**
+   * Run a command inside a running container and hand back its result.
+   *
+   * The ONE Docker call that does not throw on a non-zero exit. Its only caller
+   * is the handoff (§12), for which every failure — no such container, no agent
+   * installed, no session to summarise, a timeout — is equally a reason to write
+   * the note without that section rather than to fail the `down` that asked for
+   * it. Making it throw would put a try/catch at every call site to say so.
+   */
+  exec(request: ContainerExec): Promise<ExecResult>
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000
+/** Stopping the VM waits for the engine to shut down cleanly; a `ps` timeout is far too short. */
+const ENGINE_TIMEOUT_MS = 180_000
 /** Builds and `compose up` pull layers; the query timeout is far too short. */
 const MUTATION_TIMEOUT_MS = 30 * 60_000
 /** `system df -v` walks every volume on disk; slower than a `ps`, faster than a build. */
@@ -134,7 +185,8 @@ export function execDocker(defaultTimeoutMs = DEFAULT_TIMEOUT_MS): DockerRunner 
   return (args, options) =>
     new Promise((resolveResult) => {
       const timeout = options?.timeoutMs ?? defaultTimeoutMs
-      execFile('docker', [...args], { timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+      const env = options?.env === undefined ? undefined : { ...process.env, ...options.env }
+      execFile('docker', [...args], { timeout, maxBuffer: 16 * 1024 * 1024, env }, (error, stdout, stderr) => {
         if (error) {
           // ENOENT (no docker binary) and a non-zero exit are the same thing to
           // us: the question could not be answered.
@@ -209,8 +261,19 @@ function memoise<T>(fn: () => Promise<T>): () => Promise<T> {
 }
 
 export function createDocker(runner: DockerRunner = execDocker()): Docker {
-  const ok = async (args: readonly string[], what: string, timeoutMs?: number): Promise<ExecResult> => {
-    const result = await runner(args, timeoutMs === undefined ? undefined : { timeoutMs })
+  const ok = async (
+    args: readonly string[],
+    what: string,
+    timeoutMs?: number,
+    env?: Readonly<Record<string, string>>,
+  ): Promise<ExecResult> => {
+    // Built by spreading rather than by naming both keys: `exactOptionalPropertyTypes`
+    // distinguishes an absent property from one explicitly set to undefined.
+    const options =
+      timeoutMs === undefined && env === undefined
+        ? undefined
+        : { ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(env === undefined ? {} : { env }) }
+    const result = await runner(args, options)
     if (result.code !== 0) {
       throw new CprojError('DOCKER_UNAVAILABLE', `Could not ${what}: ${result.stderr.trim() || `docker exited ${result.code}`}`)
     }
@@ -289,7 +352,12 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
   let images = memoise(readImages)
 
   const compose = (target: ComposeTarget, args: readonly string[], what: string) =>
-    ok(['compose', '--file', target.file, '--project-name', target.project, ...args], what, MUTATION_TIMEOUT_MS)
+    ok(
+      ['compose', '--file', target.file, '--project-name', target.project, ...args],
+      what,
+      MUTATION_TIMEOUT_MS,
+      target.env,
+    )
 
   const docker: Docker = {
     available,
@@ -306,6 +374,12 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
       volumeSizes = memoise(readVolumeSizes)
       images = memoise(readImages)
     },
+
+    exec: (request) =>
+      runner(
+        ['exec', request.container, ...request.argv],
+        request.timeoutMs === undefined ? undefined : { timeoutMs: request.timeoutMs },
+      ),
 
     async composeUp(target) {
       // `--remove-orphans` is what makes a regenerated compose file authoritative:
@@ -367,6 +441,16 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
       // has already decided is ours and unwanted; a running stray is exactly
       // the case that needs removing.
       await ok(['rm', '--force', name], `remove container ${name}`)
+      docker.refresh()
+    },
+
+    async stopEngine() {
+      // `docker desktop stop` without `--detach` returns once the engine is
+      // down, which is what `eject` needs: the retry that follows is only
+      // meaningful after the VM has actually released the volume. `--force` is
+      // deliberately not passed — this is a clean shutdown of the engine, not
+      // a kill.
+      await ok(['desktop', 'stop'], 'stop the Docker engine', ENGINE_TIMEOUT_MS)
       docker.refresh()
     },
   }

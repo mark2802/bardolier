@@ -10,6 +10,7 @@
   "scripts": {
     "cproj": "node cli/bin/cproj.js",
     "test": "node --test 'test/**/*.test.ts'",
+    "test:quiet": "node --test --test-reporter=dot 'test/**/*.test.ts'",
     "typecheck": "npm run typecheck --workspace cli",
     "done-check": "bash test/phase3-done-check.sh"
   }

@@ -2,7 +2,7 @@
 
 Status: draft for implementation. macOS status-bar app; a **thin client** over
 the `cproj` CLI. Companion docs: `cli-spec.md` (the engine — authoritative for
-all behaviour), `implementation-plan.md`, `CLAUDE.md`.
+all behaviour), `CLAUDE.md`.
 
 **The CLI is the API; the app is a thin client.** The app shells out to `cproj`,
 parses `--json`, and renders. It contains no Docker/orchestration logic and holds
@@ -12,9 +12,9 @@ no persistent state beyond UI preferences.
 
 ## 1. Platform
 
-- SwiftUI `MenuBarExtra`, macOS. Built as its own Xcode project (see
-  `implementation-plan.md` for when the human creates it and how Claude-generated
-  Swift files are added to the target).
+- SwiftUI `MenuBarExtra`, macOS. Built as its own Xcode project — created and
+  maintained by the human at the Mac; Claude writes `.swift` files into the
+  synchronized folder group and never touches the project file (`app/README.md`).
 - No sandbox entitlement that would block shelling out to `docker`/`cproj`
   (the app runs a helper process; App Sandbox would need to be off or carefully
   configured — v1 targets a non-sandboxed local dev tool).
@@ -121,7 +121,19 @@ Small modal:
 1. `cproj eject --json` (which itself runs down-all → holder check → diskutil).
 2. On `EJECT_BLOCKED`, render the returned `holders` list ("Xcode, Simulator
    still hold the SSD — quit them") and offer **Retry**. Never force.
-3. On success, switch the icon to the **ejected** state ("safe to unplug").
+2b. On `EJECT_BLOCKED` with `details.reason == "runtime-holds-volume"`, the
+   holder is Docker Desktop's own VM: there is nothing to quit and Retry cannot
+   clear it. Render it as its own state and offer **Stop Docker & eject**,
+   which is `cproj eject --stop-docker` — the user consenting to the engine
+   stopping, not the app deciding to stop it.
+2c. On `reason == "runtime-holds-volume-after-stop"` — the same refusal after
+   that offer was taken and the CLI waited for the VM to let go — withdraw the
+   offer. The engine is already down, so the panel renders the CLI's own
+   sentence and leaves **Retry**; a button that repeats what just failed is a
+   loop, not a move.
+3. On success, switch the icon to the **ejected** state ("safe to unplug"). If
+   the payload says `docker_stopped`, say so: the engine has to be started
+   again before the next `up`.
 
 ## 11. Icon states
 
@@ -151,7 +163,7 @@ itself.
 
 ## 14. What must be true before the app is built
 
-Per `implementation-plan.md`: the CLI contract (commands, JSON schemas, error
+The CLI contract (commands, JSON schemas, error
 codes) is implemented and frozen, and the full lifecycle has been driven from the
 terminal. The app is written against that frozen contract, not in parallel with
 it.

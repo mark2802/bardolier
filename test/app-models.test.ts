@@ -1,22 +1,11 @@
 /**
- * The app's Codable models against the frozen schemas.
- *
- * Phase 5 puts a second reader of the CLI contract in the repo — `CprojClient`
- * and the `Codable` mirrors in `app/claude-yard/claude-yard/Cproj/`. Xcode is
- * host-only, so nothing in this repo compiles or runs that Swift; without a
- * check here, a schema field the models missed would surface as a decoding
- * failure in the menu bar, days later, with no test to catch it.
- *
- * So this reads the Swift as text and holds it to the same schemas
- * `contracts.test.ts` holds the CLI to, in both directions:
- *
- *   - every REQUIRED schema property has a Swift property (nothing missed), and
- *   - every Swift property is a DECLARED schema property (nothing invented,
- *     which under `additionalProperties: false` could never decode anyway).
- *
- * It is deliberately shallow about types — a text scan cannot judge Swift
- * types, and Xcode does that. What it judges is the field list, which is what
- * "additive only" is a promise about.
+ * The app's Codable models against the frozen schemas, in both directions:
+ * every required schema property has a Swift property, and every Swift property
+ * is a declared one (`additionalProperties: false` would never decode it
+ * otherwise). Xcode is host-only, so nothing here compiles the Swift — without
+ * this scan a missed field surfaces as a decoding failure in the menu bar days
+ * later. Deliberately shallow about types; the field list is what "additive
+ * only" is a promise about.
  */
 
 import { test, describe } from 'node:test'

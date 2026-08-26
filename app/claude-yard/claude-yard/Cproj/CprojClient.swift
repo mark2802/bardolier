@@ -135,8 +135,14 @@ nonisolated struct CprojClient: Sendable {
 
     /// down-all, holder check, eject. On EJECT_BLOCKED the thrown failure
     /// carries `holders` for the app to render (app-spec.md §10). Never forces.
-    func eject() async throws -> EjectOutput {
-        try await run(["eject"])
+    ///
+    /// `stopDocker` is not a force and is not a default: it answers, up front,
+    /// the one question `cproj eject` would otherwise ask at a terminal the app
+    /// does not have — whether it may stop the Docker ENGINE when that VM's
+    /// file share is what holds the disk. The user answers it by pressing the
+    /// button the blocked panel offers, never by the app deciding.
+    func eject(stopDocker: Bool = false) async throws -> EjectOutput {
+        try await run(["eject"] + (stopDocker ? ["--stop-docker"] : []))
     }
 
     func build(archetype: Archetype? = nil) async throws -> BuildOutput {

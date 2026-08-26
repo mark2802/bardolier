@@ -50,6 +50,9 @@ export function orderManifest(manifest: ProjectManifest): Record<string, unknown
     for (const key of keys) sorted[key] = { host_port: services[key]?.host_port }
     ordered.services = sorted
   }
+  // After the services, because it is the same kind of thing — a host port
+  // assigned once and kept (§5, §9) — and before `created`, which stays last.
+  if (typeof manifest.app_port === 'number') ordered.app_port = manifest.app_port
   ordered.created = manifest.created
   return ordered
 }

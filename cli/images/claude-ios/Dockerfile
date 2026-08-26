@@ -41,6 +41,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       zip \
     && rm -rf /var/lib/apt/lists/*
 
+# Claude Code — the agent this whole yard exists to host.
+#
+# The standalone binary, not the npm package: there is no Node in this image and
+# adding a whole runtime to carry one tool would be the wrong trade. It lands in
+# /usr/local/bin rather than the installer's default `$HOME/.local/bin`, because
+# $HOME here is a per-project named volume (below) and anything the image leaves
+# under $HOME is copied into it once per project.
+#
+# Pinned and checksum-verified against the publisher's manifest, like swiftlint
+# below — same reasoning, same shape.
+ARG CLAUDE_CODE_VERSION=2.1.246
+ARG TARGETARCH
+RUN set -eux; \
+    base="https://downloads.claude.ai/claude-code-releases"; \
+    case "${TARGETARCH}" in \
+      amd64) platform="linux-x64" ;; \
+      arm64) platform="linux-arm64" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    checksum="$(curl -fsSL "${base}/${CLAUDE_CODE_VERSION}/manifest.json" | jq -r ".platforms[\"${platform}\"].checksum")"; \
+    case "${checksum}" in [0-9a-f][0-9a-f]*) ;; *) echo "no checksum for ${platform}" >&2; exit 1 ;; esac; \
+    curl -fsSL -o /usr/local/bin/claude "${base}/${CLAUDE_CODE_VERSION}/${platform}/claude"; \
+    echo "${checksum}  /usr/local/bin/claude" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/claude; \
+    CLAUDE_CONFIG_DIR=/tmp/claude-build claude --version; \
+    rm -rf /tmp/claude-build
+
 # SwiftLint ships prebuilt Linux binaries per architecture, so this is a
 # download rather than the ~10-minute SwiftSyntax compile a source build costs.
 # TARGETARCH is BuildKit's (amd64 | arm64) and matches the asset names.
@@ -73,6 +100,23 @@ RUN set -eux; \
     home="$(getent passwd "${HOST_UID}" | cut -d: -f6)"; \
     mkdir -p "${home}" /work; \
     chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work
+
+# A PERSISTENT HOME, at a path the compose file can name (cli/src/images.ts,
+# CONTAINER_HOME). `cproj down` removes the container, so a home in the
+# container layer takes the shell history, the dotfiles and any `claude login`
+# with it. A fixed path rather than the useradd-derived one because HOST_UID may
+# collide with a user the base image already ships, which moves ~ — and compose
+# cannot mount a volume at a path it cannot predict.
+#
+# Claude Code's config dir falls under it as $HOME/.claude, per project, which
+# is what makes `claude --continue` resume THIS project: every dev container has
+# the same working dir, /work, so one shared config dir would file every
+# project's sessions in a single bucket.
+#
+# Owned by the host user in the image: Docker seeds a new named volume from the
+# image directory, ownership included, and there is no sudo in here.
+ENV HOME=/state/home
+RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state
 
 USER ${HOST_UID}:${HOST_GID}
 WORKDIR /work

@@ -57,10 +57,24 @@ export type UpOutput = {
    * never spawns a terminal itself; it only says whether one was asked for.
    */
   open_shell: boolean
+  /**
+   * The dev server's host port and the URL that opens it (§9), or null for an
+   * archetype that serves nothing. Additive since Phase 9.
+   */
+  app_port?: number | null
+  app_url?: string | null
 }
 
 export type DownOutput = {
   project: string
+  /**
+   * Where the handoff note was written (§12), or null when none was — no
+   * repository and no agent session to describe, or `--no-handoff`. Additive
+   * since Phase 9.
+   */
+  handoff_path?: string | null
+  /** True when the agent's own summary made it into that note. */
+  handoff_summarised?: boolean
   /** Always `stopped` on success. */
   state: ProjectState
   /** False when the project was already down — `down` is idempotent (§2). */

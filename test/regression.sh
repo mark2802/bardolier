@@ -1,30 +1,25 @@
 #!/usr/bin/env bash
 # The ladder, walked ONCE, in order.
 #
-# Every phase's done-check used to end by re-running all of its predecessors —
-# and each of those did the same. That is not eight runs, it is exponential:
-# phase 7 ran phase 6 (which ran 0-5), then phase 5 (which ran 0-4), and so on,
-# so phase 0's containers came up dozens of times per invocation and a
-# regression check took the better part of an hour. Identical coverage, ~2^n
-# the cost.
-#
-# So the recursion lives here instead, flattened. Each phase check now asks THIS
-# script for "everything before me", and this script runs each phase's own
-# sections exactly once, in order, with CPROJ_REGRESSION set — which is how a
-# phase check knows its predecessors are already covered and skips its own
-# ladder. One walk, linear, same answer.
+# Every phase check used to end by re-running all of its predecessors, and each
+# of those did the same — exponential, so phase 0's containers came up dozens of
+# times and a run took the better part of an hour for a minute of distinct work.
+# The walk lives here instead: each phase's own sections, once, in order, with
+# CPROJ_REGRESSION set — the flag that tells a phase check to skip its own
+# ladder. Same coverage, linear cost.
 #
 #   bash test/regression.sh                 # every phase that has a check
 #   bash test/regression.sh --through 4     # phases 0-4 only
+#   VERBOSE=1 bash test/regression.sh       # print every passing assertion
 #
-# Phase 8's own sections build container images and run a Gradle build, so the
-# full walk is still minutes rather than seconds; `--through 7` skips that.
+# Phase 8's sections build images and run Gradle, so the full walk is minutes
+# rather than seconds; --through 7 skips that.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-LAST=8
+LAST=9
 THROUGH="$LAST"
 
 while [ $# -gt 0 ]; do

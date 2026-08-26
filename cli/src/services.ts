@@ -14,6 +14,19 @@ import type { AttachedService } from './model/service.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 import type { ProjectManifest } from './model/project.ts'
 
+/**
+ * The URL that opens this project's dev server on the Mac, or null when it has
+ * none — `cli-spec.md` §9.
+ *
+ * Reported rather than composed by the caller, for the same reason
+ * `connection_hint` is: the app must not have to know that a dev server speaks
+ * http, any more than it should know that Postgres speaks `postgresql://`. If
+ * an archetype ever serves something else, this is the one place that changes.
+ */
+export function appUrl(manifest: ProjectManifest): string | null {
+  return typeof manifest.app_port === 'number' ? `http://localhost:${manifest.app_port}` : null
+}
+
 export function describeService(
   project: string,
   key: string,

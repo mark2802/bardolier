@@ -11,6 +11,19 @@
  * an unmount out from under a running editor is the data loss this command
  * exists to prevent, so there is deliberately no `--force` flag to add later.
  *
+ * The one thing it will do BEYOND stopping containers, and only with consent,
+ * is stop the Docker ENGINE. Docker Desktop shares `/Volumes` into its VM and
+ * keeps descriptors on the SSD for as long as that VM lives, so a disk whose
+ * containers are all down can still be dissented by the runtime — and unlike
+ * Xcode there is nothing on screen to quit and unlike Spotlight no retry that
+ * ever succeeds. That made "fully quit Docker Desktop" the standing price of an
+ * eject. Stopping the engine (`docker desktop stop`) is the smaller move that
+ * actually works, and it is still the user's call: the prompt, or
+ * `--stop-docker`. It is not a force — nothing is unmounted out from under
+ * anything, and `docker desktop start` puts it back. What follows the stop is a
+ * WAIT, not an immediate retry: the command returns when the engine is down,
+ * and the VM helper that holds `/Volumes` goes a few seconds later.
+ *
  * `down-all` stops the projects that are actually up, then sweeps any leftover
  * `cproj-*` container no manifest claims — the residue of a deleted project or
  * of a compose file that has since been regenerated. Stopping every project
@@ -20,6 +33,7 @@
 
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
+import { isActionableHolder, isRuntimeHolder } from '../device.ts'
 import { devContainerName, isCprojContainer, serviceContainerName } from '../naming.ts'
 import { attachedKeys } from '../compose.ts'
 import { discoverProjects, probeSsd } from '../projects.ts'
@@ -94,7 +108,33 @@ function describeHolder(holder: EjectHolder): string {
   return `${holder.command} [pid ${holder.pid}]${who}${where}`
 }
 
-export async function runEject(ctx: Context): Promise<EjectOutput> {
+export type EjectOptions = {
+  /**
+   * Stop the Docker engine without asking, when the runtime is what refuses.
+   * Consent given up front — this is the flag the app passes for its "Stop
+   * Docker & eject" button, and how a script says yes with no terminal to
+   * prompt at. It is not a force: it never applies to a holder the user could
+   * close instead.
+   */
+  readonly stopDocker?: boolean
+}
+
+function toHolders(holders: readonly { pid: number; command: string; user: string | null; paths: readonly string[] }[]): EjectHolder[] {
+  return holders.map((holder) => ({
+    pid: holder.pid,
+    command: holder.command,
+    user: holder.user,
+    paths: [...holder.paths],
+  }))
+}
+
+/** The holder records a CprojError is carrying, if any. */
+function detailHolders(error: CprojError): EjectHolder[] {
+  const holders = error.details?.holders
+  return Array.isArray(holders) ? (holders as EjectHolder[]) : []
+}
+
+export async function runEject(ctx: Context, options: EjectOptions = {}): Promise<EjectOutput> {
   const ssd = probeSsd(ctx.config)
   if (!ssd.volumePresent) {
     throw new CprojError('SSD_NOT_MOUNTED', `Nothing is mounted at ${ssd.volume}; there is nothing to eject.`)
@@ -102,12 +142,7 @@ export async function runEject(ctx: Context): Promise<EjectOutput> {
 
   const down = await runDownAll(ctx)
 
-  const holders: EjectHolder[] = (await ctx.device.holders(ssd.volume)).map((holder) => ({
-    pid: holder.pid,
-    command: holder.command,
-    user: holder.user,
-    paths: [...holder.paths],
-  }))
+  const holders: EjectHolder[] = toHolders(await ctx.device.holders(ssd.volume))
 
   if (holders.length > 0) {
     throw new CprojError(
@@ -117,14 +152,198 @@ export async function runEject(ctx: Context): Promise<EjectOutput> {
     )
   }
 
-  await ctx.device.eject(ssd.volume)
+  let dockerStopped = false
+  try {
+    await ctx.device.eject(ssd.volume)
+  } catch (error) {
+    if (!(error instanceof CprojError) || error.code !== 'EJECT_BLOCKED') throw error
+    const held = await stopEngineFor(ctx, ssd.volume, error, options)
+    if (held === null) throw error
+    dockerStopped = true
+    await ejectAfterEngineStop(ctx, ssd.volume, held)
+  }
 
-  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [] }
+  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [], docker_stopped: dockerStopped }
+}
+
+/**
+ * Decide whether the Docker engine is what stands in the way, ask, and stop it.
+ *
+ * Returns null when this refusal is not the runtime's — the caller then
+ * rethrows `refusal` untouched, because diskutil's own words plus its dissenter
+ * are already the right answer for an Xcode or an `mds_stores`. Otherwise the
+ * engine is stopped and the runtime's holders come back, so the retry that
+ * follows can name them if the disk still will not go. Throws a NEW
+ * EJECT_BLOCKED only when the runtime IS the blocker and the engine did not
+ * stop: consent refused, no terminal to ask at, or no `docker desktop` to run.
+ * That error names Docker, because a blocked eject must always name something.
+ */
+async function stopEngineFor(
+  ctx: Context,
+  volume: string,
+  refusal: CprojError,
+  options: EjectOptions,
+): Promise<EjectHolder[] | null> {
+  const dissenters = detailHolders(refusal)
+  // Someone the user can act on said no. Theirs to close; never Docker's fault.
+  if (dissenters.some((holder) => isActionableHolder(holder.command))) return null
+  // A system agent said no. "Try again in a moment" is the true advice, and
+  // stopping Docker would be a side effect that fixes nothing.
+  if (dissenters.length > 0 && !dissenters.some((holder) => isRuntimeHolder(holder.command))) return null
+
+  // Named by diskutil, or — when it refused without naming anyone — recovered
+  // from lsof, which is the only place the runtime's hold is visible at all.
+  const runtime = dissenters.filter((holder) => isRuntimeHolder(holder.command))
+  const held = runtime.length > 0 ? runtime : toHolders(await ctx.device.runtimeHolders(volume))
+  if (held.length === 0) return null
+
+  const named = held.map(describeHolder).join('; ')
+  if (!(await allowed(ctx, options, volume, named))) {
+    throw new CprojError(
+      'EJECT_BLOCKED',
+      `${volume} is held by Docker's virtual machine (${named}), which keeps the file share open until the engine stops — no retry and no app to quit will release it. Run \`cproj eject --stop-docker\` (or \`docker desktop stop\`) and try again; \`docker desktop start\` brings it back.`,
+      { holders: held, reason: 'runtime-holds-volume' },
+    )
+  }
+
+  try {
+    await ctx.docker.stopEngine()
+  } catch (error) {
+    const said = error instanceof CprojError ? error.message : String(error)
+    throw new CprojError(
+      'EJECT_BLOCKED',
+      `${volume} is held by Docker's virtual machine (${named}), and the engine would not stop: ${said} Quit Docker Desktop and try again.`,
+      { holders: held, reason: 'runtime-holds-volume' },
+    )
+  }
+  return held
+}
+
+/**
+ * How long the runtime is given to actually let go, and how often it is asked.
+ *
+ * `docker desktop stop` returns when the ENGINE reports itself down, which is
+ * not the same moment the host stops holding the disk: the descriptors on
+ * `/Volumes` belong to the VM helper (`com.apple.Virtualization.VirtualMachine`,
+ * owned by launchd rather than by Docker), and that is torn down after the
+ * command returns. Retrying immediately — which is what this did — raced that
+ * teardown and lost, so the user was told to go and do by hand the thing that
+ * had just been done, and quitting Docker Desktop got the credit that the
+ * elapsed seconds had earned.
+ *
+ * So the retry waits for `lsof` to stop seeing the runtime rather than for the
+ * command to return. The budget is bounded because a wait with no end is a hang,
+ * and what follows a spent budget is a refusal that names who is still there —
+ * never a force.
+ */
+const RELEASE_POLL_MS = 500
+const RELEASE_POLLS = 30
+const RELEASE_BUDGET_S = (RELEASE_POLLS * RELEASE_POLL_MS) / 1000
+
+/**
+ * Attempts at the unmount once the descriptors are gone. More than one because
+ * DiskArbitration can still have the runtime registered as a client for a beat
+ * after its files are closed, and that dissent clears itself.
+ */
+const EJECT_ATTEMPTS = 3
+const EJECT_RETRY_MS = 1_000
+
+/**
+ * Who the runtime still is on this volume, and whether that is nobody.
+ *
+ * A probe that cannot answer counts as nobody rather than throwing: by this
+ * point the actionable-holder check has already passed and the engine has
+ * already been stopped, so a broken `lsof` must not turn into a holder-check
+ * failure. It only decides how long to WAIT and who to name — the `diskutil
+ * eject` that follows is what actually decides whether the disk goes.
+ */
+async function runtimeHoldersOrNone(ctx: Context, volume: string): Promise<EjectHolder[]> {
+  try {
+    return toHolders(await ctx.device.runtimeHolders(volume))
+  } catch {
+    return []
+  }
+}
+
+async function runtimeReleased(ctx: Context, volume: string): Promise<boolean> {
+  return (await runtimeHoldersOrNone(ctx, volume)).length === 0
+}
+
+/**
+ * The unmount, after the engine has been stopped: wait for the hold to go, then
+ * try — and keep the answer honest about which of those two failed.
+ *
+ * A refusal from anyone else (an Xcode that opened a file while we waited, a
+ * Spotlight mid-write) is rethrown untouched, because its own dissenter and its
+ * own advice are already right. Only the runtime's refusal — or a diskutil that
+ * refuses naming nobody — is retried, and when the budget is spent it becomes an
+ * EJECT_BLOCKED that says the engine is ALREADY stopped. That distinction is the
+ * whole point: the old code answered this case with "run `--stop-docker`", which
+ * is the flag the user had just used.
+ */
+async function ejectAfterEngineStop(ctx: Context, volume: string, held: EjectHolder[]): Promise<void> {
+  for (let poll = 0; poll < RELEASE_POLLS; poll++) {
+    if (await runtimeReleased(ctx, volume)) break
+    await ctx.wait(RELEASE_POLL_MS)
+  }
+
+  let refusal: CprojError | null = null
+  let dissenters: EjectHolder[] = []
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await ctx.device.eject(volume)
+      return
+    } catch (error) {
+      if (!(error instanceof CprojError) || error.code !== 'EJECT_BLOCKED') throw error
+      dissenters = detailHolders(error)
+      // Somebody else refused this time — an Xcode that opened a file while we
+      // waited, a Spotlight mid-write. Their refusal already carries its own
+      // name and its own advice, and it is the honest answer to give back.
+      if (dissenters.length > 0 && !dissenters.every((holder) => isRuntimeHolder(holder.command))) throw error
+      refusal = error
+      if (attempt >= EJECT_ATTEMPTS) break
+      await ctx.wait(EJECT_RETRY_MS)
+    }
+  }
+
+  // Who is left, now that the engine is down: whoever diskutil named, or
+  // whoever lsof can still see. If BOTH say the runtime has gone, then this
+  // refusal is not the runtime's and blaming Docker for it would be a guess —
+  // diskutil's own words go back unchanged, holders and all.
+  const still = dissenters.length > 0 ? dissenters : await runtimeHoldersOrNone(ctx, volume)
+  if (still.length === 0 && refusal !== null) throw refusal
+
+  const named = still.length > 0 ? still : held
+  throw new CprojError(
+    'EJECT_BLOCKED',
+    `${volume} still would not unmount ${RELEASE_BUDGET_S}s after the Docker engine was stopped — held by ${named.map(describeHolder).join('; ')}. The engine is already down, so there is nothing left for cproj to stop: if Docker Desktop itself is still running, quit it and retry; otherwise give the volume a moment and retry.`,
+    { holders: named, reason: 'runtime-holds-volume-after-stop' },
+  )
+}
+
+/**
+ * Consent for stopping the engine: the flag, or the prompt.
+ *
+ * A prompt that cannot be shown is a NO, not an error — with no terminal there
+ * is nobody to ask, and the caller turns that into an EJECT_BLOCKED whose
+ * advice is `--stop-docker`. Letting `confirm`'s own refusal escape would tell
+ * the user to re-run with `--force`, a flag `eject` deliberately does not have.
+ */
+async function allowed(ctx: Context, options: EjectOptions, volume: string, named: string): Promise<boolean> {
+  if (options.stopDocker === true) return true
+  try {
+    return await ctx.confirm(
+      `${volume} is still held by Docker's virtual machine (${named}). Every container is already stopped. Stop the Docker engine to finish ejecting?`,
+    )
+  } catch {
+    return false
+  }
 }
 
 export function renderEject(output: EjectOutput): string[] {
   const lines: string[] = []
   if (output.stopped.length > 0) lines.push(`Stopped ${output.stopped.join(', ')}.`)
   lines.push(`Ejected ${output.volume}. Safe to unplug.`)
+  if (output.docker_stopped) lines.push('  Stopped the Docker engine to release the volume — `docker desktop start` when you need it.')
   return lines
 }

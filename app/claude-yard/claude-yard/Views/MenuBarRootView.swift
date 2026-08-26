@@ -98,6 +98,10 @@ struct MenuBarRootView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     MenuSectionHeader(title: "Projects")
+                    // Said once, here, rather than under each dimmed action.
+                    if let reason = mutationBlockedReason, !store.projects.isEmpty {
+                        DisabledNotice(reason: reason)
+                    }
                     projectList
                 }
             }
@@ -105,10 +109,20 @@ struct MenuBarRootView: View {
 
             Divider().padding(.vertical, 4)
 
-            MenuTextRow(title: "New project…", systemImage: "plus.square", isDisabled: !canMutate) {
+            MenuTextRow(
+                title: "New project…",
+                systemImage: "plus.square",
+                isDisabled: !canMutate,
+                disabledReason: mutationBlockedReason
+            ) {
                 panel = .newProject
             }
-            MenuTextRow(title: reclaimTitle, systemImage: "internaldrive", isDisabled: !canMutate) {
+            MenuTextRow(
+                title: reclaimTitle,
+                systemImage: "internaldrive",
+                isDisabled: !canMutate,
+                disabledReason: mutationBlockedReason
+            ) {
                 panel = .reclaim
             }
             // §10 is a FLOW, not a single click: it can come back blocked with
@@ -179,6 +193,7 @@ struct MenuBarRootView: View {
                     project: project,
                     isExpanded: expanded.contains(project.name),
                     canMutate: canMutate,
+                    disabledReason: mutationBlockedReason,
                     toggleExpanded: { toggle(project.name) },
                     openServices: { panel = .services(project: project.name) },
                     confirm: request
@@ -200,6 +215,18 @@ struct MenuBarRootView: View {
 
     /// Mutating actions need an idle app, a mounted SSD and a live daemon.
     private var canMutate: Bool { !store.isBusy && !store.isDegraded }
+
+    /// Why they are inert, in the same order they are refused. Nil when they
+    /// are not — so a row can hand this straight to `disabledReason` (§11).
+    ///
+    /// This exists because a dimmed row and an absent row look the same. The
+    /// status line has always carried `degradedReason`, but it is one caption at
+    /// the top of the popover and the disabled item may be three sections below
+    /// it, inside a collapsed project.
+    private var mutationBlockedReason: String? {
+        if let activity = store.activity { return "Waiting for “\(activity)” to finish." }
+        return store.degradedReason
+    }
 
     /// Eject is the exception: it is what you reach for when things are wrong,
     /// so it needs neither Docker nor an idle app to be OPENED — the panel
@@ -226,6 +253,10 @@ struct MenuBarRootView: View {
     /// was closed — that is the state the user comes back to.
     private var ejectTitle: String {
         switch store.ejectPhase {
+        case .blockedByDocker(_, _, let engineStopped):
+            return engineStopped
+                ? "Eject blocked — engine stopped, still held…"
+                : "Eject blocked — Docker is holding it…"
         case .blocked(let holders, _):
             return holders.isEmpty ? "Eject was blocked…" : "Eject blocked — \(holders.count) holder\(holders.count == 1 ? "" : "s")…"
         case .ejected:
@@ -239,7 +270,7 @@ struct MenuBarRootView: View {
 
     private var ejectSymbol: String {
         switch store.ejectPhase {
-        case .blocked: return "exclamationmark.triangle"
+        case .blocked, .blockedByDocker: return "exclamationmark.triangle"
         case .ejected: return "eject.circle"
         default: return "eject"
         }
@@ -256,6 +287,8 @@ struct ProjectRow: View {
     var project: CprojProject
     var isExpanded: Bool
     var canMutate: Bool
+    /// Why this row's actions are inert, or nil when they are not (§11).
+    var disabledReason: String?
     var toggleExpanded: () -> Void
     var openServices: () -> Void
     var confirm: (ConfirmationRequest) -> Void
@@ -279,7 +312,12 @@ struct ProjectRow: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 0) {
                     if project.state.isUp {
-                        MenuTextRow(title: "Stop", systemImage: "stop.circle", isDisabled: !canMutate) {
+                        MenuTextRow(
+                            title: "Stop",
+                            systemImage: "stop.circle",
+                            isDisabled: !canMutate,
+                            disabledReason: disabledReason
+                        ) {
                             Task { await store.stop(project: project.name) }
                         }
                         MenuTextRow(title: "Open shell", systemImage: "terminal", isDisabled: store.isBusy) {
@@ -291,7 +329,8 @@ struct ProjectRow: View {
                         MenuTextRow(
                             title: preferences.startOpensShell ? "Start & open shell" : "Start",
                             systemImage: "play.circle",
-                            isDisabled: !canMutate
+                            isDisabled: !canMutate,
+                            disabledReason: disabledReason
                         ) {
                             Task {
                                 await store.start(project: project.name, openShell: preferences.startOpensShell)
@@ -305,7 +344,12 @@ struct ProjectRow: View {
                     MenuTextRow(title: "Open folder in Finder", systemImage: "folder") {
                         revealInFinder(project.dir)
                     }
-                    MenuTextRow(title: "Delete…", systemImage: "trash", isDisabled: !canMutate) {
+                    MenuTextRow(
+                        title: "Delete…",
+                        systemImage: "trash",
+                        isDisabled: !canMutate,
+                        disabledReason: disabledReason
+                    ) {
                         confirm(deleteConfirmation)
                     }
 

@@ -8,7 +8,7 @@ boundary).
 
 The target uses an Xcode 16+ **file-system-synchronized group**, so a `.swift`
 file written into `claude-yard/claude-yard/` is in the build already — the
-"Add Files to target…" step in the implementation plan is a no-op here. Confirm
+"Add Files to target…" step is a no-op here. Confirm
 with ⌘B; that is all it takes.
 
 ## Layout
@@ -71,6 +71,39 @@ ln -s "$PWD/cli/bin/cproj.js" /usr/local/bin/cproj   # or install it properly
 ```
 
 `CPROJ_BIN` in an Xcode scheme's environment overrides both.
+
+## Running it without Xcode
+
+There is no installer yet, and the two halves come apart differently.
+
+**The CLI** needs one symlink onto a directory `CprojExecutable` already
+searches. `/opt/homebrew/bin` is first in that list on Apple silicon, and it is
+also npm's global prefix, so this is both what a shell finds and what the app
+finds:
+
+```sh
+ln -sf "$PWD/cli/bin/cproj.js" /opt/homebrew/bin/cproj
+```
+
+A symlink rather than a copy on purpose: `cproj` runs straight from
+`cli/src/*.ts` with no build step, so the link stays correct after every edit.
+Node resolves the symlink before resolving `../src/main.ts` and `node_modules`,
+so nothing about the working copy has to move. Check it the way the app will,
+with almost no environment:
+
+```sh
+env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME="$HOME" cproj doctor
+```
+
+**The app** still has to be built once — Xcode is host-only (`CLAUDE.md`). After
+a ⌘B, drag `claude-yard.app` out of DerivedData into `/Applications`; the copy
+is self-contained and finds `cproj` on its own through the search above, with no
+`CPROJ_BIN` and no `CprojPath` preference. Rebuild and re-copy when the Swift
+changes. Nothing in the app needs the working copy at runtime.
+
+The gap this leaves is real and deliberate: a proper `.app` bundle with a signed,
+notarised installer, and a `cproj` installed independently of a git checkout, is
+its own piece of work.
 
 ## The rule this directory exists under
 

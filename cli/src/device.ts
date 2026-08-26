@@ -29,8 +29,20 @@ export type Holder = {
 }
 
 export type SsdDevice = {
-  /** Processes with files open under `mountPoint`. Empty means nothing holds it. */
+  /**
+   * Processes holding `mountPoint` that the USER can act on. The container
+   * runtime and the OS's own volume agents are filtered out — see
+   * `isActionableHolder` for why an unfiltered list refuses forever. Empty
+   * means nothing stands between the user and an unmount.
+   */
   holders(mountPoint: string): Promise<readonly Holder[]>
+  /**
+   * The container runtime's own hold on `mountPoint`, which `holders()` leaves
+   * out on purpose. Nothing consults this to decide whether to eject — only to
+   * NAME Docker once `diskutil` has already refused, so a refusal caused by the
+   * VM's file share says so instead of arriving with an empty list.
+   */
+  runtimeHolders(mountPoint: string): Promise<readonly Holder[]>
   /** Unmount and power down the volume. Throws EJECT_BLOCKED if it will not go. */
   eject(mountPoint: string): Promise<void>
 }
@@ -73,25 +85,101 @@ export function execHost(timeoutMs = HOST_TIMEOUT_MS): HostRunner {
 const MAX_PATHS = 5
 
 /**
- * Holders the user cannot act on, and which reporting would make `eject`
- * useless.
+ * Holders that must not, on their own, refuse an eject.
  *
- * Docker Desktop's VM keeps directory descriptors open on every bind-mounted
+ * Two kinds of process show up in `lsof` on a mounted volume that the user
+ * cannot act on, for two different reasons.
+ *
+ * The CONTAINER RUNTIME keeps directory descriptors open on every bind-mounted
  * path for as long as the file share exists — including after `down-all` has
- * stopped every container. Listing it would mean "close Docker Desktop" is the
+ * stopped every container. Listing it would mean "quit Docker Desktop" is the
  * standing answer to every eject, which is not what §6's holder check is for:
  * it names Xcode, the Simulator, and shells cd'd into the SSD — processes the
  * user can see and quit.
  *
- * This is not a licence to force. Everything that could be using those
- * descriptors has just been stopped, and if the volume genuinely will not go,
- * `diskutil` refuses and that refusal is reported as it came.
+ * The SYSTEM VOLUME AGENTS are worse, because they never go away at all.
+ * Spotlight's `mds`/`mds_stores` keep `.Spotlight-V100` mapped for as long as
+ * the disk is mounted, by design; QuickLook and the Dock's preview agents open
+ * every file in whatever folder a Finder window happens to be showing. A holder
+ * check that counts them refuses FOREVER on an indexed SSD — there is no app to
+ * quit and no work to wait out, so "Close all & eject" simply never succeeds.
+ *
+ * Neither list is a licence to force, and neither is a guess that these
+ * processes will cope. They are DiskArbitration clients, and asking them to let
+ * go IS the unmount protocol — that is what `diskutil eject` does next. When one
+ * genuinely does not let go, `diskutil` dissents, `parseDissenter` recovers the
+ * name from its refusal, and the user gets a holder to act on after all: later
+ * than `lsof` would have named it, but true rather than permanent.
  */
-const VIRTUALISATION_HOLDERS = ['com.docker', 'Docker', 'com.apple.Virtualization', 'vpnkit', 'qemu'] as const
+const VIRTUALISATION_HOLDERS = [
+  'com.docker',
+  'Docker',
+  'com.apple.Virtualization',
+  'virtiofsd', // the file-share daemon itself, which is what actually holds /Volumes
+  'vpnkit',
+  'qemu',
+] as const
+
+/**
+ * Prefixes matched against the process name. `lsof -F` gives 31 characters of
+ * it rather than the human column format's 9 — enough for `mds_stores` to read
+ * as itself instead of `mds_store` — but it is still a truncation, which is why
+ * every entry here is a PREFIX that fits well inside 31 characters rather than
+ * a name to compare for equality.
+ */
+const SYSTEM_HOLDERS = [
+  'mds', // mds, mds_stores, mdsync — Spotlight's indexer and its store
+  'mdworker', // the per-file importers it forks
+  'mdbulkimport',
+  'Spotlight',
+  'fseventsd', // the volume's own change journal
+  'revisiond', // .DocumentRevisions-V100
+  'diskarbitrationd', // the thing performing the unmount
+  'quicklookd',
+  'QuickLook',
+  'com.apple.quicklook', // ThumbnailsAgent, satellite — Finder icon previews
+  'com.apple.dock.extra', // Stacks previews: the same walk over the same folder
+] as const
+
+/**
+ * The process name, whichever way the host spelled it.
+ *
+ * The two probes do not agree on that. `lsof` reports a bare name
+ * (`com.apple.Virtualization.Virtua`); `diskutil` names its dissenter by FULL
+ * EXECUTABLE PATH — `/System/Library/Frameworks/Virtualization.framework/…/
+ * MacOS/com.apple.Virtualization.VirtualMachine`. The lists above are names, so
+ * a path is reduced to its last component before it is matched against them.
+ * Without that, Docker's own VM — named the only way `diskutil` knows how to
+ * name it — reads as an ordinary app, and the user is told to close a thing
+ * that has no window, instead of being offered the engine stop that works.
+ */
+export function processName(command: string): string {
+  const base = command.slice(command.lastIndexOf('/') + 1)
+  return base.length > 0 ? base : command
+}
+
+/** Prefix match against the command as given AND against its bare name. */
+function matchesAny(command: string, prefixes: readonly string[]): boolean {
+  const name = processName(command)
+  return prefixes.some((prefix) => command.startsWith(prefix) || name.startsWith(prefix))
+}
 
 /** True for a process whose open descriptors belong to the container runtime. */
 export function isRuntimeHolder(command: string): boolean {
-  return VIRTUALISATION_HOLDERS.some((prefix) => command.startsWith(prefix))
+  return matchesAny(command, VIRTUALISATION_HOLDERS)
+}
+
+/**
+ * True for an OS agent that holds every mounted volume open as a matter of
+ * course, and relinquishes it when the unmount asks.
+ */
+export function isSystemHolder(command: string): boolean {
+  return matchesAny(command, SYSTEM_HOLDERS)
+}
+
+/** True when a holder is something the user can see, quit, and try again. */
+export function isActionableHolder(command: string): boolean {
+  return !isRuntimeHolder(command) && !isSystemHolder(command)
 }
 
 /**
@@ -138,6 +226,64 @@ export function parseLsof(stdout: string, mountPoint: string): Holder[] {
 }
 
 /**
+ * Recover the holder from `diskutil`'s own refusal.
+ *
+ * When an unmount is dissented, DiskArbitration knows exactly which process
+ * said no, and `diskutil` prints it — in a shape that has drifted across macOS
+ * releases (`Dissenter PID = 51310 (plugin_host-3.8), Status = 0x0000c010`,
+ * `dissented by PID 51310 (plugin_host)`, and on Sequoia `Unmount was dissented
+ * by PID 74033 (/System/Library/…/com.apple.Virtualization.VirtualMachine)`).
+ * What every variant carries is `PID <n> (<what>)`, so that is what this looks
+ * for and nothing more — and `<what>` is reduced to a process name, because in
+ * the newest shape it is an absolute path and both the classifier and the
+ * user's eye want the name at the end of it. The `\b` is what keeps the
+ * `Dissenter parent PPID 1 (/sbin/launchd)` line on the next line out: launchd
+ * is nobody's holder.
+ *
+ * This is the answer `lsof` cannot give. `holders()` runs unprivileged — a GUI
+ * app has no way to become root — so it never sees another user's processes at
+ * all, and a root dissenter like `mds_stores` is named here or nowhere. A
+ * refusal with no PID in it stays a refusal with no holders: inventing one
+ * would be worse than an empty list.
+ */
+export function parseDissenter(text: string): Holder[] {
+  const byPid = new Map<number, Holder>()
+  for (const match of text.matchAll(/\bPID\s*=?\s*(\d+)\s*\(([^)]*)\)/g)) {
+    const pid = Number.parseInt(match[1] ?? '', 10)
+    if (!Number.isFinite(pid) || byPid.has(pid)) continue
+    const named = (match[2] ?? '').trim()
+    const command = named.length > 0 ? processName(named) : 'unknown'
+    byPid.set(pid, { pid, command, user: null, paths: [] })
+  }
+  return [...byPid.values()].sort((a, b) => a.pid - b.pid)
+}
+
+/** `command [pid n]`, the one shape both this file and `eject`'s renderer use. */
+function nameHolders(holders: readonly Holder[]): string {
+  return holders.map((holder) => `${holder.command} [pid ${holder.pid}]`).join('; ')
+}
+
+/**
+ * What to tell the user about a dissenter, which is not the same sentence for
+ * both kinds. "Close it and try again" is the right advice for Xcode and dead
+ * wrong for `mds_stores` — there is nothing to close, and the honest answer is
+ * that Spotlight was mid-write and a second attempt will very likely take.
+ */
+function adviseOn(holders: readonly Holder[]): string {
+  if (holders.length === 0) return ''
+  if (holders.every((holder) => isRuntimeHolder(holder.command))) {
+    // The one dissenter that is neither "close it" nor "wait": Docker's VM
+    // holds the file share for as long as it is alive, so no amount of
+    // retrying moves it and there is no document to save first.
+    return ` ${nameHolders(holders)} did not let go — that is Docker's virtual machine, which holds the volume until the engine stops. Run \`cproj eject --stop-docker\` (or \`docker desktop stop\`) and try again.`
+  }
+  if (holders.every((holder) => !isActionableHolder(holder.command))) {
+    return ` ${nameHolders(holders)} did not let go — a system agent, so try again in a moment rather than quitting anything.`
+  }
+  return ` Still held by ${nameHolders(holders.filter((holder) => isActionableHolder(holder.command)))} — close it and try again.`
+}
+
+/**
  * The real device.
  *
  * `selfPid` is excluded from the holder list: `cproj eject` is very often run
@@ -146,33 +292,45 @@ export function parseLsof(stdout: string, mountPoint: string): Holder[] {
  * holder and the user has to leave it.
  */
 export function createSsdDevice(runner: HostRunner = execHost(), selfPid: number = process.pid): SsdDevice {
+  /** One `lsof` pass, unclassified. Both holder questions are views over it. */
+  const scan = async (mountPoint: string): Promise<Holder[]> => {
+    const result = await runner('lsof', ['-F', 'pcLn', '--', mountPoint])
+    // lsof exits 1 with no output when nothing matches — that is the answer
+    // "nothing holds it", not a failure.
+    if (result.code !== 0 && result.stdout.trim().length === 0) {
+      if (result.code === 1 && result.stderr.trim().length === 0) return []
+      throw new CprojError(
+        'EJECT_BLOCKED',
+        `Could not determine what is holding ${mountPoint}: ${result.stderr.trim() || `lsof exited ${result.code}`}. Refusing to eject without knowing.`,
+        { holders: [], reason: 'holder-check-failed' },
+      )
+    }
+    return parseLsof(result.stdout, mountPoint).filter((holder) => holder.pid !== selfPid)
+  }
+
   return {
     async holders(mountPoint) {
-      const result = await runner('lsof', ['-F', 'pcLn', '--', mountPoint])
-      // lsof exits 1 with no output when nothing matches — that is the answer
-      // "nothing holds it", not a failure.
-      if (result.code !== 0 && result.stdout.trim().length === 0) {
-        if (result.code === 1 && result.stderr.trim().length === 0) return []
-        throw new CprojError(
-          'EJECT_BLOCKED',
-          `Could not determine what is holding ${mountPoint}: ${result.stderr.trim() || `lsof exited ${result.code}`}. Refusing to eject without knowing.`,
-          { holders: [], reason: 'holder-check-failed' },
-        )
-      }
-      return parseLsof(result.stdout, mountPoint).filter(
-        (holder) => holder.pid !== selfPid && !isRuntimeHolder(holder.command),
-      )
+      return (await scan(mountPoint)).filter((holder) => isActionableHolder(holder.command))
+    },
+
+    async runtimeHolders(mountPoint) {
+      return (await scan(mountPoint)).filter((holder) => isRuntimeHolder(holder.command))
     },
 
     async eject(mountPoint) {
       const result = await runner('diskutil', ['eject', mountPoint])
       if (result.code !== 0) {
         // diskutil's own refusal — a dissenter, a busy volume — is reported as
-        // it came, never retried with force.
+        // it came, never retried with force. The one thing added to it is the
+        // dissenting process, lifted out of the text into `holders` so the app
+        // renders a NAME in the same place it renders lsof's, instead of an
+        // empty list under a sentence it would have to parse itself.
+        const said = result.stderr.trim() || result.stdout.trim() || `diskutil exited ${result.code}`
+        const holders = parseDissenter(`${result.stdout}\n${result.stderr}`)
         throw new CprojError(
           'EJECT_BLOCKED',
-          `diskutil refused to eject ${mountPoint}: ${result.stderr.trim() || result.stdout.trim() || `diskutil exited ${result.code}`}`,
-          { holders: [], reason: 'diskutil-refused' },
+          `diskutil refused to eject ${mountPoint}: ${said}${adviseOn(holders)}`,
+          { holders, reason: 'diskutil-refused' },
         )
       }
     },

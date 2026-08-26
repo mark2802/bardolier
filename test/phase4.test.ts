@@ -1,23 +1,13 @@
 /**
- * Phase 4 tests — shell, volumes, down-all, eject.
- *
- * Still no SSD and no daemon. Phase 4 adds one more fake to the set: the SSD
- * device (`stubDevice`), which answers a scripted `lsof` holder list and
- * records whether `diskutil eject` was reached. That is what lets the eject
- * contract — refuse while held, succeed once clear, never force — be a test
- * instead of a paragraph, on a machine with no disk to unmount.
- *
- * Four properties carry Phase 4:
- *
- *   - `shell` RESOLVES and returns; it never spawns. A stopped project is
- *     PROJECT_STOPPED, not an auto-start.
- *   - An orphan is derived from the MANIFESTS. A volume some project still
- *     attaches is never offered for reclaiming, and the reverse — a detached
- *     service's volume — always is.
- *   - `volumes rm` destroys data, so it confirms, and refuses VOLUME_IN_USE
- *     before Docker is asked.
- *   - `eject` stops first, checks holders second, unmounts third, and refuses
- *     with the holders named rather than forcing.
+ * Phase 4 — shell, volumes, down-all, eject. No SSD, no daemon: `stubDevice`
+ * answers a scripted `lsof` and records whether `diskutil eject` was reached,
+ * which is what makes the eject contract testable with no disk to unmount.
+ *   - `shell` RESOLVES and never spawns; a stopped project is PROJECT_STOPPED.
+ *   - an orphan is derived from the MANIFESTS: still attached is never offered,
+ *     a detached service's volume always is.
+ *   - `volumes rm` confirms, and refuses VOLUME_IN_USE before asking Docker.
+ *   - `eject` stops, checks holders, unmounts — and refuses with them named
+ *     rather than forcing.
  */
 
 import { test, describe, afterEach } from 'node:test'
@@ -27,7 +17,7 @@ import { CprojError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { formatBytes, scanVolumes } from '../cli/src/volumes.ts'
 import { parseDockerSize } from '../cli/src/docker.ts'
-import { createSsdDevice, isRuntimeHolder, parseLsof } from '../cli/src/device.ts'
+import { createSsdDevice, isRuntimeHolder, isSystemHolder, parseDissenter, parseLsof } from '../cli/src/device.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runServiceRemove } from '../cli/src/commands/service.ts'
@@ -180,7 +170,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
     await project(ctx, 'alpha', 'postgres')
 
     const deleted = await runDelete(ctx, { name: 'alpha', force: true, keepData: false, purge: false, json: true })
-    assert.deepEqual(deleted.kept_volumes, ['alpha_pgdata'])
+    assert.deepEqual(deleted.kept_volumes, ['alpha_pgdata', 'cproj-alpha-home'])
 
     const output = await collectOrphanedVolumes(ctx)
     assert.deepEqual(output.orphaned.map((v) => v.name), ['alpha_pgdata'])
@@ -512,8 +502,14 @@ describe('eject (cli-spec.md §6)', () => {
     const device: StubDevice = {
       ejected: [],
       setHolders() {},
+      setRuntimeHolders() {},
+      releaseRuntimeAfter() {},
+      runtimeProbes: () => 0,
       async holders() {
         order.push('holders')
+        return []
+      },
+      async runtimeHolders() {
         return []
       },
       async eject() {
@@ -667,5 +663,90 @@ describe('holders the user cannot act on', () => {
     const stdout = `${DOCKER_LSOF}\np431\ncXcode\nLmark\nn/Volumes/ssd/claude-projects/alpha`
     const device = createSsdDevice(async () => ({ code: 0, stdout, stderr: '' }))
     assert.deepEqual((await device.holders('/Volumes/ssd')).map((h) => h.command), ['Xcode'])
+  })
+
+  // Spotlight is the one that made "Close all & eject" impossible rather than
+  // merely inconvenient: `mds_stores` maps the volume's index for as long as it
+  // is mounted, so counting it is a refusal with no end state.
+  const SPOTLIGHT_LSOF = [
+    'p343',
+    'cmds',
+    'Lroot',
+    'n/Volumes/ssd',
+    'p556',
+    'cmds_stores',
+    'Lroot',
+    'n/Volumes/ssd/.Spotlight-V100/Store-V2/67C1D8EB/store.db',
+    'p654',
+    'ccom.apple.quicklook.ThumbnailsAgent',
+    'Lmark',
+    'n/Volumes/ssd/claude-projects/alpha/project.yml',
+  ].join('\n')
+
+  test('Spotlight and the preview agents never block an eject', async () => {
+    const device = createSsdDevice(async () => ({ code: 0, stdout: SPOTLIGHT_LSOF, stderr: '' }))
+    assert.deepEqual(await device.holders('/Volumes/ssd'), [])
+    assert.equal(isSystemHolder('mds_stores'), true)
+    assert.equal(isSystemHolder('mdworker_shared'), true)
+    assert.equal(isSystemHolder('com.apple.quicklook.ThumbnailsAgent'), true)
+    assert.equal(isSystemHolder('Xcode'), false)
+    // An editor indexing a repo on the SSD is a real holder with a real fix.
+    assert.equal(isSystemHolder('plugin_host-3.8'), false)
+  })
+
+  test('a user process is still named when the system agents are there too', async () => {
+    const stdout = `${SPOTLIGHT_LSOF}\np51310\ncplugin_host-3.8\nLmark\nn/Volumes/ssd/analysta/.git/objects/10/5c57`
+    const device = createSsdDevice(async () => ({ code: 0, stdout, stderr: '' }))
+    assert.deepEqual((await device.holders('/Volumes/ssd')).map((h) => h.command), ['plugin_host-3.8'])
+  })
+})
+
+describe('a refusal always names something (§6)', () => {
+  test("diskutil's dissenter becomes a holder, in every shape it prints it", () => {
+    assert.deepEqual(
+      parseDissenter('Volume ssd on disk5s1 failed to eject\nDissenter PID = 51310 (plugin_host-3.8), Status = 0x0000c010'),
+      [{ pid: 51310, command: 'plugin_host-3.8', user: null, paths: [] }],
+    )
+    assert.deepEqual(
+      parseDissenter('Unmount failed for /Volumes/ssd: dissented by PID 556 (mds_stores)').map((h) => h.command),
+      ['mds_stores'],
+    )
+  })
+
+  test('a refusal that names no PID invents no holder', () => {
+    assert.deepEqual(parseDissenter('Unmount of disk5s1 failed: at least one volume could not be unmounted'), [])
+  })
+
+  test('the blocked eject carries the dissenter lsof could not see', async () => {
+    // holders() runs unprivileged, so a root dissenter is named HERE or nowhere.
+    const device = createSsdDevice(async () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'Volume ssd on disk5s1 failed to eject\nDissenter PID = 556 (mds_stores), Status = 0x0000c010',
+    }))
+    await assert.rejects(
+      () => device.eject('/Volumes/ssd'),
+      (error: unknown) => {
+        assert.ok(error instanceof CprojError)
+        assert.equal(error.code, 'EJECT_BLOCKED')
+        const holders = error.details?.holders as { pid: number; command: string }[]
+        assert.deepEqual(holders.map((h) => h.pid), [556])
+        // A system agent gets the advice that fits it — there is nothing to quit.
+        assert.match(error.message, /try again in a moment/)
+        return true
+      },
+    )
+  })
+
+  test('an app that can be quit is told to quit', async () => {
+    const device = createSsdDevice(async () => ({
+      code: 1,
+      stdout: 'Dissenter PID = 431 (Xcode), Status = 0x0000c010',
+      stderr: '',
+    }))
+    await assert.rejects(
+      () => device.eject('/Volumes/ssd'),
+      (error: unknown) => error instanceof CprojError && /Xcode \[pid 431\] — close it and try again/.test(error.message),
+    )
   })
 })

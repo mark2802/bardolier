@@ -44,6 +44,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       zip \
     && rm -rf /var/lib/apt/lists/*
 
+# Claude Code — the agent this whole yard exists to host.
+#
+# The standalone binary, not the npm package: there is no Node in this image.
+# It lands in /usr/local/bin rather than the installer's default
+# `$HOME/.local/bin`, because $HOME here is a per-project named volume (below)
+# and anything the image leaves under $HOME is copied into it once per project.
+#
+# TARGETARCH resolves to amd64 here whatever the Mac is — this image is pinned
+# linux/amd64 for aapt2's sake (see the header), so the x64 build is the right
+# one and runs under the same emulation as everything else in here.
+ARG CLAUDE_CODE_VERSION=2.1.246
+ARG TARGETARCH
+RUN set -eux; \
+    base="https://downloads.claude.ai/claude-code-releases"; \
+    case "${TARGETARCH}" in \
+      amd64) platform="linux-x64" ;; \
+      arm64) platform="linux-arm64" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    checksum="$(curl -fsSL "${base}/${CLAUDE_CODE_VERSION}/manifest.json" | jq -r ".platforms[\"${platform}\"].checksum")"; \
+    case "${checksum}" in [0-9a-f][0-9a-f]*) ;; *) echo "no checksum for ${platform}" >&2; exit 1 ;; esac; \
+    curl -fsSL -o /usr/local/bin/claude "${base}/${CLAUDE_CODE_VERSION}/${platform}/claude"; \
+    echo "${checksum}  /usr/local/bin/claude" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/claude; \
+    CLAUDE_CONFIG_DIR=/tmp/claude-build claude --version; \
+    rm -rf /tmp/claude-build
+
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk \
     GRADLE_HOME=/opt/gradle
@@ -113,6 +140,22 @@ RUN set -eux; \
 # and a path under $HOME cannot be named up front — HOST_UID may collide with a
 # user the base image already has, which moves ~.
 ENV GRADLE_USER_HOME=/cache/gradle
+
+# A PERSISTENT HOME, at a path the compose file can name (cli/src/images.ts,
+# CONTAINER_HOME) — the SAME argument as /cache/gradle above, but per project
+# rather than shared: `cproj down` removes the container, so a home in the
+# container layer takes the shell history, the dotfiles and any `claude login`
+# with it, and the next `up` starts from nothing.
+#
+# Claude Code's config dir falls under it as $HOME/.claude, per project, which
+# is what makes `claude --continue` resume THIS project: every dev container has
+# the same working dir, /work, so one shared config dir would file every
+# project's sessions in a single bucket.
+#
+# Note this is /state, not /cache: what is under it is the user's, not
+# rebuildable, and `delete --purge` is the only thing that removes it.
+ENV HOME=/state/home
+RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state
 
 USER ${HOST_UID}:${HOST_GID}
 WORKDIR /work

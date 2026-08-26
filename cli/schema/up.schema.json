@@ -25,6 +25,17 @@
     },
     "already_running": { "type": "boolean", "description": "True when up was an idempotent no-op (§2)." },
     "compose_regenerated": { "type": "boolean", "description": "True when the compose file on disk differed from the manifest." },
+    "app_port": {
+      "type": ["integer", "null"],
+      "description": "Host port the archetype's dev server is published on (cli-spec.md \u00a79), or null when this project publishes none. Additive since Phase 9.",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "app_url": {
+      "type": ["string", "null"],
+      "description": "Ready-to-open URL for app_port, or null when there is no dev-server port.",
+      "minLength": 1
+    },
     "open_shell": { "type": "boolean", "description": "The app's cue to open a shell; false under --no-shell. The CLI spawns no terminal." }
   }
 }

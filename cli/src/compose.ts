@@ -17,8 +17,9 @@
 
 import { stringify as stringifyYaml } from 'yaml'
 import { CprojError } from './errors.ts'
-import { IMAGE_CACHE, IMAGE_PLATFORM } from './images.ts'
-import { composeProject, devContainerName, serviceContainerName } from './naming.ts'
+import { CONTAINER_HOME, IMAGE_CACHE, IMAGE_PLATFORM } from './images.ts'
+import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
+import { composeProject, devContainerName, homeVolumeName, serviceContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 import type { ImageCache } from './images.ts'
@@ -38,6 +39,44 @@ export const LABEL_SERVICE = 'cproj.service'
 
 /** `cproj.role` on the shared toolchain cache volume — it belongs to no project. */
 export const ROLE_CACHE = 'cache'
+
+/** `cproj.role` on the dev container's persistent `$HOME` volume (`images.ts`). */
+export const ROLE_HOME = 'home'
+
+/**
+ * Host environment the dev container inherits, if the host has it — `cli-spec.md`
+ * §9.
+ *
+ * Written in Compose's LIST form (a bare `NAME`, no `=`), which is the only
+ * shape with the semantics this needs: pass the value through when the
+ * environment running `compose up` has one, and leave the variable UNSET in the
+ * container when it does not. The map form would have to write `${NAME:-}`, and
+ * an empty-string token is not the same as no token — it is a credential that
+ * fails instead of a login prompt.
+ *
+ * That it is a fixed, sorted list is what keeps the generated file deterministic
+ * (§9): the same manifest renders the same bytes on a machine that has none of
+ * these set and on one that has all of them. What varies is the container's
+ * environment, which is not the file's business.
+ *
+ * `GIT_*` are git's own documented identity variables, so a commit made in here
+ * is attributed to the human rather than failing on an unset `user.email`; `up`
+ * fills them from the host's own `git config`. The tokens are passed rather than
+ * stored: a credential in `~/.config/cproj/config.yml` would be a plaintext
+ * secret this tool had chosen to keep, and it never needs to keep one — the
+ * persistent home (`CONTAINER_HOME`) is where a `claude login` or an ssh key
+ * lives across a `down`.
+ */
+export const PASSTHROUGH_ENV: readonly string[] = [
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_AUTHOR_NAME',
+  'GIT_COMMITTER_EMAIL',
+  'GIT_COMMITTER_NAME',
+]
 
 /** The labels `up` creates a cache volume with, so the scan can recognise ours. */
 export const CACHE_VOLUME_LABELS: Readonly<Record<string, string>> = { [LABEL_ROLE]: ROLE_CACHE }
@@ -66,9 +105,20 @@ export function volumeName(service: CatalogueService, project: string): string {
   return interpolate(service.volume, project)
 }
 
-/** Every named volume this project owns, sorted. Used by `delete --purge`. */
+/**
+ * Every named volume this project owns, sorted. Used by `delete --purge`.
+ *
+ * The dev container's `$HOME` is one of them: it holds the project's shell
+ * history, its dotfiles and its Claude Code sessions, so it dies with the
+ * project like any service's data — and, like any service's data, only under
+ * `--purge`. A plain `delete` leaves it behind as a listed orphan.
+ *
+ * NOT the shared toolchain cache: that belongs to every project on the base
+ * image, and taking it here would let one project's deletion cost every other
+ * android project its Gradle download.
+ */
 export function projectVolumes(manifest: ProjectManifest, catalogue: ServiceCatalogue): string[] {
-  const names: string[] = []
+  const names: string[] = [homeVolumeName(manifest.name)]
   for (const key of attachedKeys(manifest)) {
     const definition = catalogue.services[key]
     if (definition) names.push(volumeName(definition, manifest.name))
@@ -83,6 +133,22 @@ export function attachedKeys(manifest: ProjectManifest): string[] {
 
 type ComposeService = Record<string, unknown>
 
+/**
+ * The dev server's `host:container` publication, or null — `cli-spec.md` §9.
+ *
+ * Both halves must be present: an archetype that serves something
+ * (`ARCHETYPE_APP_PORT`) and a manifest that has actually been assigned a host
+ * port. A project created before the field existed has the first and not the
+ * second, and publishes nothing until its next `up` assigns one — which is what
+ * keeps its generated file from changing under it in the meantime.
+ */
+function appPublication(manifest: ProjectManifest): { host: number; container: number } | null {
+  const container = ARCHETYPE_APP_PORT[manifest.archetype]
+  const host = manifest.app_port
+  if (container === undefined || typeof host !== 'number') return null
+  return { host, container }
+}
+
 function devService(manifest: ProjectManifest): ComposeService {
   // Present only when the base image is pinned (`claude-and`, whose SDK tools
   // are x86_64-only): the key is absent otherwise, so no existing project's
@@ -91,6 +157,7 @@ function devService(manifest: ProjectManifest): ComposeService {
   // Shared across every project on this image, so it is NOT a project volume:
   // `up` creates it and Compose only mounts it (`external: true` below).
   const cache = cacheFor(manifest)
+  const app = appPublication(manifest)
 
   return {
     container_name: devContainerName(manifest.name),
@@ -100,11 +167,28 @@ function devService(manifest: ProjectManifest): ComposeService {
     // `up` starts it and it waits; the agent's work happens through `exec`.
     command: ['sleep', 'infinity'],
     working_dir: WORKDIR,
-    // Relative: resolved against the compose file's directory, which is the
-    // project directory. Keeps the file independent of where the SSD mounts.
-    volumes: cache ? [`.:${WORKDIR}`, `${cache.volume}:${cache.mount}`] : [`.:${WORKDIR}`],
-    // No `ports:` — the dev container publishes nothing. Services expose their
-    // debugging tap; the app inside talks over the network by service name (§5).
+    // `PORT` first, because it carries a value and the rest do not: it tells the
+    // dev server which port to bind, so every project's server config is the
+    // same fixed number however its host port was allocated. Then what the host
+    // lends the container, if it has it (PASSTHROUGH_ENV).
+    environment: [...(app ? [`PORT=${app.container}`] : []), ...PASSTHROUGH_ENV],
+    // The bind mount is relative: resolved against the compose file's own
+    // directory, which is the project directory, so the file stays independent
+    // of where the SSD mounts. The other two are named volumes on the internal
+    // disk — $HOME per project so a `down` does not erase the login and the
+    // shell history, and the toolchain cache shared by every project on this
+    // base image (`images.ts`).
+    volumes: [
+      `.:${WORKDIR}`,
+      `${homeVolumeName(manifest.name)}:${CONTAINER_HOME}`,
+      ...(cache ? [`${cache.volume}:${cache.mount}`] : []),
+    ],
+    // §9's ONE exception to "the dev container publishes nothing": the
+    // archetype's dev server, which a browser on the Mac has to reach and
+    // cannot reach over the Docker network. Services are still the other way
+    // round — their host port is a debugging tap and the app inside talks to
+    // them by service name (§5).
+    ...(app ? { ports: [`${app.host}:${app.container}`] } : {}),
     labels: {
       [LABEL_PROJECT]: manifest.name,
       [LABEL_ROLE]: 'dev',
@@ -154,6 +238,13 @@ export function composeDocument({ manifest, catalogue }: ComposeInput): Record<s
   const project = manifest.name
   const services: Record<string, ComposeService> = { [DEV_SERVICE]: devService(manifest) }
   const volumes: Record<string, unknown> = {}
+
+  // First, because the dev service is first: its $HOME. Compose creates and
+  // labels this one, exactly as it does a service's data volume — it IS the
+  // project's, unlike the shared cache at the bottom. Every project has one, so
+  // a `volumes:` block is no longer the sign that services are attached.
+  const home = homeVolumeName(project)
+  volumes[home] = { name: home, labels: { [LABEL_PROJECT]: project, [LABEL_ROLE]: ROLE_HOME } }
 
   for (const key of attachedKeys(manifest)) {
     const definition = catalogue?.services[key]

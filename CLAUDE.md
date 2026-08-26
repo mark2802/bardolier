@@ -1,353 +1,284 @@
 # CLAUDE.md — Container Project Manager
 
-This project builds a CLI (`cproj`) and a macOS menu-bar app that manage
-containerised dev projects whose data lives on an external SSD.
-
-## Read these first
+A CLI (`cproj`) plus a macOS menu-bar app that manage containerised dev projects
+whose data lives on an external SSD.
 
 - `docs/cli-spec.md` — the engine. **Authoritative for all behaviour.**
 - `docs/app-spec.md` — the menu-bar app; a thin client over the CLI.
-- `docs/implementation-plan.md` — phased build. Work one phase per `/goal`.
+- `docs/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
+  Phases 0-9 are done; their plan is history in `docs/archive/`.
 
-When a phase goal is given, read the relevant spec section for that phase and the
-principles below before writing code.
+Read only the spec **section** a task needs (`sed -n` a range), not the whole file.
+
+## Token discipline (read first)
+
+Recent work has cost far more tokens than the changes warranted. Rules:
+
+- **Read narrowly.** `grep`/`sed -n` a range over `cat` of a whole file. Never
+  re-read a file you just wrote — the edit would have errored.
+- **Test the smallest scope that can catch the bug**: `npm test`, or the one
+  phase check you touched. `test/regression.sh` is for declaring a phase done —
+  prefer `--through N`; `PHASE8_QUICK=1` and `CPROJ_SKIP_DOCKER=1` skip legs a
+  change cannot affect. Never re-run a check that just passed.
+- **Quiet the noise.** `npm run test:quiet` over `npm test` (30 lines vs 600);
+  done-checks print failures and a summary by default (`VERBOSE=1` for every
+  passing line); pipe anything else long through `tail`/`grep`.
+- **Batch independent tool calls** into one message.
+- **Match prose to the change.** This repo's older comments, script headers and
+  docs are written at essay length. *Do not extend that style.* Explain a
+  non-obvious "why" in one or two sentences and stop. Summaries state what
+  changed and what proves it — they do not re-narrate the diff.
+- **Don't add unasked work**: no extra docs, changelogs, formatting passes,
+  review rounds, or subagents unless requested.
+- **Keep this file short.** A new principle edits or replaces an existing line;
+  it does not append another essay.
 
 ## Environment boundary (critical)
 
-This project is itself developed in the split environment it manages:
+This project is developed in the split environment it manages. Claude runs in a
+Linux dev container (source, CLI, tests, Docker CLI, Node/Bun, git). The human
+works on the macOS host for anything macOS-native.
 
-- **You (Claude) run in a Linux dev container**, sandboxed to this project
-  directory. You can: edit source, run the CLI and its tests, run Docker-CLI
-  commands against the daemon, run Node/Bun tooling, use git.
-- **The human works on the macOS host** for anything macOS-native.
-
-Hard rules:
-- **Never attempt `xcodebuild`, the iOS Simulator, or code signing.** Xcode is
-  macOS-only and absent here. The menu-bar app is built by the human in Xcode;
-  you only write its `.swift` source files into `app/`.
-- **Creating or modifying the Xcode project file is a human step.** You do not
-  create `.xcodeproj`/`.pbxproj`. When you add Swift files, note in your summary
-  that the human must add them to the Xcode target (see the implementation plan's
-  MANUAL markers).
-- For **Android** archetype projects this tool manages, Gradle builds/tests can
-  run in-container, but the emulator is host-side.
-- These boundary rules **override any agent tooling or workflow skill.** If any
-  command or skill assumes a full local build environment, defer to these rules —
-  do not run host-only build steps in the container.
+- **Never run `xcodebuild`, the iOS Simulator, or code signing.** You write
+  `.swift` sources into `app/`; the human builds in Xcode.
+- **You never create or edit `.xcodeproj`/`.pbxproj`.** Note new Swift files in
+  your summary (MANUAL markers in the plan).
+- Android Gradle builds/tests run in-container; the emulator is host-side.
+- These rules **override any agent tooling or workflow skill.**
 
 ## Engineering principles
 
-**The CLI is the API; the app is a thin client.** All orchestration, state, and
-side effects live in the CLI. The app only invokes commands and renders JSON. If
-the app appears to need logic, add a CLI command instead. Never duplicate
-orchestration in Swift.
-
-**One source of truth.** Per-project `project.yml` is the truth for that project;
-the compose file is *generated* from it and never hand-edited. Port assignments
-live in the manifest, not a separate registry. Don't introduce a second store
-that can desync.
-
-**Stable contracts.** Every CLI command supports `--json`, emits a documented
-schema, and returns a stable error code on failure (`cli-spec.md` §2, §7). Once
-the app is built (Phase 5+), schema changes are additive only. Human-readable
-output and machine output are separate renderers; never make the app parse human
-output.
-
-**Determinism.** Compose generation must be deterministic for a given manifest
-(stable ordering) so regeneration yields no spurious diffs. Same input, same
-output.
-
-**No partial mutation of running state.** Service add/remove require the project
-stopped and fail `PROJECT_RUNNING`. This keeps state machines simple — honour it;
-do not add hot-apply paths.
-
-**Safety over convenience for destructive actions.** Detaching a service keeps
-its data volume (it becomes a listed orphan); deletion is explicit and confirmed.
-Eject refuses when the SSD is held and reports the holders rather than forcing.
-Never destroy data to save a step.
-
-**Disk frugality.** Docker images live on the internal disk and are shared;
-project data lives on the SSD. Seed `.dockerignore` and `.gitignore` so build
-context and repos stay lean. Prefer shared official service images over baking
-services into the base.
-
-**Prod-like dev topology.** The dev app connects to services over the internal
-Docker network by service name (e.g. `postgres:5432`), matching production. The
-allocated host port is a **debugging tap only** (for host GUI tools). Never wire
-the app to `localhost:<port>` for its normal service connections — that would
-diverge dev from prod.
-
-**Test the contract from the terminal.** The full lifecycle must be drivable and
-assertable via `--json` before any app work (implementation plan, Phase 4 gate).
-Port allocation gets unit tests: uniqueness, stability across restart, band
-assignment, host-squat detection.
-
-**Incremental, verifiable changes.** Small commits that keep the CLI runnable and
-its tests green. Prefer clarity over cleverness. Read existing patterns before
-adding new ones.
+- **The CLI is the API; the app is a thin client.** All orchestration, state and
+  side effects live in the CLI. If the app seems to need logic, add a CLI
+  command. Never duplicate orchestration in Swift.
+- **One source of truth.** `project.yml` is the truth for a project; compose is
+  generated from it. Ports live in the manifest, not a second registry.
+- **Stable contracts.** Every command supports `--json`, emits a documented
+  schema, and fails with a §2 error code. From Phase 5 on, schema changes are
+  additive only. Human and machine output are separate renderers.
+- **Determinism.** Compose generation is byte-stable for a given manifest.
+- **No partial mutation of running state.** Service add/remove require the
+  project stopped and fail `PROJECT_RUNNING`. No hot-apply paths.
+- **Safety over convenience.** Detaching a service keeps its volume (it becomes
+  a listed orphan); deletion is explicit and confirmed; eject reports holders
+  rather than forcing. Never destroy data to save a step.
+- **Disk frugality.** Images on the internal disk and shared; project data on
+  the SSD. Prefer shared official service images over baking services in.
+- **Prod-like dev topology.** The dev app reaches services over the Docker
+  network by name (`postgres:5432`). The allocated host port is a debugging tap
+  only — never wire the app to `localhost:<port>`.
+- **Test the contract from the terminal**, via `--json`, before app work.
+- **Incremental, verifiable changes.** Small commits, tests green, existing
+  patterns over new ones.
 
 ## Toolchain
 
-**CLI: TypeScript on Node — no build step.** Chosen in Phase 0. Node ≥ 22.18
-strips TypeScript types natively, so `cproj` runs straight from `cli/src/*.ts`.
-There is no bundler, no `dist/`, and nothing to rebuild after an edit.
-
-The cost of that: **type syntax must be erasable**. No TS `enum`, no `namespace`,
-no constructor parameter properties. Use `as const` arrays plus
-`(typeof X)[number]` for unions — see `cli/src/errors.ts`. `tsconfig.json` sets
-`erasableSyntaxOnly` so `npm run typecheck` catches violations.
-
-Import `.ts` extensions explicitly (`import { … } from './errors.ts'`) —
-required by Node's resolver.
-
-The repo is an **npm workspace** so `test/` can sit at the root (per the
-implementation plan's layout) and still resolve dependencies.
+**TypeScript on Node, no build step.** Node ≥ 22.18 strips types, so `cproj`
+runs from `cli/src/*.ts` — no bundler, no `dist/`. The cost: **type syntax must
+be erasable** — no `enum`, no `namespace`, no constructor parameter properties;
+use `as const` arrays plus `(typeof X)[number]` (see `cli/src/errors.ts`).
+`erasableSyntaxOnly` makes `npm run typecheck` catch violations. Import `.ts`
+extensions explicitly. The repo is an npm workspace so root-level `test/`
+resolves dependencies. Dependencies are deliberately few: `yaml`, `ajv` +
+`ajv-formats`; tests use `node:test`.
 
 ```
 npm install                      # once, from the repo root
-npm run cproj -- --help          # run the CLI (note the `--`)
+npm run cproj -- --help
 node cli/bin/cproj.js status --json
-npm test                         # contract tests (node:test, no framework dep)
-npm run typecheck                # tsc --noEmit
-bash test/phase0-done-check.sh   # Phase 0 regression check
-bash test/phase1-done-check.sh   # Phase 1 regression check (runs Phase 0's too)
-bash test/phase2-done-check.sh   # Phase 2 regression check (runs 0 and 1 too)
-bash test/phase3-done-check.sh   # Phase 3 regression check (runs 0-2 too)
-bash test/phase4-done-check.sh   # Phase 4 regression check (runs 0-3 too) — the
-                                 # contract-freeze gate: schemas are additive-only
-                                 # from here
-bash test/phase5-done-check.sh   # Phase 5: the app's models against the frozen
-                                 # schemas, plus 0-4. Its other half is manual,
-                                 # in Xcode; the script prints that checklist
-bash test/phase6-done-check.sh   # Phase 6: the commands the app needed, the
-                                 # sources, the build settings, and (only when a
-                                 # Swift toolchain is present) a type-check and
-                                 # an SF Symbol check. Its other half — the
-                                 # lifecycle driven from the menu bar — is the
-                                 # checklist it prints
-bash test/phase7-done-check.sh   # Phase 7: the two flows that leave the app —
-                                 # shell-open and eject. Drives the eject flow
-                                 # through the context seam with a scripted
-                                 # device (a done-check must never reach a real
-                                 # `diskutil`); its other half is a soak with a
-                                 # real disk and a real Xcode, which it prints
-bash test/phase8-done-check.sh   # Phase 8: the mobile base images, for real —
-                                 # it builds them if they are missing, then
-                                 # drives an ios and an android project through
-                                 # `new`/`up` and works inside the container:
-                                 # swift build/test + swiftlint, and a Gradle
-                                 # assembleDebug + unit test that must produce
-                                 # an APK owned by you. It needs the network and
-                                 # its Gradle leg is emulated on Apple Silicon;
-                                 # PHASE8_QUICK=1 keeps everything but the two
-                                 # toolchain runs
-bash test/regression.sh          # every phase's check, each run ONCE, in order
-bash test/regression.sh --through 7   # …up to a phase (7 skips Phase 8's
-                                 # image builds and Gradle run: ~1 minute)
+npm run test:quiet               # contract tests (dot reporter — use this)
+npm test                         # same, one line per test
+npm run typecheck
+bash test/phaseN-done-check.sh   # N = 0..9; each covers everything below it
+bash test/regression.sh [--through N]   # every check, once, in order
 ```
 
-**The ladder is walked once.** Each phase's check used to end by re-running all
-of its predecessors — and each of those did the same, so phase 0's containers
-came up dozens of times per invocation and `phase7-done-check.sh` took the
-better part of an hour for a minute of distinct work. `test/regression.sh` now
-owns that walk: it runs each phase's own sections in order, exactly once, with
-`CPROJ_REGRESSION` set, and a phase check that sees that flag skips its own
-"earlier phases" section instead of recursing. Run a phase check on its own and
-it still covers everything below it — it just asks the runner rather than
-rebuilding the pyramid. Same coverage, linear cost (0-7 is ~60s).
+**The ladder is walked once.** `regression.sh` owns the walk: each phase's
+sections run once, in order, with `CPROJ_REGRESSION` set; a phase check seeing
+that flag skips its own "earlier phases" section instead of recursing. 0–7 is
+~60s; Phase 8 builds images and runs Gradle, so `--through 7` skips that.
 
-Dependencies are deliberately few: `yaml` (manifests + catalogue), `ajv` +
-`ajv-formats` (schema validation). Tests use the built-in `node:test` runner.
-
-**Where the contracts live** — one definition each, mirrored by a JSON Schema
-that `test/contracts.test.ts` checks against the code:
-
-| Contract | Code | Schema |
-|---|---|---|
-| Error codes (§2) | `cli/src/errors.ts` | `cli/schema/error.schema.json` |
-| Service catalogue (§4.1) | `cli/src/model/catalogue.ts` | `cli/schema/services.schema.json` |
-| Project manifest (§4.2) | `cli/src/model/project.ts` | `cli/schema/project.schema.json` |
-| Archetype map (§4.3) | `cli/src/model/archetype.ts` | — |
-| `status` output (§7) | `cli/src/model/status.ts` | `cli/schema/status.schema.json` |
-| `list` output (§6) | `cli/src/model/list.ts` | `cli/schema/list.schema.json` |
-| `doctor` output (§6) | `cli/src/model/doctor.ts` | `cli/schema/doctor.schema.json` |
-| Config file (§8) | `cli/src/config.ts` | `cli/schema/config.schema.json` |
-| `new` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/new.schema.json` |
-| `up` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/up.schema.json` |
-| `down` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/down.schema.json` |
-| `delete` output (§6) | `cli/src/model/lifecycle.ts` | `cli/schema/delete.schema.json` |
-| `build` output (§6) | `cli/src/model/build.ts` | `cli/schema/build.schema.json` |
-| `service add` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-add.schema.json` |
-| `service remove` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-remove.schema.json` |
-| `service list` output (§6) | `cli/src/model/service.ts` | `cli/schema/service-list.schema.json` |
-| `shell` output (§6) | `cli/src/model/shell.ts` | `cli/schema/shell.schema.json` |
-| `volumes orphaned` output (§6) | `cli/src/model/volumes.ts` | `cli/schema/volumes-orphaned.schema.json` |
-| `volumes rm` output (§6) | `cli/src/model/volumes.ts` | `cli/schema/volumes-rm.schema.json` |
-| `down-all` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/down-all.schema.json` |
-| `eject` output (§6) | `cli/src/model/ssd.ts` | `cli/schema/eject.schema.json` |
-| `catalogue` output (§4.1) | `cli/src/model/catalogue.ts` | `cli/schema/catalogue.schema.json` |
-| `config get` output (§8) | `cli/src/model/config.ts` | `cli/schema/config-get.schema.json` |
-| `config set` output (§8) | `cli/src/model/config.ts` | `cli/schema/config-set.schema.json` |
-
-Commands are declared in `cli/src/commands/registry.ts` and return a payload
-plus a human-formatting function; `cli/src/main.ts` picks the renderer. A command
-must never write to stdout itself — that is what keeps the §2 guarantee that
-`--json` emits exactly one JSON value.
+**Contracts: one definition, one schema, checked both ways.** Each contract is
+defined in `cli/src/model/<x>.ts` (or `errors.ts` / `config.ts`) and mirrored by
+`cli/schema/<x>.schema.json`; `test/contracts.test.ts` holds them together, and
+`test/app-models.test.ts` holds the Swift structs to the same schemas. Groupings
+that aren't one-file-per-command: `new`/`up`/`down`/`delete` → `model/lifecycle.ts`,
+`service *` → `model/service.ts`, `volumes *` → `model/volumes.ts`,
+`down-all`/`eject` → `model/ssd.ts`. Commands are declared in
+`cli/src/commands/registry.ts` and return a payload plus a human formatter;
+`main.ts` picks the renderer. **A command must never write to stdout** — that is
+what keeps `--json` a single JSON value.
 
 **The outside world reaches commands through one seam.** A command takes a
-`Context` (`cli/src/context.ts`) carrying the loaded config, a `Docker` handle,
-a deferred catalogue loader, a host-port probe, an `SsdDevice` (`lsof` +
-`diskutil`, `cli/src/device.ts`), a confirmation prompt, a host UID/GID, and the
-clock — it never reads `process.env`, spawns `docker` or `lsof`, binds a socket,
-prompts, or hard-codes the SSD path itself. That is what lets the whole
-CLI, mutations included, be tested with a temp dir for the SSD and stubs for the
-rest (`test/helpers.ts`). Anything with an observable side effect belongs on the
-Context, or the tests stop being honest. Config is read from
-`~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` / `CPROJ_SSD_VOLUME`
-overrides (§8), plus `CPROJ_CONFIG` to relocate the file itself — which is how
-the done-checks stay hermetic on a real machine.
+`Context` (`cli/src/context.ts`): config, `Docker`, deferred catalogue loader,
+host-port probe, `SsdDevice` (`lsof` + `diskutil`), confirm prompt, `Git`, host
+UID/GID, clock, `wait`. It never touches `process.env`, spawns processes, binds
+sockets, prompts, or hard-codes the SSD path. That is what lets mutations be
+tested with a temp dir and stubs (`test/helpers.ts`). **Anything with an
+observable side effect belongs on the Context**, including passing time. Config
+comes from `~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` /
+`CPROJ_SSD_VOLUME` overrides and `CPROJ_CONFIG` to relocate the file — which is
+how done-checks stay hermetic.
 
-**Generated files are regenerated, seeded files are not.** `docker-compose.yml`
-is rendered from `project.yml` by `cli/src/compose.ts` on every `new`, `up`, and
-service change; it is never patched, never read back for facts, and a hand edit
-loses. The §10 seeds (`.gitignore`, `.dockerignore`, project `CLAUDE.md`) are
-written once by `new` and are the user's from then on. Writing goes through
-`cli/src/workspace.ts`, which also skips the write when the bytes already match —
-that is what makes determinism observable rather than merely intended.
+## Behaviour that is easy to get wrong
 
-**Ports are chosen in one place and written down in one place.**
-`cli/src/allocator.ts` picks a host port by scanning every manifest under
-`$SSD_ROOT` and then probing the host socket — a port is free only when both say
-so. The chosen port is persisted in the project's `project.yml` and never
-revisited: `up` re-probes and fails `PORT_UNAVAILABLE` naming the port rather
-than remapping it, because the user has connection strings saved against it. The
-search starts at the catalogue's `host_port_base` and is bounded to keep bands
-readable (§5). `cli/src/services.ts` joins manifest to catalogue to describe an
-attachment; `status` and `service list` both go through it, so they cannot
-describe the same attachment differently.
+**Generated vs seeded.** `docker-compose.yml` is rendered by `cli/src/compose.ts`
+on every `new`, `up` and service change — never patched, never read back for
+facts; a hand edit loses. The §10 seeds (`.gitignore`, `.dockerignore`, project
+`CLAUDE.md`) are written once and are the user's. Writes go through
+`cli/src/workspace.ts`, which skips a write when bytes match — determinism made
+observable.
+
+**Ports: chosen once, written once.** `cli/src/allocator.ts` scans every
+manifest under `$SSD_ROOT` *and* probes the host socket — free means both. The
+port persists in `project.yml` and is never revisited: `up` re-probes and fails
+`PORT_UNAVAILABLE` naming it rather than remapping, because users have
+connection strings. Search starts at the catalogue's `host_port_base`, bounded
+to keep bands readable (§5). `cli/src/services.ts` joins manifest to catalogue,
+so `status` and `service list` cannot disagree.
 
 **An orphan is derived, never recorded.** `cli/src/volumes.ts` asks the
-manifests under `$SSD_ROOT` what is still claimed — by resolved volume name, and
-by the `cproj.project`/`cproj.service` labels the generated compose file writes
-— and everything else this tool made is reclaimable. There is no orphan
-registry to desync. Because being wrong here destroys data, the scan refuses
-(SSD_NOT_MOUNTED, CONFIG_INVALID) when it cannot read the manifests rather than
-calling every volume an orphan; `status` catches that and reports an empty list,
-because `status` must never fail.
+manifests what is still claimed (resolved volume name, plus the
+`cproj.project`/`cproj.service` labels compose writes); everything else this
+tool made is reclaimable. Because being wrong destroys data, the scan refuses
+(`SSD_NOT_MOUNTED`, `CONFIG_INVALID`) when it cannot read manifests; `status`
+catches that and reports an empty list, because `status` must never fail.
 
-**`eject` never forces.** It stops containers, asks `lsof` who still holds the
-volume, then unmounts — and a held volume is `EJECT_BLOCKED` carrying `holders`
-for the app to render. The one exception to "report every holder" is the
-container runtime's own descriptors (`isRuntimeHolder`), which Docker Desktop
-keeps open on bind-mounted paths after its containers stop; listing those would
-make "quit Docker" the standing answer to every eject. If the volume genuinely
-will not go, `diskutil`'s own refusal is reported as it came.
+**`eject` never forces, and a holder is someone you can act on.** Stop
+containers → ask `lsof` → unmount; a held volume is `EJECT_BLOCKED` carrying
+`holders`. `isActionableHolder` excludes the container runtime (it keeps
+descriptors on bind mounts after containers stop) and the OS volume agents
+(`mds`, QuickLook — counting them made eject refuse forever on an indexed SSD).
+Filtering is safe because both are DiskArbitration clients and the following
+`diskutil eject` *is* the request to let go; a refusal is parsed by
+`parseDissenter` into the same `holders` array — "close it" for Xcode, "try
+again in a moment" for a system agent. Reduce a dissenter's name to its last
+path component before classifying (recent macOS reports full executable paths).
+`holders()` runs unprivileged, so a root dissenter is named there or nowhere.
+**A blocked eject always names something.**
 
-**Base images live in `cli/images/<image>/Dockerfile`** and are built by
-`cproj build`, which passes `HOST_UID`/`HOST_GID` so files the dev container
-writes into the bind-mounted `/work` come back owned by the Mac user. All three
-exist: `claude-web` (Node), `claude-ios` (the Swift toolchain plus swiftlint)
-and `claude-and` (JDK, Android SDK, Gradle). An image with no Dockerfile behind
-it is still reported `unavailable` rather than failing — that state now means a
-missing file, not an unfinished phase.
+**Docker's VM gets a third answer: stop the engine, with consent.** Docker
+Desktop shares `/Volumes` into its VM and holds descriptors while that VM lives
+— nothing to close, no retry that works. When the runtime *alone* refused (named
+by the dissenter, or via `device.runtimeHolders()`), `eject` asks and
+`docker.stopEngine()` runs `docker desktop stop`. Consent is `--stop-docker` or
+the prompt; no terminal means NO, i.e. `EJECT_BLOCKED` naming Docker. Then
+**wait for the signal, not the command**: `docker desktop stop` returns before
+launchd tears down the VM helper, so poll `device.runtimeHolders()` (bounded,
+15s) until the runtime is off the volume, unmount, retry a runtime dissent twice
+more. A spent budget is `EJECT_BLOCKED` with
+`reason: 'runtime-holds-volume-after-stop'`, so the refusal cannot re-advise the
+flag just used and the app withdraws the button. If lsof says the runtime let go
+and the unmount still fails, relay diskutil's words untouched. Never force.
 
-**The boundary is built into the mobile images, not just written down.** The
-ios base has no `xcodebuild`, `xcrun` or simulator and the android base no
-`adb`, so the host-only steps the seeded `CLAUDE.md` forbids cannot be attempted
-from inside — advice the container cannot disobey. What each CAN do is what
-§4.3 promises: `swift build`/`swift test`/`swiftlint` there, Gradle builds and
-unit tests here.
+**Base images** live in `cli/images/<image>/Dockerfile`, built by `cproj build`
+with `HOST_UID`/`HOST_GID` so bind-mounted `/work` files come back owned by the
+Mac user. `claude-web` (Node), `claude-ios` (Swift + swiftlint), `claude-and`
+(JDK, Android SDK, Gradle). No Dockerfile → `unavailable`, not an error.
 
-**One image is pinned to an architecture, in one place.** Google ships the Linux
-Android SDK build tools (aapt2) for x86_64 only, so `claude-and` is built and
-run `linux/amd64` — emulated on Apple Silicon, which is slower but is the
-difference between building and not. `IMAGE_PLATFORM` in `cli/src/images.ts` is
-the single constant; `build` turns it into `--platform` and `compose.ts` into
-the dev service's `platform:`, because an image built for one platform and
-started on another either fails or silently pulls a different image. Every other
-image builds for whatever the Mac is, and emits no `platform:` key — an unpinned
-project's generated compose file must not change.
+**The boundary is built into the images.** The ios base has no `xcodebuild`,
+`xcrun` or simulator; the android base has no `adb`. What they can do is §4.3:
+`swift build`/`test`/`swiftlint`, Gradle builds and unit tests.
 
-**The Gradle cache is shared, and it is not project data.** `GRADLE_USER_HOME`
-in `claude-and` is `/cache/gradle` — a named volume (`cproj-gradle-cache`)
-mounted into every android dev container, not a directory under the project's
-bind mount. The Android Gradle Plugin and its transitive world are hundreds of
-megabytes, identical for every project and re-downloadable at will: exactly the
-kind of thing the disk-frugality rule keeps once, on the internal disk beside
-the image layers, rather than once per project on the SSD. `IMAGE_CACHE` in
-`cli/src/images.ts` is again the single constant, and three readers must agree
-with it — the Dockerfile's `ENV` (asserted in `test/phase8.test.ts`, because a
-Gradle writing elsewhere still works and merely re-downloads), the mount
-`compose.ts` writes, and `up`, which creates the volume. Compose is given
-`external: true` so it neither creates the volume nor stamps the first
-project's labels on something every project shares. The scan in `volumes.ts`
-knows it by its `cproj.role: cache` label: claimed while any manifest names
-that base image, reclaimable once none does, and never destroyed by
-`delete --purge`, which takes only what a project owns.
+**One image is pinned to an architecture, in one place.** aapt2 is x86_64-only,
+so `claude-and` builds and runs `linux/amd64` (emulated on Apple Silicon).
+`IMAGE_PLATFORM` in `cli/src/images.ts` is the single constant — `build` turns
+it into `--platform`, `compose.ts` into the dev service's `platform:`. Every
+other image builds native and emits **no** `platform:` key.
 
-**Two commands exist because the app asked, not because §6 named them.**
-`cproj catalogue` and `cproj config get|set` are Phase 6 additions under §1's
-rule that "if the app needs something, a CLI command grows to provide it". The
-Services submenu ticks the attached rows of the WHOLE catalogue and the
-New-project window offers the same list, so the alternative was a copy of
-`services.yml` in Swift; Preferences writes the SSD path and the terminal, so
-the alternative was a second writer that knew only some of §8's precedence and
-path-expansion rules. Both are additive — no frozen schema changed to make room
-for them — and `status` gained `dir` the same way, so "Open folder in Finder"
-never composes a path out of `ssd.root`.
+**The Gradle cache is shared and is not project data.** `GRADLE_USER_HOME` is
+`/cache/gradle`, a named volume (`cproj-gradle-cache`, `IMAGE_CACHE`) mounted
+into every android dev container — hundreds of identical, re-downloadable
+megabytes belong once, on the internal disk. Three readers must match the
+constant: the Dockerfile `ENV`, the mount `compose.ts` writes, and `up`, which
+creates the volume. Compose marks it `external: true` so no project stamps its
+labels on it. `volumes.ts` knows it by `cproj.role: cache`: claimed while any
+manifest names that base image, never taken by `delete --purge`.
 
-**The app reads the contract; it never re-derives it.** The Swift client lives
-in `app/claude-yard/claude-yard/Cproj/` — `CprojClient` builds argv, appends
-`--json` itself (no caller may), runs the binary, and turns a non-zero exit into
-`CprojFailure.cli` carrying the stable §2 code. `CprojModels.swift` mirrors
-`cli/schema/*.json` one struct per schema object; closed string enums decode as
-open tokens so an additive schema change cannot break an older build. Because
-Xcode is host-only and `npm test` compiles no Swift,
-`test/app-models.test.ts` reads it as text and holds it to the same schemas in
-both directions — a required field missed, a field invented, an error code the
-CLI cannot emit, or a `Process` spawned outside the client all fail there rather
-than in the menu bar. A GUI app inherits no shell `PATH`, so
-`CprojExecutable.swift` locates `cproj` and hands the child a `PATH` that can
-find `node`, `docker`, `lsof` and `diskutil`; that is the only environment
-knowledge in Swift.
+**The agent ships in the base image.** All three install Claude Code — pinned
+binary, checksum-verified, into `/usr/local/bin`. Not a catalogue service (the
+catalogue is for sibling containers with an image, port and volume), and not
+under `$HOME`, which is a mounted volume that would copy 236MB per project.
 
-**A blocked eject is a place to come back to, not a banner.** `cproj eject`
-answers EJECT_BLOCKED with `holders`, and the user's next move is to leave, quit
-Xcode, and try again — so `CprojStore.ejectPhase` holds that state (blocked with
-its holders, working, ejected, failed) instead of `lastError`, which the next
-refresh clears. `EjectPanel` renders the phase, offers **Retry** — which is
-simply the same call again — and the menu row says where the flow got to, so
-closing the popover loses nothing. Nothing in Swift can force an unmount or kill
-a holder, and there is no `--force` on `eject` to reach for
-(`test/phase7.test.ts`).
+**`$HOME` is a volume, because `down` destroys the container.**
+`CONTAINER_HOME` = `/state/home`, with `cproj-<project>-home` mounted there —
+otherwise every stop loses shell history, dotfiles, and the `claude` login
+(`$HOME/.claude`). It is **per project**: Claude Code files sessions by working
+directory and every container works in `/work`, so one shared home would make
+`claude --continue` resume whichever project ran last. Four readers must agree
+(the constant and three Dockerfiles). `delete --purge` takes it; plain `delete`
+leaves it an orphan.
 
-**A missing `cproj` is the state of the whole menu.** With nothing to run there
-is no status to show and no action to offer, so `CprojStore.cprojMissing` puts
-`FirstRunPanel` in place of the menu — with the locations
-`CprojExecutable` actually searched, not a plausible-looking list — rather than
-letting each item fail its own way (`app-spec.md` §13).
+**The host is lent, never copied.** `PASSTHROUGH_ENV` in `compose.ts` uses
+Compose's **list** form (bare `NAME`, no `=`) — the only shape meaning "pass
+through if set, otherwise leave unset". `${NAME:-}` would inject an empty
+credential, i.e. a failing login instead of a prompt. Fixed and sorted, so the
+file is byte-identical on a Mac holding every token and one holding none. `up`
+fills `GIT_*` from the host's `git config` through the `Git` seam. No credential
+is ever written to `config.yml`.
 
-**The menu runs one thing at a time, and asks after each.** `CprojStore` names
-the running operation in `activity`; while it is set every mutating item is
-disabled, and every mutation is followed by a forced `status` refresh rather
-than a patch to the store's own copy (`app-spec.md` §4). A refusal is relayed
-verbatim — PROJECT_RUNNING on a service change becomes "Stop the project to
-change its services", never a stop-change-start the user did not ask for.
-Confirmation for anything destructive happens in the VIEW before the call,
-because `CprojClient` passes `--force` and the CLI cannot prompt with no
-terminal. `CprojTerminal` runs `cproj shell`'s argv in the user's terminal
-through AppleScript or a `.command` file — it launches no process of its own,
-so `CprojClient` remains the only thing in the app that constructs one.
+**The dev container publishes exactly one thing.** `ARCHETYPE_APP_PORT`: fixed
+inside the container (3000, with `PORT` set), allocated from a host band and
+persisted as `app_port`, assigned once and never revisited. Projects predating
+the field get one on their next `up`. This is the one exception to
+"a published port is a debugging tap" — a browser on the Mac cannot join the
+Docker network. `status` reports `app_url`, as it reports `connection_hint`.
 
-- App: SwiftUI `MenuBarExtra`, `LSUIElement` = YES, App Sandbox off for v1, plus
-  `NSAppleEventsUsageDescription` from Phase 6 (without it macOS terminates the
-  app the first time it drives a terminal). All are build settings the human sets
-  in Xcode (`app/README.md`); the target uses a synchronized folder group, so
-  `.swift` files written to disk are in the build without an "Add Files to
-  target" step.
+**`down` writes down where you were.** `cli/src/handoff.ts` writes
+`.cproj/handoff.md` on every stop: repository state from `Git`, plus the agent's
+own account via `claude --print --continue` **inside the still-running dev
+container** — after `compose down` there is nobody to ask. Everything is
+best-effort: missing container, agent, session or credentials, a timeout, or a
+read-only disk degrades the note and never fails the stop. A non-zero exit or
+empty output is reported as such, not pasted under the heading. `delete` skips
+it.
 
-## Definition of done (per phase)
+**Two commands exist because the app asked.** `cproj catalogue` and
+`cproj config get|set` are Phase 6 additions under §1's rule that the CLI grows
+to serve the app — the alternative was a copy of `services.yml` in Swift and a
+second config writer that knew only some of §8's precedence rules. `status`
+gained `dir` the same way, so the app never composes a path from `ssd.root`.
 
-Each phase has a terminal done-check in the implementation plan. A phase is not
-done until its check passes. CLI phases' checks become regression scripts — keep
-them.
+## The app
+
+**It reads the contract; it never re-derives it.** `app/claude-yard/claude-yard/Cproj/`:
+`CprojClient` builds argv, appends `--json` itself (no caller may), and turns a
+non-zero exit into `CprojFailure.cli` with the §2 code. `CprojModels.swift`
+mirrors `cli/schema/*.json`, one struct per schema object; closed string enums
+decode as open tokens so additive changes can't break an older build.
+`test/app-models.test.ts` checks it as text in both directions — a missed field,
+an invented one, an impossible error code, or a `Process` spawned outside the
+client fails there. A GUI app inherits no shell `PATH`, so
+`CprojExecutable.swift` locates `cproj` and hands the child a `PATH` reaching
+`node`, `docker`, `lsof`, `diskutil` — the only environment knowledge in Swift.
+
+- **A blocked eject is a place to come back to.** `CprojStore.ejectPhase` holds
+  blocked/working/ejected/failed (not `lastError`, which the next refresh
+  clears); `EjectPanel` renders it, offers **Retry** (the same call again), and
+  the menu row says where the flow got to. Nothing in Swift can force an unmount
+  or kill a holder, and `eject` has no `--force` (`test/phase7.test.ts`).
+- **A dimmed row and an absent row look the same.** `MenuRow` takes a
+  `disabledReason` and serves it as help; `DisabledNotice` says it once per
+  group — with Docker down, every mutating item is disabled for one reason.
+- **A missing `cproj` is the state of the whole menu.** `CprojStore.cprojMissing`
+  shows `FirstRunPanel` — listing the paths `CprojExecutable` actually searched
+  — instead of letting each item fail its own way (§13).
+- **One operation at a time, then ask.** `CprojStore.activity` names it; while
+  set, mutating items are disabled, and every mutation is followed by a forced
+  `status` refresh rather than a local patch (§4). Refusals are relayed verbatim
+  — `PROJECT_RUNNING` becomes "Stop the project to change its services", never
+  an unrequested stop-change-start. Destructive confirmation happens in the view
+  before the call, because the client passes `--force` and the CLI cannot prompt.
+  `CprojTerminal` runs `cproj shell`'s argv via AppleScript or a `.command` file
+  and launches no process itself.
+- Build settings the human sets in Xcode (`app/README.md`): SwiftUI
+  `MenuBarExtra`, `LSUIElement` YES, App Sandbox off for v1,
+  `NSAppleEventsUsageDescription` (without it macOS kills the app on first
+  terminal drive). The target uses a synchronized folder group, so new `.swift`
+  files build without an Add-Files step.
+
+## Definition of done
+
+New work gets a scoped spec in `docs/phases/` and a terminal done-check; it is
+not done until that check passes, and a CLI check then joins `regression.sh`
+and stays.

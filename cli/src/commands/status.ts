@@ -19,6 +19,7 @@ import { discoverProjects, probeSsd, type DiscoveredProject } from '../projects.
 import { observeState, runningNames } from '../workspace.ts'
 import { scanVolumes } from '../volumes.ts'
 import { connectionHint } from '../catalogue.ts'
+import { appUrl } from '../services.ts'
 import type { Status, StatusProject, StatusService } from '../model/status.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 
@@ -59,6 +60,8 @@ function buildProject(
     state: observed.state,
     services,
     dev_container: observed.devRunning ? devContainerName(name) : null,
+    app_port: manifest.app_port ?? null,
+    app_url: appUrl(manifest),
   }
 }
 
@@ -128,6 +131,7 @@ export function renderStatus(status: Status): string[] {
   for (const project of status.projects) {
     lines.push(`${project.name}  [${project.archetype}]  ${project.state}`)
     lines.push(`  dev container: ${project.dev_container ?? '—'}`)
+    if (project.app_url) lines.push(`  dev server:    ${project.app_url}`)
     if (project.services.length === 0) {
       lines.push('  services: none')
     } else {

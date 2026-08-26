@@ -40,6 +40,12 @@
         }
       }
     },
+    "app_port": {
+      "type": "integer",
+      "description": "Host port published for the archetype's dev server (cli-spec.md §9). Assigned once and stable, like a service's. Absent means the dev container publishes nothing.",
+      "minimum": 1024,
+      "maximum": 65535
+    },
     "created": {
       "type": "string",
       "format": "date-time"

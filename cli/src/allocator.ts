@@ -55,6 +55,12 @@ export type PortHolder = {
 export function assignedPorts(config: Config): Map<number, PortHolder> {
   const holders = new Map<number, PortHolder>()
   for (const project of discoverProjects(config).projects) {
+    // The dev-server port (§9) is spoken for exactly as a service's is —
+    // it lives in the same manifest and must not be handed out twice.
+    const appPort = project.manifest.app_port
+    if (typeof appPort === 'number' && !holders.has(appPort)) {
+      holders.set(appPort, { project: project.name, service: DEV_SERVER_KEY })
+    }
     for (const [service, attachment] of Object.entries(project.manifest.services ?? {})) {
       if (typeof attachment?.host_port !== 'number') continue
       // First writer wins: a duplicate means two manifests already collide, and
@@ -72,6 +78,13 @@ export type PortRequest = {
 }
 
 /**
+ * The name the dev-server allocation answers to in a holder list and in a
+ * PORT_UNAVAILABLE refusal. Not a catalogue key — nothing in `services.yml` may
+ * be called this — so a message naming it cannot be mistaken for a service.
+ */
+export const DEV_SERVER_KEY = 'dev server'
+
+/**
  * Assign a host port to each request, in one pass over the manifests.
  *
  * Requests are served in sorted key order and each assignment is folded into
@@ -83,26 +96,39 @@ export async function allocatePorts(
   ctx: Context,
   project: string,
   requests: readonly PortRequest[],
+  /** Ports already promised in this same operation but not yet on disk (§9). */
+  reserved: Iterable<number> = [],
 ): Promise<Map<string, number>> {
   const taken = new Set(assignedPorts(ctx.config).keys())
+  for (const port of reserved) taken.add(port)
   const assigned = new Map<string, number>()
 
   const ordered = [...requests].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
   for (const request of ordered) {
-    const port = await allocateOne(ctx, project, request, taken)
+    const port = await allocateOne(ctx, project, request.key, request.definition.host_port_base, taken)
     taken.add(port)
     assigned.set(request.key, port)
   }
   return assigned
 }
 
+/**
+ * The dev server's host port (§9). Same rules as a service's — start at the
+ * archetype's own port and count up, take the first that no manifest claims and
+ * no socket holds — so a second web project lands on 3001 rather than failing.
+ */
+export async function allocateAppPort(ctx: Context, project: string, base: number): Promise<number> {
+  const taken = new Set(assignedPorts(ctx.config).keys())
+  return allocateOne(ctx, project, DEV_SERVER_KEY, base, taken)
+}
+
 async function allocateOne(
   ctx: Context,
   project: string,
-  request: PortRequest,
+  key: string,
+  base: number,
   taken: ReadonlySet<number>,
 ): Promise<number> {
-  const base = request.definition.host_port_base
   for (let offset = 0; offset < MAX_BAND_SCAN; offset += 1) {
     const port = base + offset
     if (port > MAX_PORT) break
@@ -113,7 +139,7 @@ async function allocateOne(
   const last = Math.min(base + MAX_BAND_SCAN - 1, MAX_PORT)
   throw new CprojError(
     'PORT_UNAVAILABLE',
-    `No free host port for \`${request.key}\` in \`${project}\`: ${base}–${last} are all assigned to another project or already bound on this Mac.`,
-    { service: request.key, project, host_port_base: base, scanned: last - base + 1 },
+    `No free host port for \`${key}\` in \`${project}\`: ${base}–${last} are all assigned to another project or already bound on this Mac.`,
+    { service: key, project, host_port_base: base, scanned: last - base + 1 },
   )
 }

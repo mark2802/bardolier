@@ -1,12 +1,8 @@
 /**
- * Phase 1 tests — the read-only core: config, discovery, Docker probe, status,
- * list, doctor.
- *
- * Everything here runs with no SSD and no Docker daemon: the SSD is a temp
- * directory and Docker is a stub. Two properties get the most attention because
- * the app depends on them from Phase 5:
- *   - `status` succeeds in EVERY degraded state and always matches §7;
- *   - read-only means read-only — nothing under the sandbox is created.
+ * Phase 1 — the read-only core: config, discovery, Docker probe, status, list,
+ * doctor. No SSD, no daemon. Two properties the app depends on from Phase 5:
+ * `status` succeeds in EVERY degraded state and always matches §7, and
+ * read-only means read-only — nothing under the sandbox is created.
  */
 
 import { test, describe, afterEach } from 'node:test'

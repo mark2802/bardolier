@@ -1,21 +1,13 @@
 /**
- * Phase 6 tests — the two commands the app needed, and the field it needed.
- *
- * Phase 6 is the app's phase, and most of its done-check is a human clicking a
- * menu. What a terminal CAN own is the CLI surface that phase grew: `catalogue`
- * (app-spec.md §6, §8), `config get`/`config set` (§12), and `status.dir` (§5's
- * "Open folder in Finder"). Each exists for the same reason — the app must not
- * hold a second copy of something the CLI decides — so each is tested for the
- * property that makes it worth having:
- *
- *   - `catalogue` reports the file that ACTUALLY answered (§4.1's chain), so
- *     the menu offers what an attach would really use.
- *   - `config set` goes through config.ts, so precedence, path expansion and
- *     ordering are the CLI's and the app inherits them.
+ * Phase 6 — the two commands the app needed and the field it needed. Most of
+ * the phase is a human clicking a menu; the CLI surface it grew is testable,
+ * and each part exists so the app holds no second copy of a CLI decision:
+ *   - `catalogue` reports the file that ACTUALLY answered (§4.1's chain).
+ *   - `config set` goes through config.ts, so the app inherits §8's precedence,
+ *     path expansion and ordering.
  *   - `config get` reports env overrides, so Preferences can say "the
- *     environment wins here" instead of writing a value that has no effect.
- *   - `status.dir` is reported, not composed, so the app never encodes §3's
- *     layout.
+ *     environment wins here" instead of writing a value with no effect.
+ *   - `status.dir` is reported, not composed, so the app never encodes §3.
  */
 
 import { test, describe, afterEach } from 'node:test'

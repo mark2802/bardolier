@@ -1,6 +1,10 @@
-# Implementation Plan — Container Project Manager
+# Implementation Plan — Container Project Manager (phases 0-9, COMPLETE)
 
-Companion docs: `cli-spec.md`, `app-spec.md`, `CLAUDE.md`.
+**Historical. Not a spec, and not a place to add work.** Phases 0-9 shipped;
+what they built is described by `../cli-spec.md` (authoritative for behaviour)
+and `../app-spec.md`, and each phase's done-check lives on in `test/`. Later
+work gets its own small scoped file under `docs/phases/` instead of an entry
+here.
 
 This plan is phased so each phase is a single `/goal` you hand to Claude Code.
 Phases are ordered by dependency. **The CLI is built and frozen before the app.**
@@ -216,6 +220,36 @@ Deliverables:
 Done-check: an `ios` project's container has the Swift toolchain and its
 CLAUDE.md correctly steers the agent away from host-only build steps; an
 `android` project can run a Gradle build/test in-container.
+
+---
+
+## Phase 9 — The agent in the container, and the memory of what it did
+
+**Goal:** Make the dev container somewhere an agent can actually work, and make a
+project you return to explain itself.
+
+Deliverables:
+- **Claude Code in all three base images**, pinned and checksum-verified, at a
+  system path — not under `$HOME`, which is a mounted volume.
+- **A persistent per-project `$HOME`** (`cproj-<project>-home`), so a `down` no
+  longer costs the login, the shell history and the dotfiles. Per project rather
+  than shared, because Claude Code files sessions by working directory and every
+  dev container works in `/work`.
+- **Host credentials and git identity lent to the container** through Compose's
+  bare-name environment form, so the file stays byte-identical everywhere and a
+  commit made inside is attributed to the human.
+- **§9's dev-server port, finally implemented** — allocated, persisted as
+  `app_port`, published, and retrofitted onto projects that predate the field.
+- **`.cproj/handoff.md`, written by `down`** before the containers go: the
+  repository's state plus the agent's own account of the session, best-effort
+  and never able to fail the stop.
+- **Disabled menu items that say why** — a dimmed row and an absent row looked
+  identical, which is how "Delete…" came to look unimplemented.
+
+⚠️ **MANUAL:** the half that needs a real login — `claude login` in a shell
+surviving a down/up, a handoff whose top section is Claude's own summary, and
+the two-project check that each note describes its own project.
+Done-check: `bash test/phase9-done-check.sh`.
 
 ---
 

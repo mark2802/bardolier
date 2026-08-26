@@ -55,4 +55,12 @@ export type EjectOutput = {
   stopped: string[]
   /** Always empty on success: a held volume is EJECT_BLOCKED, never a force. */
   holders: EjectHolder[]
+  /**
+   * True when the Docker engine had to be stopped for the unmount to go
+   * through — Docker Desktop's file share holds the volume for as long as its
+   * VM lives (§6). Reported because it is a side effect the user has to undo
+   * (`docker desktop start`) before the next `up`, not just a detail of how the
+   * eject went. Optional in the schema: an older app build decodes without it.
+   */
+  docker_stopped: boolean
 }

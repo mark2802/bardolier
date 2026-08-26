@@ -27,6 +27,10 @@ let menuWidth: CGFloat = 320
 struct MenuRow<Content: View>: View {
     var systemImage: String?
     var isDisabled = false
+    /// Why this row is inert, shown on hover (§11). A disabled item with no
+    /// explanation is indistinguishable from a missing one — which is exactly
+    /// how "Delete…" came to look absent while Docker was simply not running.
+    var disabledReason: String?
     var action: () -> Void
     @ViewBuilder var content: () -> Content
 
@@ -55,6 +59,31 @@ struct MenuRow<Content: View>: View {
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.45 : 1)
         .onHover { isHovering = $0 }
+        // On the container rather than the Button: a disabled control does not
+        // reliably serve its own help tag.
+        .help(isDisabled ? (disabledReason ?? "") : "")
+    }
+}
+
+/// One line saying why the actions above or below it are inert (§11).
+///
+/// Shown ONCE per group rather than on every row: with the SSD away or Docker
+/// down every mutating item is disabled at the same time and for the same
+/// reason, and repeating it against each one would be noise rather than help.
+struct DisabledNotice: View {
+    var reason: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 9))
+            Text(reason)
+                .font(.caption2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
     }
 }
 
@@ -63,10 +92,11 @@ struct MenuTextRow: View {
     var title: String
     var systemImage: String?
     var isDisabled = false
+    var disabledReason: String?
     var action: () -> Void
 
     var body: some View {
-        MenuRow(systemImage: systemImage, isDisabled: isDisabled, action: action) {
+        MenuRow(systemImage: systemImage, isDisabled: isDisabled, disabledReason: disabledReason, action: action) {
             Text(title)
         }
     }

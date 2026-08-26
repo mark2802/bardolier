@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
-# Phase 2 done-check — implementation-plan.md.
-#
-#   "new → up → shell in manually (`docker exec`) shows /work mounted and owned
-#    by your user → down removes the container, data persists → delete removes
-#    the dir. `status` reflects each transition."
-#
-# The SSD is stood in for with CPROJ_SSD_ROOT against a temp dir (§8), exactly
-# as the Phase 1 check does, so this runs with no SSD attached. The Docker half
-# is real: it builds the base image if it is missing, starts a container, and
-# execs into it. Set CPROJ_SKIP_DOCKER=1 to run only the offline assertions.
-#
-# Keep this script: per CLAUDE.md, each CLI phase's done-check becomes a
-# regression check.
+# Phase 2 done-check — new → up → /work mounted and owned by the host user →
+# down (container gone, data kept) → delete, with `status` tracking each step.
+# The SSD is a temp dir (CPROJ_SSD_ROOT, §8); the Docker half is real and builds
+# the base image if it is missing.
 #
 #   bash test/phase2-done-check.sh
+#   CPROJ_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,7 +15,7 @@ CPROJ="node cli/bin/cproj.js"
 pass=0
 fail=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
@@ -33,6 +25,9 @@ cleanup() {
   # Never leave containers behind, whatever went wrong above.
   if [ "${DOCKER_OK:-0}" = "1" ]; then
     docker rm -f cproj-myapp cproj-second >/dev/null 2>&1 || true
+    # Every project now owns a $HOME volume (cli-spec.md §9); a check that left
+    # them behind would litter the machine with one per run.
+    docker volume rm -f cproj-myapp-home cproj-second-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -162,6 +157,7 @@ fi
 
 if [ "$DOCKER_OK" = "1" ]; then
   docker rm -f cproj-myapp >/dev/null 2>&1 || true
+  docker volume rm -f cproj-myapp-home cproj-second-home >/dev/null 2>&1 || true
 
   if ! docker image inspect claude-web:latest >/dev/null 2>&1; then
     printf '    building claude-web (first run only, this takes a few minutes)…\n'

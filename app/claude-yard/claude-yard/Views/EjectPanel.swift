@@ -16,6 +16,14 @@
 //       holder: `cproj` deliberately has no `--force` to pass, because forcing
 //       an unmount out from under a running editor is the data loss the command
 //       exists to prevent (CLAUDE.md, safety over convenience).
+//    2b. EJECT_BLOCKED by Docker's own VM — the same refusal with a different
+//       move, because there is no window to close and no retry that works. The
+//       panel offers to stop the ENGINE (`eject --stop-docker`), which is a
+//       thing the user consents to here rather than something the eject did.
+//       Once that has happened (`engineStopped`) the offer is withdrawn: the
+//       CLI has stopped the engine, waited for the VM to let go, and been
+//       refused anyway, so the panel shows what it said and offers only Retry.
+//       A button that repeats what just failed is a loop, not a move.
 //    3. Ejected — "safe to unplug", which is also the icon state (§11).
 //
 //  Retry is simply the same call again, which is why this panel holds no state
@@ -43,6 +51,8 @@ struct EjectPanel: View {
                         workingState
                     case .blocked(let holders, let message):
                         blockedState(holders: holders, message: message)
+                    case .blockedByDocker(let holders, let message, let engineStopped):
+                        dockerHoldState(holders: holders, message: message, engineStopped: engineStopped)
                     case .ejected(let volume, let stopped):
                         ejectedState(volume: volume, stopped: stopped)
                     case .failed(let message):
@@ -131,6 +141,85 @@ struct EjectPanel: View {
                 Task { await store.closeAllAndEject() }
             }
             .disabled(store.isBusy)
+
+            Button("Not now") {
+                store.resetEject()
+                back()
+            }
+            .controlSize(.small)
+        }
+    }
+
+    // MARK: - Blocked by Docker's VM
+
+    /// The refusal Retry cannot clear.
+    ///
+    /// Docker Desktop shares `/Volumes` into its VM and keeps descriptors on
+    /// the SSD for as long as that VM is alive, so every project being stopped
+    /// is not enough — and there is no window to close, which is what the
+    /// blocked state above tells the user to go and do. What clears it is
+    /// stopping the ENGINE, so that is the button, and it is a button rather
+    /// than something the eject did on its own because it stops any container
+    /// on this Mac, cproj's or not.
+    @ViewBuilder
+    private func dockerHoldState(holders: [SsdHolder], message: String, engineStopped: Bool) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "shippingbox.fill").foregroundStyle(.orange)
+            Text(engineStopped ? "The engine stopped, and the SSD still wouldn’t unmount." : "Docker is still holding the SSD.")
+                .font(.caption.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        if engineStopped {
+            // The CLI's own sentence, not a canned one: at this point it knows
+            // something the panel does not — that the engine is already down,
+            // how long it waited, and who is still there. The standing advice
+            // ("stop the engine") is the thing that has just been done.
+            Text(message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if !holders.isEmpty {
+                HolderList(holders: holders)
+            }
+        } else {
+            Text("Every project is stopped, but Docker Desktop’s virtual machine keeps the disk open while it runs. Stopping the engine releases it — starting Docker again is all it takes to get back to work.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if holders.isEmpty {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HolderList(holders: holders)
+            }
+        }
+
+        HStack(spacing: 8) {
+            // No offer to stop the engine once it is down: a button whose whole
+            // effect has already happened is a loop, not a move.
+            if engineStopped {
+                actionButton("Retry", role: nil) {
+                    Task { await store.closeAllAndEject() }
+                }
+                .disabled(store.isBusy)
+            } else {
+                actionButton("Stop Docker & eject", role: nil) {
+                    Task { await store.closeAllAndEject(stopDocker: true) }
+                }
+                .disabled(store.isBusy)
+
+                Button("Retry") {
+                    Task { await store.closeAllAndEject() }
+                }
+                .controlSize(.small)
+                .disabled(store.isBusy)
+            }
 
             Button("Not now") {
                 store.resetEject()

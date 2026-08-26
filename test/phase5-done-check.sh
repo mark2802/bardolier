@@ -1,27 +1,13 @@
 #!/usr/bin/env bash
-# Phase 5 done-check — implementation-plan.md.
+# Phase 5 done-check — "the app launches in the menu bar and shows correctly
+# decoded projects/services/ports". The build, the launch and the click are
+# Xcode's, on the Mac (CLAUDE.md § Environment boundary); the script prints that
+# checklist and runs nothing host-only.
 #
-#   "the app launches as a menu-bar item, calls `cproj status --json`, and your
-#    debug view shows correctly decoded projects/services/ports."
-#
-# Phase 5 is the first phase whose done-check a terminal cannot finish. The
-# build, the launch and the click are Xcode's, on the Mac (CLAUDE.md
-# § Environment boundary) — nothing here runs xcodebuild, the Simulator, or a
-# signing step, and nothing here edits the Xcode project.
-#
-# What this script CAN do, it does:
-#
-#   - hold the Swift models to the frozen schemas, in both directions, via
-#     `test/app-models.test.ts`. That is the substance of "correctly decoded":
-#     a field the models missed fails here rather than in the menu bar.
-#   - confirm the sources are where the synchronized folder group will pick
-#     them up, so the human's "add files to target" step is a no-op.
-#   - read back the two BUILD SETTINGS the app spec requires and Xcode's
-#     template does not default to (§1: LSUIElement on, App Sandbox off). It
-#     reads the pbxproj; changing it is the human's step.
-#   - re-run every earlier phase's check.
-#
-# The rest is the checklist printed at the end, which is yours to walk.
+# What a terminal can check: the Swift models against the frozen schemas in both
+# directions (test/app-models.test.ts), the sources sitting where the
+# synchronized folder group picks them up, and the two build settings Xcode does
+# not default to (LSUIElement on, App Sandbox off), read back from the pbxproj.
 #
 #   bash test/phase5-done-check.sh
 set -euo pipefail
@@ -35,7 +21,7 @@ pass=0
 fail=0
 manual=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
@@ -68,7 +54,7 @@ else
 fi
 
 # ── 2. Build settings the spec requires (the human's manual step) ────────────
-head "2. Build settings (app-spec.md §1, implementation-plan.md Phase 5)"
+head "2. Build settings (app-spec.md §1)"
 
 if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
   ok "App Sandbox is off — the app can shell out to cproj"

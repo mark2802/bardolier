@@ -19,6 +19,7 @@ import { rmSync } from 'node:fs'
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
 import { attachedKeys, projectVolumes } from '../compose.ts'
+import { homeVolumeName } from '../naming.ts'
 import type { DeleteOutput } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import { requireProject } from '../workspace.ts'
@@ -47,9 +48,11 @@ export async function runDelete(ctx: Context, request: DeleteRequest): Promise<D
   const project = requireProject(ctx, request.name)
   const { manifest, dir } = project
 
-  // Volume names come from the catalogue, so a broken catalogue must not block
-  // deleting the directory — only `--purge` genuinely needs them.
-  let volumes: string[] = []
+  // The dev container's $HOME is owned by every project and needs no catalogue
+  // to name, so it is the floor rather than a special case. Service volume
+  // names DO come from the catalogue, so a broken one must not block deleting
+  // the directory — only `--purge` genuinely needs them.
+  let volumes: string[] = [homeVolumeName(manifest.name)]
   if (attachedKeys(manifest).length > 0) {
     try {
       volumes = projectVolumes(manifest, ctx.catalogue().catalogue)
@@ -85,11 +88,19 @@ export async function runDelete(ctx: Context, request: DeleteRequest): Promise<D
     }
   }
 
-  await runDown(ctx, manifest.name)
+  // No handoff: the directory it would be written into is removed below (§12).
+  await runDown(ctx, manifest.name, { noHandoff: true })
 
   const removed: string[] = []
   if (request.purge) {
+    // Only the ones Docker actually has. A manifest names every volume the
+    // project WOULD own, but Compose creates them at `up` — so a project that
+    // was created and never started names volumes that do not exist, and asking
+    // Docker to remove one of those is an error rather than a no-op. Unfiltered,
+    // that error aborts the delete after `down` and leaves the directory behind.
+    const existing = new Set(await ctx.docker.volumeNames())
     for (const volume of volumes) {
+      if (!existing.has(volume)) continue
       await ctx.docker.removeVolume(volume)
       removed.push(volume)
     }

@@ -166,6 +166,23 @@ nonisolated enum CprojFailure: Error, Sendable {
         if case .cli(let body) = self { return body.details?.holders ?? [] }
         return []
     }
+
+    /// `details.reason`, when the CLI gave one. EJECT_BLOCKED uses it to say
+    /// WHICH kind of refusal this is, which is the difference between an offer
+    /// to stop the Docker engine and an instruction to quit an editor.
+    var reason: String? {
+        if case .cli(let body) = self { return body.details?.reason }
+        return nil
+    }
+
+    /// EJECT_BLOCKED because Docker Desktop's VM holds the volume — the one
+    /// refusal the app can clear itself, by asking the CLI to stop the engine.
+    var isRuntimeHold: Bool { code == .ejectBlocked && reason == "runtime-holds-volume" }
+
+    /// EJECT_BLOCKED with the engine ALREADY stopped and the volume still held.
+    /// Kept apart from `isRuntimeHold` because the button that clears that one
+    /// is the thing that has just been done: offering it again would be a loop.
+    var isRuntimeHoldAfterStop: Bool { code == .ejectBlocked && reason == "runtime-holds-volume-after-stop" }
 }
 
 // Nonisolated for the same reason as CprojToken's extension: LocalizedError's

@@ -1,34 +1,15 @@
 #!/usr/bin/env bash
-# Phase 6 done-check — implementation-plan.md.
+# Phase 6 done-check — "drive the whole lifecycle FROM THE MENU BAR". That is a
+# human with a mouse, so this makes sure everything the mouse depends on is
+# already true and prints the manual pass.
 #
-#   "perform the entire lifecycle FROM THE MENU BAR — create a project, add a
-#    service, start (shell opens), inspect ports, stop, remove service, reclaim
-#    the orphan, delete. Matches the Phase 4 terminal run."
-#
-# That is a human with a mouse, and no script can do it. What this script does
-# is make sure everything the mouse depends on is already true, so the manual
-# pass is a confirmation rather than a debugging session:
-#
-#   - the CLI surface Phase 6 added is REAL and schema-valid from the terminal:
-#     `catalogue`, `config get`, `config set`, and `dir` on every status project.
-#     Those three exist only because the app needed them (cli-spec.md §1), so
-#     they are checked the way §6's commands are.
-#   - the Swift sources are where the synchronized folder group will find them.
-#   - the build settings the app needs, INCLUDING the new one: driving Terminal
-#     or iTerm is Apple-event automation, which needs a usage description or
-#     macOS kills the app instead of asking (app-spec.md §7).
-#   - when a Swift toolchain is present, the sources type-check and every SF
-#     Symbol the menu names actually resolves. A symbol macOS cannot resolve
-#     draws as NOTHING — a blank menu-bar icon for exactly the degraded state
-#     §11 most needs to show. Nothing here builds, signs, or opens Xcode; both
-#     steps are skipped when the toolchain is absent (CLAUDE.md's boundary).
-#
-#     The type-check is WEAKER THAN ⌘B and does not replace it: these flags
-#     approximate the target's build settings, and Xcode has already been seen
-#     to reject concurrency that passes here (a MainActor method passed as a
-#     function value to `map`). Treat a pass as "no obvious breakage", not as a
-#     build.
-#   - every earlier phase still passes.
+# Checks the CLI surface Phase 6 added (`catalogue`, `config get|set`, `dir` on
+# every status project), the Swift sources' location, the build settings —
+# including NSAppleEventsUsageDescription, without which macOS kills the app the
+# first time it drives a terminal — and, when a Swift toolchain is present, a
+# type-check plus an SF Symbol check (an unresolvable symbol draws as NOTHING,
+# i.e. a blank menu-bar icon). That type-check only approximates the target's
+# settings and is weaker than ⌘B: read a pass as "no obvious breakage".
 #
 #   bash test/phase6-done-check.sh
 set -euo pipefail
@@ -43,7 +24,7 @@ pass=0
 fail=0
 manual=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }

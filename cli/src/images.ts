@@ -76,6 +76,31 @@ export const IMAGE_CACHE: Readonly<Partial<Record<BaseImage, ImageCache>>> = {
   'claude-and': { volume: 'cproj-gradle-cache', mount: '/cache/gradle' },
 }
 
+/**
+ * `$HOME` inside every dev container — and a per-project named volume, not a
+ * directory in the container layer.
+ *
+ * `down` removes the container, so a home that lives in its writable layer takes
+ * the shell history, the dotfiles, anything installed from a shell, and — since
+ * Claude Code keeps its config at `$HOME/.claude` — the login itself. The next
+ * `up` would start from nothing every time.
+ *
+ * Unlike IMAGE_CACHE this is PER PROJECT, and deliberately so. The cache holds
+ * rebuildable bytes that are identical everywhere, which is why one copy serves
+ * every project; a home holds the user's own state, and — more sharply — it
+ * holds Claude Code's session transcripts, which are filed by working directory.
+ * Every dev container works in `/work`, so a single shared home would file every
+ * project's sessions under one key and `claude --continue` would resume
+ * whichever project ran last. One home per project is what keeps that honest.
+ *
+ * The value is fixed rather than derived from the image's own user because
+ * HOST_UID may collide with a user the base image already ships, which moves
+ * `~` — and compose cannot mount a volume at a path it cannot predict. All
+ * three Dockerfiles set `ENV HOME` to this and must agree with it
+ * (`test/phase9.test.ts`).
+ */
+export const CONTAINER_HOME = '/state/home'
+
 export function imagesRoot(): string {
   return fileURLToPath(new URL('../images', import.meta.url))
 }

@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Phase 1 done-check — implementation-plan.md.
-#
-#   "on an empty SSD, `cproj status --json` returns valid JSON with empty
-#    projects/orphaned_volumes; `cproj doctor --json` correctly reports SSD
-#    mounted/absent as you plug/unplug."
-#
-# The plug/unplug half is driven with CPROJ_SSD_ROOT (§8) against a temp dir, so
-# this runs unattended and with no SSD attached. Keep this script: per CLAUDE.md,
-# each CLI phase's done-check becomes a regression check.
+# Phase 1 done-check — on an empty SSD, `status --json` is valid JSON with empty
+# projects/orphaned_volumes, and `doctor --json` tracks the SSD appearing and
+# disappearing. Both halves run against a temp dir via CPROJ_SSD_ROOT (§8), so
+# no real SSD is needed.
 #
 #   bash test/phase1-done-check.sh
 set -euo pipefail
@@ -19,7 +14,7 @@ CPROJ="node cli/bin/cproj.js"
 pass=0
 fail=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 

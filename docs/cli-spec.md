@@ -4,8 +4,8 @@ Status: draft for implementation. This is the **engine**. The menu-bar app is a
 thin client over this CLI. **The CLI is the API; the app is a thin client.** All
 orchestration lives here; the app only calls commands and renders their JSON.
 
-Companion docs: `app-spec.md` (the client), `implementation-plan.md` (phasing),
-`CLAUDE.md` (principles + boundaries).
+Companion docs: `app-spec.md` (the client), `CLAUDE.md` (principles +
+boundaries).
 
 ---
 
@@ -106,6 +106,8 @@ services:
     host_port: 5433       # ASSIGNED at add-time, STABLE for life, persisted here
   redis:
     host_port: 6379
+app_port: 3000            # dev-server host port (§9); absent when the
+                          # archetype serves nothing, or predates the field
 created: 2026-08-19T10:00:00Z
 ```
 
@@ -118,7 +120,11 @@ created: 2026-08-19T10:00:00Z
 | android   | `claude-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `claude-web` | full                         | none                   |
 
-Base images carry the per-archetype toolchain only. See CLAUDE.md.
+Base images carry the per-archetype toolchain, plus the two things every
+archetype needs: **Claude Code** — the agent the whole tool exists to host,
+installed as the pinned standalone binary to a system path rather than under
+`$HOME`, which is a mounted volume (§9) — and the working kit (git, ripgrep, jq,
+curl). See CLAUDE.md.
 
 `claude-and` is built and run as `linux/amd64`: Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
@@ -179,7 +185,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
   suppresses the app's shell-open (the CLI itself doesn't spawn terminals — it
   reports the exec command; see §6 shell).
-- `cproj down <name>` — stop + remove this project's containers. Data persists.
+- `cproj down <name> [--no-handoff]` — stop + remove this project's containers.
+  Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
 - `cproj delete <name>` — remove containers, then the project dir. Prompts unless
   `--force`. Releases the project's ports. Named volumes: see `--keep-data`
   (default) vs `--purge` (also removes this project's volumes).
@@ -211,6 +218,36 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 - `cproj eject` — `down-all`, then check host holders (Xcode, Simulator, shells
   cd'd into the SSD via `lsof`), then `diskutil eject`. If held, fail
   `EJECT_BLOCKED` with `{ holders: [...] }` and do not force.
+  A holder is only something the user can act on. The container runtime and the
+  OS's own volume agents — Spotlight's `mds`/`mds_stores` above all, which map an
+  indexed volume for as long as it is mounted — are excluded, because counting
+  them makes the command refuse forever with nothing to quit. They are
+  DiskArbitration clients, so the `diskutil eject` that follows is what actually
+  asks them to let go; if one dissents, its PID and name are parsed out of the
+  refusal into the same `holders` array. A blocked eject therefore always names
+  something, including the root processes unprivileged `lsof` cannot see.
+  The runtime is the one holder with a third answer. Docker Desktop shares
+  `/Volumes` into its VM and keeps descriptors on the SSD for as long as that VM
+  lives, so a disk whose containers are all down can still be dissented — with
+  no window to close and no retry that ever succeeds, which made "quit Docker
+  Desktop" the standing price of an eject. When that (and only that) is what
+  refused, `eject` offers to stop the ENGINE (`docker desktop stop`) and try
+  again: with `--stop-docker`, or by confirming at the prompt. Declining is
+  `EJECT_BLOCKED` with `reason: "runtime-holds-volume"`, the runtime named in
+  `holders`, and the command to run. A successful eject reports
+  `docker_stopped`. This is not a force — nothing is unmounted from under
+  anything, and `docker desktop start` puts the engine back.
+  What follows the stop is a WAIT, not an immediate retry. `docker desktop
+  stop` returns when the engine reports itself down; the VM helper that
+  actually holds `/Volumes` is torn down after that and takes seconds about it,
+  so retrying at once loses the race and the user is told to go and do by hand
+  the thing that has just been done. `eject` polls `lsof` until the runtime is
+  no longer on the volume (bounded — 15s), then attempts the unmount, and
+  retries a dissent from the runtime a couple of times. A budget that runs out
+  is `EJECT_BLOCKED` with `reason: "runtime-holds-volume-after-stop"`: the same
+  refusal, but with no engine left to stop, so it never advises `--stop-docker`
+  again. If the runtime has let go and the unmount still fails, that refusal is
+  somebody else's and is reported as it came.
 - `cproj doctor` — environment check: Docker running, SSD mounted, base images
   present, catalogue valid. Returns structured findings. (Useful first call for
   the app on launch.)
@@ -262,7 +299,9 @@ changed to accommodate them.
           "connection_hint": "postgresql://localhost:5433"
         }
       ],
-      "dev_container": "cproj-myapp"    // null if stopped
+      "dev_container": "cproj-myapp",   // null if stopped
+      "app_port": 3000,                 // dev-server host port (§9); null if none
+      "app_url": "http://localhost:3000" // null alongside it
     }
   ],
   "orphaned_volumes": [
@@ -300,21 +339,49 @@ Schema stability is the contract. Additive changes only once the app ships.
   on that image shares — `up` creates it, labelled `cproj.role: cache`. Both
   keys are absent for an image with no cache, for the same reason `platform:`
   is: an existing project's generated file must not change.
+- Dev container, cont.: plus its `$HOME`, a named volume `cproj-<project>-home`
+  mounted at the images' shared `CONTAINER_HOME`, labelled `cproj.project` and
+  `cproj.role: home`. `down` removes the container, so a home in its writable
+  layer would lose the shell history, the dotfiles and the agent's login on
+  every stop. It is PER PROJECT, not shared like the toolchain cache: it holds
+  the user's own state, and Claude Code files its sessions by working directory
+  — every dev container works in `/work`, so one shared home would file every
+  project's sessions together and `claude --continue` would resume the wrong
+  one. It is the project's, so `delete --purge` takes it and a plain `delete`
+  leaves it as a listed orphan.
+- Dev container, cont.: an `environment:` block in Compose's LIST form naming
+  the host variables the container may inherit — the agent's credentials and
+  git's identity variables. A bare name (no `=`) is passed through when the
+  environment running `compose up` has a value and left UNSET otherwise; an
+  empty-string token is a credential that fails rather than a login prompt. The
+  list is fixed and sorted, so the file is identical on a machine holding every
+  token and one holding none. `up` fills the `GIT_*` names from the host's own
+  `git config`, so a commit made in the container is attributed to the human
+  rather than failing on an unset `user.email`.
 - Services: image from catalogue, named volume, `host_port:container_port`
   published, env interpolated (`{project}` → name).
-- Never publish the dev container's own ports unless an archetype needs it
-  (web/next dev server: publish an allocated app port too — treat the web app's
-  dev-server port as a service-like allocation so multiple web projects don't
-  clash).
+- The dev container publishes NOTHING except its archetype's dev server, where
+  the archetype has one (`ARCHETYPE_APP_PORT`; `web` → 3000). That port is a
+  service-like allocation: fixed inside the container so every project's server
+  config is identical, allocated from a band on the host so two web projects
+  cannot clash, assigned once and persisted as `app_port` (§5). `PORT` is set in
+  the container to the fixed side. A project created before the field existed is
+  assigned one on its next `up` — the only moment its manifest is being written
+  anyway. This is the one exception to the rule that services' host ports are
+  debugging taps: a browser on the Mac cannot join the Docker network.
 
 ## 10. Seeded files (by `new`)
 
 - `.gitignore` — `.build/ .swiftpm/ DerivedData/ node_modules/`
-  (archetype-tuned).
+  (archetype-tuned), plus `.cproj/`, which holds the handoff note (§12):
+  regenerated on every stop, so churn rather than history. Track it deliberately
+  if you want the notes in the repo.
 - `.dockerignore` — excludes `node_modules`, build output, `.git`,
   DerivedData, so image builds/context stays small (serves the disk goal).
 - `CLAUDE.md` — archetype-specific, references the boundary rules (host vs
-  container build).
+  container build), and for an archetype with a dev server (§9) the instruction
+  to bind `0.0.0.0` rather than `localhost` — a server on the container's own
+  loopback is unreachable from the Mac and looks like a broken port mapping.
 
 ## 11. Testing expectations
 
@@ -324,3 +391,30 @@ Schema stability is the contract. Additive changes only once the app ships.
   eject (holder-blocked and clear paths).
 - Port allocation has unit coverage: uniqueness, stability across restart,
   band assignment, host-squat detection.
+
+## 12. The handoff note (by `down`)
+
+A project resumed after three weeks is a project whose state has been forgotten.
+`down` is the one moment when everything needed to describe that state is still
+true and still reachable — so the note is written there, into
+`<project>/.cproj/handoff.md`, and nowhere else.
+
+- **Two sources, failing independently.** The repository, via `git` on the host:
+  branch, recent commits, what is still uncommitted. And the agent's own
+  account, via `claude --print --continue` run INSIDE the dev container, which
+  is the half that knows what was being *attempted* — no amount of git
+  archaeology recovers that.
+- **Written before `compose down`.** The session being summarised lives in the
+  dev container and dies with it. Asking afterwards is asking nobody.
+- **`--continue` resolves correctly** only because each project has its own
+  `$HOME` and therefore its own Claude config dir (§9).
+- **Best-effort is the contract.** No container, no agent, no session, no
+  credentials, a timeout, a read-only disk: each degrades to a smaller note or
+  to no note, and NONE fails the `down`. A stop that refused because it could
+  not write a memo would be worse than a tool that never wrote memos — the user
+  asked for a stop. A non-zero exit or empty output is not a summary; the note
+  says so rather than pasting a refusal under the heading.
+- **Regenerated, not appended.** Each stop overwrites with the newer moment.
+  Git history is the archive.
+- `--no-handoff` skips it. `delete` always passes it — there is no point
+  summarising a project a second before its directory is removed.

@@ -22,6 +22,10 @@
       "type": "array",
       "description": "Always empty on success; populated in error.details.holders on EJECT_BLOCKED.",
       "items": { "$ref": "#/$defs/holder" }
+    },
+    "docker_stopped": {
+      "type": "boolean",
+      "description": "True when the Docker engine was stopped to release the volume (eject --stop-docker, or a confirmed prompt). Additive and NOT required: an app build from before it decodes the same payload."
     }
   },
   "$defs": {

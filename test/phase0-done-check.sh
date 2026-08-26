@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Phase 0 done-check — implementation-plan.md.
+# Phase 0 done-check — `cproj --help` lists every command, the schema and data
+# files parse, and the error-code list exists in code.
 #
-#   "cproj --help lists all commands; schema files parse; error-code list
-#    exists in code."
-#
-# Keep this script: per CLAUDE.md, each CLI phase's done-check becomes a
-# regression check. Run from anywhere:  bash test/phase0-done-check.sh
+#   bash test/phase0-done-check.sh
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +12,7 @@ CPROJ="node cli/bin/cproj.js"
 pass=0
 fail=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 

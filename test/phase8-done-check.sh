@@ -1,38 +1,25 @@
 #!/usr/bin/env bash
-# Phase 8 done-check — implementation-plan.md.
+# Phase 8 done-check — the mobile base images, for real, through the CLI: `new`
+# and `up` an ios and an android project on a temp SSD, then work inside the
+# container the generated compose file started.
 #
-#   "an `ios` project's container has the Swift toolchain and its CLAUDE.md
-#    correctly steers the agent away from host-only build steps; an `android`
-#    project can run a Gradle build/test in-container."
+#   IOS      swift build, swift test and swiftlint run; `xcodebuild` is absent,
+#            because the boundary is a fact about the image and not only a
+#            sentence in the seeded CLAUDE.md (which is checked too).
+#   ANDROID  a real Gradle assembleDebug + unit test produces an APK on an
+#            x86_64 container (Google ships aapt2 for x86_64 only, so the image
+#            is pinned — cli/src/images.ts); its dependencies land in the SHARED
+#            cache volume, which a second --offline build proves; `adb` is
+#            absent for the same reason `xcodebuild` is.
 #
-# Unlike Phases 5–7, both halves of that ARE terminal work — so this script
-# does it, end to end, through the CLI rather than through `docker` by hand:
-#
-#   - `cproj new` an ios and an android project on a temp SSD, seed each with a
-#     minimal real package, `cproj up`, and work inside the dev container the
-#     compose file started. That is the same path a user takes, so a break in
-#     compose generation, the platform pin or the uid mapping fails here too.
-#   - IOS: swift build, swift test and swiftlint all run; `xcodebuild` is
-#     absent, because the boundary is meant to be a fact about the image and
-#     not only a sentence in the seeded CLAUDE.md — which is checked too.
-#   - ANDROID: a real Gradle `assembleDebug` + unit test produces an APK, on an
-#     x86_64 container (Google ships aapt2 for x86_64 only, so the image is
-#     pinned; see cli/src/images.ts). `adb` is absent for the same reason
-#     `xcodebuild` is.
-#     Its dependencies land in the SHARED cache volume rather than on the SSD,
-#     which a second `--offline` build proves — and which is why a re-run of
-#     this check no longer re-downloads the Android Gradle Plugin.
-#   - Files the container writes come back owned by the HOST user — the reason
-#     `cproj build` passes HOST_UID/HOST_GID at all.
-#
-# It needs a Docker daemon and the network, and the first run BUILDS both base
-# images (several GB, and the Android one compiles under emulation on Apple
-# Silicon). Two escape hatches, both of which report what they skipped:
-#
-#   PHASE8_QUICK=1        skip the in-container toolchain runs (keep the rest)
-#   PHASE8_NO_BUILD=1     never build a base image; fail if one is missing
+# Files the container writes come back owned by the HOST user — the reason
+# `cproj build` passes HOST_UID/HOST_GID. Needs a Docker daemon and the network;
+# the first run builds both images (several GB, and the Android one compiles
+# under emulation on Apple Silicon).
 #
 #   bash test/phase8-done-check.sh
+#   PHASE8_QUICK=1 …      skip the in-container toolchain runs, keep the rest
+#   PHASE8_NO_BUILD=1 …   never build an image; fail if one is missing
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,7 +30,7 @@ pass=0
 fail=0
 manual=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }
@@ -63,6 +50,9 @@ cleanup() {
   # to vanish, and a running container holding it would be the mess this tool
   # exists to prevent.
   $CPROJ down-all --force >/dev/null 2>&1 || true
+  # Every project now owns a $HOME volume (cli-spec.md §9). NOT the Gradle
+  # cache: that is shared, expensive to refill, and the point of this phase.
+  docker volume rm -f cproj-swiftbits-home cproj-droid-home >/dev/null 2>&1 || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT

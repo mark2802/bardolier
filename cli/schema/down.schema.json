@@ -10,6 +10,15 @@
     "project": { "type": "string", "minLength": 1 },
     "state": { "type": "string", "enum": ["running", "stopped", "partial"] },
     "was_running": { "type": "boolean", "description": "False when down was an idempotent no-op (§2)." },
-    "data_kept": { "type": "boolean", "const": true, "description": "`down` never removes volumes; only delete --purge and volumes rm do." }
+    "data_kept": { "type": "boolean", "const": true, "description": "`down` never removes volumes; only delete --purge and volumes rm do." },
+    "handoff_path": {
+      "type": ["string", "null"],
+      "description": "Where the handoff note was written (cli-spec.md \u00a712), or null when none was — nothing to describe, --no-handoff, or the write failed. Additive since Phase 9.",
+      "minLength": 1
+    },
+    "handoff_summarised": {
+      "type": "boolean",
+      "description": "True when the agent's own summary made it into the note, false when it holds the repository state alone."
+    }
   }
 }

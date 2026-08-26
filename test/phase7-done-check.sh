@@ -1,29 +1,14 @@
 #!/usr/bin/env bash
-# Phase 7 done-check — implementation-plan.md.
+# Phase 7 done-check — "drive everything from the menu bar and safely eject;
+# with Xcode running, eject is blocked and reported". The soak needs a real SSD
+# and a real Xcode, and is printed at the end.
 #
-#   "from a cold start you can drive everything from the menu bar and safely
-#    eject; with Xcode running, eject is correctly blocked and reported."
-#
-# That is a human, a real SSD and a real copy of Xcode, so the automated half
-# checks everything that soak depends on and the script prints the soak:
-#
-#   - the CLI's side of both flows, run for real against a temp dir standing in
-#     for the mount: `shell` resolves to argv and spawns nothing, `eject` stops
-#     first and refuses second, EJECT_BLOCKED carries the holders the menu
-#     renders, and the same call succeeds once the holder quits — which is
-#     exactly what Retry does.
-#   - the app sources Phase 7 adds, and the properties that make them right
-#     (test/phase7.test.ts): a blocked eject survives the refresh that follows
-#     it, nothing in Swift can force an unmount, the auto-shell preference
-#     reaches `up`, and a missing `cproj` is a first-run state rather than one
-#     failed command.
-#   - the build settings, including NSAppleEventsUsageDescription: without it
-#     macOS TERMINATES the app the first time it drives a terminal, which is
-#     Phase 7's own headline flow.
-#   - when a Swift toolchain is present, a type-check and an SF Symbol check.
-#     Still weaker than ⌘B (see phase6's header) — nothing here builds, signs,
-#     or opens Xcode (CLAUDE.md's boundary).
-#   - every earlier phase still passes.
+# Checks both flows' CLI side for real against a temp mount — `shell` resolves
+# to argv and spawns nothing; `eject` stops first, refuses second, carries the
+# holders the menu renders, and succeeds once the holder quits, which is exactly
+# what Retry does — plus the Phase 7 app properties (test/phase7.test.ts), the
+# build settings, and a type-check/SF Symbol pass when a Swift toolchain is
+# present (same caveat as phase 6's header).
 #
 #   bash test/phase7-done-check.sh
 set -euo pipefail
@@ -38,7 +23,7 @@ pass=0
 fail=0
 manual=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }

@@ -56,12 +56,28 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     /// EJECT_BLOCKED. `holders` is the CLI's answer, rendered verbatim; the app
     /// never forces and offers Retry instead (§10).
     case blocked(holders: [SsdHolder], message: String)
+    /// EJECT_BLOCKED because Docker Desktop's VM still holds the volume — kept
+    /// apart from `blocked` because the user's move is different. There is
+    /// nothing to quit and no retry that works: the disk goes when the ENGINE
+    /// stops, so the panel offers that instead of "quit them, then Retry".
+    ///
+    /// `engineStopped` is the same refusal arriving AFTER that offer was taken:
+    /// the CLI stopped the engine, waited for the VM to let go, and the disk
+    /// still would not unmount. The move changes again — there is no engine
+    /// left to stop — so the panel renders the CLI's own sentence and offers
+    /// only Retry, rather than a button that would repeat what just happened.
+    case blockedByDocker(holders: [SsdHolder], message: String, engineStopped: Bool)
     /// Unmounted. The "safe to unplug" state (§10, §11).
     case ejected(volume: String, stopped: [String])
     /// Something else went wrong — the SSD already gone, Docker refusing.
     case failed(message: String)
 
-    var isBlocked: Bool { if case .blocked = self { return true }; return false }
+    var isBlocked: Bool {
+        switch self {
+        case .blocked, .blockedByDocker: return true
+        default: return false
+        }
+    }
     var isEjected: Bool { if case .ejected = self { return true }; return false }
 }
 
@@ -445,19 +461,26 @@ final class CprojStore: ObservableObject {
     /// Retry IS this method: `cproj eject` is idempotent in the way that
     /// matters (it stops what is up, checks again, unmounts), so a second call
     /// after the user quits Xcode is the whole recovery.
-    func closeAllAndEject() async {
+    ///
+    /// `stopDocker` is the one thing this flow can escalate, and only because
+    /// the user pressed the button that says so: Docker Desktop's VM holds the
+    /// SSD for as long as it runs, so a disk with every container stopped can
+    /// still be refused, and no Retry ever clears it. It stops the ENGINE, not
+    /// a holder — nothing is killed and nothing is forced.
+    func closeAllAndEject(stopDocker: Bool = false) async {
         guard !isBusy else { return }
         ejectPhase = .working
 
-        let result = await perform("Ejecting") { client in
-            try await client.eject()
+        let result = await perform(stopDocker ? "Stopping Docker, then ejecting" : "Ejecting") { client in
+            try await client.eject(stopDocker: stopDocker)
         }
 
         if let result {
             ejected = result.ejected
             ejectPhase = .ejected(volume: result.volume, stopped: result.stopped)
             let stopped = result.stopped.isEmpty ? "" : " Stopped \(result.stopped.joined(separator: ", "))."
-            notice = "\(result.volume) ejected — safe to unplug.\(stopped)"
+            let engine = result.dockerStopped == true ? " The Docker engine was stopped — start it again before your next Start." : ""
+            notice = "\(result.volume) ejected — safe to unplug.\(stopped)\(engine)"
             return
         }
 
@@ -468,7 +491,14 @@ final class CprojStore: ObservableObject {
             ejectPhase = .ready
             return
         }
-        if failure.code == .ejectBlocked {
+        if failure.isRuntimeHold || failure.isRuntimeHoldAfterStop {
+            ejectPhase = .blockedByDocker(
+                holders: failure.holders,
+                message: failure.failureReason ?? "Docker’s virtual machine is still holding the SSD.",
+                engineStopped: failure.isRuntimeHoldAfterStop
+            )
+            lastError = nil
+        } else if failure.code == .ejectBlocked {
             ejectPhase = .blocked(
                 holders: failure.holders,
                 message: failure.failureReason ?? "Something is still holding the SSD."

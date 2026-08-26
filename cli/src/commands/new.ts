@@ -15,12 +15,12 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
-import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetype.ts'
+import { ARCHETYPES, ARCHETYPE_APP_PORT, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetype.ts'
 import type { Archetype } from '../model/archetype.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { NewOutput } from '../model/lifecycle.ts'
 import type { AttachedService } from '../model/service.ts'
-import { allocatePorts } from '../allocator.ts'
+import { allocateAppPort, allocatePorts } from '../allocator.ts'
 import { describeService } from '../services.ts'
 import { parseServiceList, resolveServices } from './service.ts'
 import { seededFiles } from '../scaffold.ts'
@@ -89,9 +89,18 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     created: ctx.now().toISOString(),
   }
 
+  // The dev-server port first, so it is in the taken set before any service is
+  // served from a band that could reach it (§9). Archetypes with no dev server
+  // get nothing and the field stays absent.
+  const appPortBase = ARCHETYPE_APP_PORT[archetype]
+  if (appPortBase !== undefined) {
+    manifest.app_port = await allocateAppPort(ctx, name, appPortBase)
+  }
+
   const attached: AttachedService[] = []
   if (definitions.length > 0) {
-    const allocated = await allocatePorts(ctx, name, definitions)
+    const reserved = manifest.app_port === undefined ? [] : [manifest.app_port]
+    const allocated = await allocatePorts(ctx, name, definitions, reserved)
     const services: Record<string, { host_port: number }> = {}
     for (const { key, definition } of definitions) {
       const hostPort = allocated.get(key)

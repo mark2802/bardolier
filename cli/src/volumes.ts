@@ -37,6 +37,7 @@ import type { Context } from './context.ts'
 import { CprojError } from './errors.ts'
 import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, ROLE_CACHE, volumeName } from './compose.ts'
 import { discoverProjects } from './projects.ts'
+import { homeVolumeName } from './naming.ts'
 import type { DockerVolume } from './docker.ts'
 import type { ResolvedCatalogue } from './catalogue.ts'
 import type { OrphanedVolume } from './model/status.ts'
@@ -118,6 +119,11 @@ function claimsFromManifests(ctx: Context): Claims {
   let catalogue: ResolvedCatalogue | null = null
 
   for (const project of discovery.projects) {
+    // The dev container's $HOME is claimed by the project existing at all — it
+    // needs no attachment and no catalogue, which is why it is asserted here
+    // rather than in the loop below. Deleting the project is what releases it.
+    names.set(homeVolumeName(project.name), project.name)
+
     // The cache is claimed by the base image, not by any attachment — a bare
     // android project with no services still builds with it. `projects` is
     // sorted, so the project named in a VOLUME_IN_USE refusal is stable.

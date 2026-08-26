@@ -1,29 +1,18 @@
 /**
- * Phase 8 tests — the mobile base images, and the boundary they encode.
- *
- * Phase 8's done-check builds `claude-ios` and `claude-and` for real and looks
- * inside them (`test/phase8-done-check.sh`); that takes a daemon, a network and
- * several gigabytes, so it is not what `npm test` runs. What a fast test CAN
- * own is everything the built image is judged against:
- *
- *   - THE MAP IS COMPLETE. Every archetype in §4.3 now resolves to a Dockerfile
- *     that exists, so `build` has no `unavailable` left to report and `doctor`'s
- *     "base images missing" finding means "not built yet", never "never will be".
- *   - THE BUILD-ARG CONTRACT. Each Dockerfile takes HOST_UID/HOST_GID and drops
- *     to that user at /work, which is the whole reason `cproj build` exists
- *     rather than `docker build`. An image that skipped it would hand the Mac
- *     back root-owned files, and only a real build would notice.
- *   - THE ARCHITECTURE PIN AGREES WITH ITSELF. `claude-and` is x86_64-only
- *     because Google's aapt2 is; `build` and the generated compose file both
- *     have to say so, or the image is built for one platform and started on
- *     another. One constant, two readers, checked here.
- *   - THE BOUNDARY IS IN THE IMAGE, not only in prose. The ios base carries no
- *     `xcodebuild` and the android base no `adb`, because CLAUDE.md's rule that
- *     the agent must not attempt host-only steps is worth more when there is
- *     nothing in the container to attempt them with.
- *
- * The seeded CLAUDE.md that tells the agent all this is Phase 2's (§10); what
- * is asserted here is that the image and that text agree.
+ * Phase 8 — the mobile base images and the boundary they encode. Building them
+ * for real takes a daemon, a network and gigabytes (phase8-done-check.sh); what
+ * a fast test owns is everything the built image is judged against:
+ *   - THE MAP IS COMPLETE: every §4.3 archetype resolves to a Dockerfile that
+ *     exists, so `unavailable` means "not built yet", never "never will be".
+ *   - THE BUILD-ARG CONTRACT: each Dockerfile takes HOST_UID/HOST_GID and drops
+ *     to that user at /work — the whole reason `cproj build` exists. Skipping it
+ *     hands the Mac root-owned files, and only a real build would notice.
+ *   - THE PIN AGREES WITH ITSELF: `claude-and` is x86_64-only because aapt2 is,
+ *     and `build` and the generated compose file must both say so. One
+ *     constant, two readers.
+ *   - THE BOUNDARY IS IN THE IMAGE: no `xcodebuild` in the ios base, no `adb`
+ *     in the android one — a rule the container cannot disobey. Asserted here
+ *     against the seeded CLAUDE.md (§10) that states it.
  */
 
 import { test, describe, afterEach } from 'node:test'
@@ -125,7 +114,7 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
 
 // ── The build-arg contract every base image keeps ─────────────────────────────
 
-describe('the base images keep the ownership contract (implementation plan, Phase 2)', () => {
+describe('the base images keep the ownership contract (HOST_UID/HOST_GID)', () => {
   for (const image of BASE_IMAGES) {
     test(`${image} takes the host identity and works at /work as that user`, () => {
       const text = dockerfile(image)
@@ -286,7 +275,10 @@ describe('the android toolchain cache is shared, not per project (images.ts)', (
     // Nothing changes for an image without a cache — no mount, no volumes key.
     const web = renderCompose({ manifest: manifest('site'), catalogue: services })
     assert.ok(!web.includes(CACHE), 'an image with no cache must not gain one')
-    assert.ok(!/\nvolumes:\n/.test(web), 'a serviceless web project still declares no named volume at all')
+    // It DOES declare its own home volume — every project has one — but nothing
+    // shared: the cache is the android image's, and a web project never sees it.
+    assert.match(web, /\nvolumes:\n/)
+    assert.ok(!web.includes('external: true'), 'a web project shares no volume with anyone')
 
     // Same manifest, same bytes (§9).
     assert.equal(android, renderCompose({ manifest: droid(), catalogue: services }))
@@ -359,6 +351,7 @@ describe('the android toolchain cache is shared, not per project (images.ts)', (
     const docker = stubDocker({
       volumes: [
         { name: CACHE, labels: { 'cproj.role': 'cache' } },
+        { name: 'cproj-droid-home', labels: { 'cproj.project': 'droid', 'cproj.role': 'home' } },
         { name: 'droid_pgdata', labels: { 'cproj.project': 'droid', 'cproj.service': 'postgres' } },
       ],
     })
@@ -367,6 +360,10 @@ describe('the android toolchain cache is shared, not per project (images.ts)', (
 
     await runDelete(ctx, { name: 'droid', force: true, keepData: false, purge: true, json: true })
     const removed = docker.calls.filter((call) => call.kind === 'removeVolume').map((call) => call.name)
-    assert.deepEqual(removed, ['droid_pgdata'], 'purge destroys what the project owns, not what it shares')
+    assert.deepEqual(
+      removed,
+      ['cproj-droid-home', 'droid_pgdata'],
+      'purge destroys what the project owns — its home included — not what it shares',
+    )
   })
 })

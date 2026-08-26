@@ -1,16 +1,12 @@
 /**
- * Test scaffolding.
+ * Test scaffolding: fakes for everything outside the process — a temp dir for
+ * the SSD, a scripted Docker, port probe, confirm prompt, SSD device and clock.
+ * Together they exercise the whole CLI, mutations included, on a machine with
+ * no SSD and no daemon — the point of the seams in `src/context.ts`.
  *
- * Fakes stand in for everything outside the process: a temp directory in place
- * of the SSD, a scripted Docker, a scripted port probe, a scripted confirmation
- * prompt, a scripted SSD device and a frozen clock. Together they let the whole
- * CLI — including the Phase 2 mutations and Phase 4's eject — be exercised on a
- * machine with no SSD and no daemon, which is the point of the seams in
- * `src/context.ts`.
- *
- * The Docker stub RECORDS what it was asked to do (`docker.calls`). For the
- * lifecycle commands that is the assertion that matters: `down` must never pass
- * `-v`, `up` must target the generated file, and so on.
+ * The Docker stub RECORDS what it was asked to do (`docker.calls`); for the
+ * lifecycle commands that is the assertion that matters (`down` must never pass
+ * `-v`, `up` must target the generated file).
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -20,7 +16,16 @@ import { stringify as stringifyYaml } from 'yaml'
 
 import type { Context, ContextOptions } from '../cli/src/context.ts'
 import { createContext } from '../cli/src/context.ts'
-import type { BuildRequest, ComposeTarget, Docker, DockerContainer, DockerImage, DockerVolume } from '../cli/src/docker.ts'
+import type {
+  BuildRequest,
+  ComposeTarget,
+  ContainerExec,
+  Docker,
+  DockerContainer,
+  DockerImage,
+  DockerVolume,
+  ExecResult,
+} from '../cli/src/docker.ts'
 import type { Holder, SsdDevice } from '../cli/src/device.ts'
 import type { ProjectManifest } from '../cli/src/model/project.ts'
 import type { PortProbe } from '../cli/src/ports.ts'
@@ -130,6 +135,19 @@ export type StubDockerOptions = {
    * way of modelling "the daemon did what it was told".
    */
   readonly startsAs?: readonly string[]
+  /**
+   * What `exec` answers, keyed by nothing — one script for every call. The
+   * default is a non-zero exit, which is the honest default: most tests have no
+   * agent in the container, and the handoff must degrade rather than invent.
+   */
+  readonly exec?: (request: ContainerExec) => ExecResult
+  /**
+   * What stopping the Docker engine does to the rest of the world — usually
+   * `() => device.setRuntimeHolders([])`, the stub's way of saying the VM let
+   * go of the volume. Throw from here to model a Docker with no `desktop`
+   * plugin to stop.
+   */
+  readonly onStopEngine?: () => void
 }
 
 /** One recorded mutation. */
@@ -140,6 +158,8 @@ export type DockerCall =
   | { readonly kind: 'ensureVolume'; readonly name: string; readonly labels: Readonly<Record<string, string>> }
   | { readonly kind: 'removeVolume'; readonly name: string }
   | { readonly kind: 'removeContainer'; readonly name: string }
+  | { readonly kind: 'exec'; readonly request: ContainerExec }
+  | { readonly kind: 'stopEngine' }
 
 export type StubDocker = Docker & {
   /** Mutations in the order they were requested. */
@@ -157,6 +177,8 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
     volumes.set(volume.name, volume)
   }
   const inUse = new Set(options.volumesInUse ?? [])
+  const execScript =
+    options.exec ?? (() => ({ code: 1, stdout: '', stderr: 'stubDocker: no exec script configured' }))
 
   const fail = async (): Promise<never> => {
     throw new Error('stubDocker: queried while unavailable')
@@ -225,7 +247,32 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
       calls.push({ kind: 'removeContainer', name })
       running.delete(name)
     },
+    async exec(request) {
+      // Deliberately does NOT `requireAvailable`: the real one never throws, and
+      // a stub that did would hide the fact that its caller handles everything.
+      calls.push({ kind: 'exec', request })
+      return execScript(request)
+    },
+    async stopEngine() {
+      calls.push({ kind: 'stopEngine' })
+      options.onStopEngine?.()
+    },
   }
+}
+
+export type StubDeviceOptions = {
+  /**
+   * The container runtime's hold — what the real device reports from
+   * `runtimeHolders()` and deliberately leaves out of `holders()`. Present
+   * means `eject` is refused the way Docker Desktop's live VM refuses it.
+   */
+  readonly runtime?: readonly Holder[]
+  /**
+   * Who `diskutil` NAMES in its refusal, when that differs from who is holding
+   * it — an empty array is the real and awkward case where it refuses without
+   * naming anyone. Defaults to `runtime`.
+   */
+  readonly dissenters?: readonly Holder[]
 }
 
 export type StubDevice = SsdDevice & {
@@ -233,25 +280,64 @@ export type StubDevice = SsdDevice & {
   readonly ejected: string[]
   /** Change who is holding the volume — a shell opened, or quit, mid-test. */
   setHolders(holders: readonly Holder[]): void
+  /** Change the runtime's hold — what stopping the Docker engine amounts to. */
+  setRuntimeHolders(holders: readonly Holder[]): void
+  /**
+   * Let go of the volume on the `probes`th call to `runtimeHolders`, not at
+   * once — the real thing after `docker desktop stop`, where the command has
+   * returned but the VM helper still has the descriptors open for a few
+   * seconds. `setRuntimeHolders([])` is the same event with the delay removed.
+   */
+  releaseRuntimeAfter(probes: number): void
+  /** How many times the runtime's hold has been asked about. */
+  runtimeProbes(): number
 }
 
 /** An SSD that answers a scripted holder list instead of running `lsof`. */
-export function stubDevice(initial: readonly Holder[] = []): StubDevice {
+export function stubDevice(initial: readonly Holder[] = [], options: StubDeviceOptions = {}): StubDevice {
   let holders = [...initial]
+  let runtime = [...(options.runtime ?? [])]
+  let releaseAfter: number | null = null
+  let probes = 0
   const ejected: string[] = []
   return {
     ejected,
     setHolders(next) {
       holders = [...next]
     },
+    setRuntimeHolders(next) {
+      runtime = [...next]
+    },
+    releaseRuntimeAfter(next) {
+      releaseAfter = next
+    },
+    runtimeProbes: () => probes,
     async holders() {
       return holders
+    },
+    async runtimeHolders() {
+      probes += 1
+      if (releaseAfter !== null && probes >= releaseAfter) {
+        runtime = []
+        releaseAfter = null
+      }
+      return runtime
     },
     async eject(mountPoint) {
       if (holders.length > 0) {
         // The real `diskutil` would refuse too; a stub that ejected anyway
         // would let a bug in the ordering pass unnoticed.
         throw new CprojError('EJECT_BLOCKED', `${mountPoint} is held by ${holders.length} process(es).`)
+      }
+      if (runtime.length > 0) {
+        // The refusal that only stopping the engine clears, shaped like the
+        // real one: diskutil's words, and whoever it named (if anyone).
+        const named = options.dissenters ?? runtime
+        throw new CprojError(
+          'EJECT_BLOCKED',
+          `diskutil refused to eject ${mountPoint}: Unmount failed.`,
+          { holders: [...named], reason: 'diskutil-refused' },
+        )
       }
       ejected.push(mountPoint)
     },
@@ -277,6 +363,21 @@ export function stubConfirm(answer: boolean): Confirm & { readonly questions: st
     return answer
   }
   return Object.assign(confirm, { questions })
+}
+
+/**
+ * A sleep that records instead of sleeping.
+ *
+ * `eject` waits for the Docker VM to release the volume, and a test that really
+ * waited would pay fifteen seconds to assert an ordering. The delays are the
+ * assertion: that the retry waited at all, and how many times.
+ */
+export function stubWait(): ((ms: number) => Promise<void>) & { readonly delays: number[] } {
+  const delays: number[] = []
+  const wait = async (ms: number) => {
+    delays.push(ms)
+  }
+  return Object.assign(wait, { delays })
 }
 
 /** The clock every test sees unless it says otherwise. */
@@ -305,6 +406,9 @@ export function makeContext(
       holders: async () => {
         throw new Error('unexpected holder check: pass a stubDevice() to makeContext')
       },
+      runtimeHolders: async () => {
+        throw new Error('unexpected holder check: pass a stubDevice() to makeContext')
+      },
       eject: async () => {
         throw new Error('unexpected eject: pass a stubDevice() to makeContext')
       },
@@ -316,6 +420,9 @@ export function makeContext(
     },
     host: { uid: 501, gid: 20 },
     now: () => FIXED_NOW,
+    // Nothing in a test may actually sleep; a test that wants to see the waits
+    // passes its own `stubWait()`.
+    wait: async () => {},
     ...rest,
   })
 }

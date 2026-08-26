@@ -1,16 +1,11 @@
 /**
- * Phase 2 tests — the project lifecycle: new, up, down, delete, and compose
- * generation.
- *
- * Everything runs with no SSD and no Docker daemon: the SSD is a temp directory
- * and Docker is a recording stub. Three properties carry the weight, because
- * the rest of the CLI is built on them:
- *
- *   - COMPOSE GENERATION IS DETERMINISTIC (§9). Same manifest, same bytes,
- *     regardless of path, key order, or how many times you regenerate.
- *   - up/down ARE IDEMPOTENT (§2), and neither invents state.
- *   - DESTRUCTIVE ACTIONS ARE CONSERVATIVE: down keeps data, delete confirms,
- *     and --keep-data is the default.
+ * Phase 2 — the project lifecycle (new, up, down, delete) and compose
+ * generation. No SSD, no daemon. Three properties the rest is built on:
+ *   - compose generation is DETERMINISTIC (§9): same manifest, same bytes,
+ *     whatever the path, key order, or number of regenerations.
+ *   - up/down are IDEMPOTENT (§2) and neither invents state.
+ *   - destructive actions are CONSERVATIVE: down keeps data, delete confirms,
+ *     --keep-data is the default.
  */
 
 import { test, describe, afterEach } from 'node:test'
@@ -21,7 +16,7 @@ import { parse as parseYaml } from 'yaml'
 
 import { CprojError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { COMPOSE_FILENAME, attachedKeys, projectVolumes, renderCompose } from '../cli/src/compose.ts'
+import { COMPOSE_FILENAME, PASSTHROUGH_ENV, attachedKeys, projectVolumes, renderCompose } from '../cli/src/compose.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../cli/src/naming.ts'
 import { orderManifest, regenerateCompose, renderManifest, requireProject } from '../cli/src/workspace.ts'
 import { seededFiles } from '../cli/src/scaffold.ts'
@@ -118,7 +113,10 @@ describe('compose generation (cli-spec.md §9)', () => {
     const dev = doc.services.dev
     assert.equal(dev.container_name, devContainerName('myapp'))
     assert.equal(dev.image, 'claude-web:latest')
-    assert.deepEqual(dev.volumes, ['.:/work'])
+    // The bind mount, then $HOME as a per-project named volume: `down` removes
+    // the container, so a home in its writable layer would lose the shell
+    // history and the `claude login` on every stop (images.ts, CONTAINER_HOME).
+    assert.deepEqual(dev.volumes, ['.:/work', 'cproj-myapp-home:/state/home'])
     assert.equal(dev.working_dir, '/work')
     assert.deepEqual(dev.command, ['sleep', 'infinity'])
     assert.equal(dev.ports, undefined, 'the dev container must not publish host ports')
@@ -130,10 +128,25 @@ describe('compose generation (cli-spec.md §9)', () => {
     assert.ok(!rendered.includes('/tmp'))
   })
 
-  test('a bare project generates no volumes section', () => {
+  test('a bare project declares exactly one volume: the dev container home', () => {
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    assert.equal(doc.volumes, undefined)
+    // Every project has a home volume, so a `volumes:` block is no longer the
+    // sign that services are attached — the KEYS are.
+    assert.deepEqual(Object.keys(doc.volumes), ['cproj-myapp-home'])
+    assert.equal(doc.volumes['cproj-myapp-home'].labels['cproj.role'], 'home')
+    assert.equal(doc.volumes['cproj-myapp-home'].labels['cproj.project'], 'myapp')
     assert.deepEqual(Object.keys(doc.services), ['dev'])
+  })
+
+  test('the dev container inherits the host names it is lent, and no values', () => {
+    const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
+    // Compose's LIST form: a bare name is passed through when the environment
+    // running `compose up` has one and left UNSET otherwise. A `NAME=` here
+    // would put an empty credential in the container instead of none.
+    assert.deepEqual(doc.services.dev.environment, [...PASSTHROUGH_ENV])
+    for (const entry of doc.services.dev.environment) {
+      assert.ok(!entry.includes('='), `${entry} must not carry a value`)
+    }
   })
 
   test('services publish host:container and carry a named volume (§9)', () => {
@@ -450,9 +463,11 @@ describe('down (cli-spec.md §6)', () => {
     assert.equal(result.was_running, true)
     assert.equal(result.state, 'stopped')
     assert.equal(result.data_kept, true)
+    // The order is the point (§12): the handoff asks the agent while its
+    // container is still up. One `compose down` later there is nobody to ask.
     assert.deepEqual(
       docker.calls.map((c) => c.kind),
-      ['down'],
+      ['exec', 'down'],
     )
     assert.deepEqual(await docker.volumeNames(), ['myapp_pgdata'], 'down must not remove volumes')
     assert.ok(box.exists('myapp', 'project.yml'), 'down must not touch the project directory')
@@ -514,7 +529,10 @@ describe('delete (cli-spec.md §6)', () => {
   test('brings the project down, removes the dir, and keeps volumes by default', async () => {
     const box = sandbox()
     box.writeProject('myapp', withServices())
-    const docker = stubDocker({ running: [devContainerName('myapp')], volumes: ['myapp_pgdata', 'myapp_redisdata'] })
+    const docker = stubDocker({
+      running: [devContainerName('myapp')],
+      volumes: ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'],
+    })
 
     const result = await runDelete(makeContext(box, docker), request('myapp', { force: true }))
 
@@ -522,25 +540,47 @@ describe('delete (cli-spec.md §6)', () => {
     assert.equal(result.deleted, true)
     assert.deepEqual(result.released_ports, [5433, 6380])
     assert.deepEqual(result.removed_volumes, [])
-    assert.deepEqual(result.kept_volumes, ['myapp_pgdata', 'myapp_redisdata'])
+    // The dev container's home is kept like any other data volume — a plain
+    // delete destroys nothing, so the shell history and the login outlive it.
+    assert.deepEqual(result.kept_volumes, ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
     assert.ok(!box.exists('myapp'), 'the project directory must be gone')
     assert.deepEqual(
       docker.calls.map((c) => c.kind),
       ['down'],
       'delete must stop containers before removing the directory',
     )
-    assert.deepEqual(await docker.volumeNames(), ['myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(await docker.volumeNames(), ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
   })
 
   test('--purge is the only path that destroys volumes', async () => {
     const box = sandbox()
     box.writeProject('myapp', withServices())
-    const docker = stubDocker({ volumes: ['myapp_pgdata', 'myapp_redisdata'] })
+    const docker = stubDocker({ volumes: ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'] })
 
     const result = await runDelete(makeContext(box, docker), request('myapp', { force: true, purge: true }))
-    assert.deepEqual(result.removed_volumes, ['myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(result.removed_volumes, ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
     assert.deepEqual(result.kept_volumes, [])
     assert.deepEqual(await docker.volumeNames(), [])
+  })
+
+  test('--purge on a project that was never started still deletes it', async () => {
+    const box = sandbox()
+    box.writeProject('myapp', withServices())
+    // No volumes at all: Compose creates them at `up`, and this project never
+    // ran. Asking Docker to remove one that does not exist is an ERROR, so an
+    // unfiltered purge would abort after `down` and strand the directory.
+    const docker = stubDocker({ volumes: [] })
+
+    const result = await runDelete(makeContext(box, docker), request('myapp', { force: true, purge: true }))
+
+    assert.equal(result.deleted, true)
+    assert.deepEqual(result.removed_volumes, [], 'nothing existed, so nothing was removed')
+    assert.ok(!box.exists('myapp'), 'the project directory must still be gone')
+    assert.deepEqual(
+      docker.calls.filter((call) => call.kind === 'removeVolume'),
+      [],
+      'a volume Docker does not have must never be asked for',
+    )
   })
 
   test('confirms before deleting, and a refusal touches nothing', async () => {
@@ -749,8 +789,13 @@ describe('lifecycle (new → up → down → delete)', () => {
   })
 
   test('projectVolumes names exactly what delete --purge would remove', () => {
-    assert.deepEqual(projectVolumes(withServices('shop'), catalogue()), ['shop_pgdata', 'shop_redisdata'])
-    assert.deepEqual(projectVolumes(manifest('bare'), catalogue()), [])
+    // Sorted, and the dev container's home is one of the project's own.
+    assert.deepEqual(projectVolumes(withServices('shop'), catalogue()), [
+      'cproj-shop-home',
+      'shop_pgdata',
+      'shop_redisdata',
+    ])
+    assert.deepEqual(projectVolumes(manifest('bare'), catalogue()), ['cproj-bare-home'])
     assert.deepEqual(attachedKeys(withServices()), ['postgres', 'redis'])
   })
 

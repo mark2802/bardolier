@@ -210,13 +210,18 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['down'],
     group: 'Projects',
-    usage: 'down <name>',
+    usage: 'down <name> [--no-handoff]',
     summary: "Stop and remove the project's containers. Data persists. Idempotent.",
-    flags: [],
+    flags: [
+      {
+        name: '--no-handoff',
+        description: "Skip the handoff note. By default `down` records the repository's state and asks the agent in the dev container to summarise the session before it goes.",
+      },
+    ],
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('down'), 1)
-      return output(await runDown(createContext(), name), renderDown)
+      return output(await runDown(createContext(), name, { noHandoff: boolFlag(inv, 'noHandoff') }), renderDown)
     },
   },
   {
@@ -381,13 +386,18 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['eject'],
     group: 'Lifecycle / SSD',
-    usage: 'eject',
+    usage: 'eject [--stop-docker]',
     summary: 'down-all, check host holders via lsof, then eject the SSD. Never forces.',
-    flags: [],
+    flags: [
+      {
+        name: '--stop-docker',
+        description: "Stop the Docker engine without asking, if its VM is what holds the volume.",
+      },
+    ],
     errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       noArgs(inv, 'eject')
-      return output(await runEject(createContext()), renderEject)
+      return output(await runEject(createContext(), { stopDocker: boolFlag(inv, 'stop-docker') }), renderEject)
     },
   },
   {

@@ -1,23 +1,11 @@
 #!/usr/bin/env bash
-# Phase 3 done-check — implementation-plan.md.
-#
-#   "add postgres to two projects → each gets a distinct host port in its band →
-#    both `up` → connect from a host GUI to each on its port → restart one →
-#    port unchanged → remove from one → volume orphaned, port released → the
-#    freed port is reused by the next add."
-#
-# "Connect from a host GUI" is stood in for by a TCP connect from this machine
-# to the published port — the same thing TablePlus does first, and the only part
-# of it a script can assert.
-#
-# The SSD is stood in for with CPROJ_SSD_ROOT against a temp dir (§8), so this
-# runs with no SSD attached. The Docker half is real; set CPROJ_SKIP_DOCKER=1 to
-# run only the offline assertions.
-#
-# Keep this script: per CLAUDE.md, each CLI phase's done-check becomes a
-# regression check.
+# Phase 3 done-check — postgres on two projects: distinct host ports in-band,
+# both up, a TCP connect from this machine (what a GUI client does first), the
+# port unchanged across a restart, and removal orphaning the volume and freeing
+# the port for the next add. SSD is a temp dir (§8); the Docker half is real.
 #
 #   bash test/phase3-done-check.sh
+#   CPROJ_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,7 +15,7 @@ CPROJ="node cli/bin/cproj.js"
 pass=0
 fail=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
@@ -37,6 +25,9 @@ cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
     docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-postgres >/dev/null 2>&1 || true
     docker volume rm alpha_pgdata beta_pgdata >/dev/null 2>&1 || true
+  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
+    # Every project now owns a $HOME volume (cli-spec.md §9).
+    docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -212,6 +203,7 @@ fi
 if [ "$DOCKER_OK" = "1" ]; then
   docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-postgres >/dev/null 2>&1 || true
   docker volume rm alpha_pgdata beta_pgdata >/dev/null 2>&1 || true
+  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
 
   if ! docker image inspect claude-web:latest >/dev/null 2>&1; then
     printf '    building claude-web (first run only, this takes a few minutes)…\n'

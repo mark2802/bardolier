@@ -12,10 +12,14 @@
  */
 
 import type { Archetype } from './model/archetype.ts'
+import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import { WORKDIR } from './compose.ts'
 
 /** Ignored everywhere, whatever the archetype. */
-const COMMON_IGNORE = ['.DS_Store', '*.log', '.env', '.env.local']
+// `.cproj/` holds the handoff note (§12) — generated on every stop, so it is
+// churn rather than history. Ignored by default; track it deliberately if you
+// want the notes in the repo.
+const COMMON_IGNORE = ['.cproj/', '.DS_Store', '*.log', '.env', '.env.local']
 
 const NODE_IGNORE = ['node_modules/', 'dist/', 'build/', '.next/', 'coverage/']
 const SWIFT_IGNORE = ['.build/', '.swiftpm/', 'DerivedData/', '*.xcuserstate', 'xcuserdata/']
@@ -78,6 +82,34 @@ const BOUNDARY: Readonly<Record<Archetype, string>> = {
   ].join('\n'),
 }
 
+/**
+ * The dev-server note, for the archetypes that publish one (§9).
+ *
+ * The 0.0.0.0 sentence is the whole reason this section exists. A dev server
+ * that defaults to `localhost` binds the CONTAINER's loopback, which nothing on
+ * the Mac can reach — the port is published, the browser gets nothing, and the
+ * obvious conclusion ("the port mapping is broken") is the wrong one.
+ */
+function devServerNote(archetype: Archetype): string {
+  const port = ARCHETYPE_APP_PORT[archetype]
+  if (port === undefined) return ''
+  return `
+## The dev server
+
+This project publishes one port to the Mac: the dev server, on **${port}**
+inside the container. \`$PORT\` is set to it, and the host port it is published
+on may differ — run \`cproj status\` on the host for the URL to open.
+
+**Bind to \`0.0.0.0\`, not \`localhost\`.** A server bound to localhost listens on
+the container's own loopback, which no browser on the Mac can reach; the port
+mapping will look broken when it is not. Most frameworks take \`--host 0.0.0.0\`
+or an equivalent setting.
+
+This is the ONLY port this container publishes. Services are the other way
+round — you reach them by name over the network, as below.
+`
+}
+
 export function projectClaudeMd(name: string, archetype: Archetype): string {
   return `# CLAUDE.md — ${name}
 
@@ -91,7 +123,7 @@ is mounted at \`${WORKDIR}\` and owned by the host user, so files you create are
 editable on the Mac without a chown.
 
 ${BOUNDARY[archetype]}
-
+${devServerNote(archetype)}
 ## Services
 
 Backing services (Postgres, Redis, …) run as sibling containers on this

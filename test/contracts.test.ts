@@ -1,13 +1,7 @@
 /**
- * Contract tests — every command's payload against the schema that documents it.
- *
- * These guard the things the app will depend on from Phase 5 onward: the status
- * schema, the manifest schema, the catalogue, the error-code list, and from
- * Phase 4 the rest of §6's surface. They are the machine half of the
- * done-checks — `test/phase0-done-check.sh` onward run them.
- *
- * Phase 4 is the contract-freeze gate: once it passes, every schema here is
- * additive-only.
+ * Contract tests — every command's payload against the schema documenting it:
+ * status, the manifest, the catalogue, the error codes, and the rest of §6.
+ * The machine half of the done-checks. Phase 4 froze these; additive only.
  */
 
 import { test, describe } from 'node:test'
@@ -97,6 +91,10 @@ describe('status contract (cli-spec.md §7)', () => {
           state: 'stopped',
           services: [],
           dev_container: null,
+          // An `ios` project serves nothing, so §9's dev-server port is null
+          // rather than absent — the app reads a field, not a maybe-field.
+          app_port: null,
+          app_url: null,
         },
       ],
       orphaned_volumes: [],
@@ -609,7 +607,13 @@ describe('down-all and eject contracts (cli-spec.md §6, Lifecycle / SSD)', () =
     }
     assert.ok(validate('down-all', downAll).valid)
 
-    const eject: EjectOutput = { volume: '/Volumes/ssd', ejected: true, stopped: ['alpha'], holders: [] }
+    const eject: EjectOutput = {
+      volume: '/Volumes/ssd',
+      ejected: true,
+      stopped: ['alpha'],
+      holders: [],
+      docker_stopped: false,
+    }
     assert.ok(validate('eject', eject).valid)
   })
 

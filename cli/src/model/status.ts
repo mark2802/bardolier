@@ -42,6 +42,17 @@ export type StatusProject = {
   services: StatusService[]
   /** Container name, or null when the project is stopped. */
   dev_container: string | null
+  /**
+   * Host port the archetype's dev server is published on (§9), or null when
+   * this project publishes none — a non-web archetype, or one created before
+   * the field existed and not yet restarted.
+   */
+  app_port: number | null
+  /**
+   * The URL that opens `app_port`, or null alongside it. Reported rather than
+   * composed by the caller, for the same reason `connection_hint` is.
+   */
+  app_url: string | null
 }
 
 export type OrphanedVolume = {

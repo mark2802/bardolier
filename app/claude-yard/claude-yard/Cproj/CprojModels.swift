@@ -159,6 +159,18 @@ nonisolated struct CprojProject: Codable, Hashable, Identifiable, Sendable {
     let services: [ProjectService]
     /// Container name, or nil when the project is stopped.
     let devContainer: String?
+    /// Host port the archetype's dev server is published on (§9), or nil when
+    /// this project publishes none — a non-web archetype, or one that predates
+    /// the field and has not been restarted since.
+    let appPort: Int?
+    /// The URL that opens `appPort`. Taken from the CLI rather than built from
+    /// the port here, for the same reason `connectionHint` is: the scheme is
+    /// the contract's business, not the menu's.
+    ///
+    /// Spelled `appUrl`, not `appURL`, because `.convertFromSnakeCase` is what
+    /// maps it — the decoder produces `appUrl` from `app_url`, and an API-style
+    /// rename here would need a `CodingKeys` that says the same thing twice.
+    let appUrl: String?
 
     var id: String { name }
 }
@@ -382,6 +394,10 @@ nonisolated struct EjectOutput: Codable, Hashable, Sendable {
     /// Always empty on success; populated in `error.details.holders` on
     /// EJECT_BLOCKED (app-spec.md §10).
     let holders: [SsdHolder]
+    /// True when the Docker engine had to be stopped to release the volume.
+    /// Optional because the field is additive: a CLI from before it says
+    /// nothing, and nothing is the same as false here.
+    let dockerStopped: Bool?
 }
 
 /// A process holding files open on the SSD, as `lsof` reports it.

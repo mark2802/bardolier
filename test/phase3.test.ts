@@ -1,21 +1,13 @@
 /**
- * Phase 3 tests — services and port allocation.
- *
- * Still no SSD and no daemon: a temp directory stands in for the disk, the port
- * probe is scripted, and Docker is a recording stub. The scripted probe is the
- * important one — it is what lets "the host already holds 5432" be a test case
- * instead of a race against whatever this machine happens to be running.
- *
- * Four properties carry Phase 3, and they are the four §5 requirements:
- *
+ * Phase 3 — services and port allocation. No SSD, no daemon; the scripted port
+ * probe is what makes "the host already holds 5432" a test case rather than a
+ * race against this machine. The four §5 requirements:
  *   - UNIQUE across every manifest on the disk, not just this project's.
- *   - STABLE once assigned: nothing re-allocates a port that is already written
- *     down, and a squatted port fails loudly rather than being remapped.
- *   - BANDED: allocation starts at the catalogue's host_port_base.
- *   - RELEASED on remove/delete, and the freed port is reusable.
- *
- * Plus the safety rule that makes the rest simple: add and remove refuse while
- * the project is running, and remove never destroys a volume.
+ *   - STABLE once written down; a squatted port fails loudly, never remaps.
+ *   - BANDED from the catalogue's host_port_base.
+ *   - RELEASED on remove/delete and reusable.
+ * Plus the rule that keeps it simple: add/remove refuse while running, and
+ * remove never destroys a volume.
  */
 
 import { test, describe, afterEach } from 'node:test'
@@ -562,7 +554,7 @@ describe('add → up → status → down → remove → delete', () => {
 
     const deleted = await runDelete(ctx, { name: 'myapp', force: true, keepData: true, purge: false, json: true })
     assert.deepEqual(deleted.released_ports, [5432, 6379])
-    assert.deepEqual(deleted.kept_volumes, ['myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(deleted.kept_volumes, ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
 
     await project(ctx, 'next')
     const reused = await runServiceAdd(ctx, { project: 'next', service: 'postgres' })

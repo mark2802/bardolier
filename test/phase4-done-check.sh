@@ -1,33 +1,16 @@
 #!/usr/bin/env bash
-# Phase 4 done-check — implementation-plan.md. THE CONTRACT-FREEZE GATE.
+# Phase 4 done-check — THE CONTRACT-FREEZE GATE. The full lifecycle end to end:
+# new → service add → up → `shell --json` (run, not merely shaped) → status
+# ports → down → service remove → orphan with size → reclaim → delete → eject
+# blocked by a shell holding the volume, then clear once it quits.
 #
-#   "run the full lifecycle script end to end from the terminal (new → add
-#    service → up → `shell --json` resolves → status shows ports → down →
-#    remove service → orphan appears with size → reclaim → delete → eject
-#    blocked while a shell is cd'd into the SSD, then clear after quitting it)."
-#
-# What is real here and what is stood in for:
-#
-#   REAL   every command up to and including `delete`: a real Docker daemon, a
-#          real dev container, a real postgres, real named volumes, and real
-#          sizes read from `docker system df`. The `shell` argv is not merely
-#          checked in shape — it is RUN, and its output asserted.
-#   REAL   the holder half of `eject`: a background shell is cd'd into the
-#          stand-in SSD and `lsof` is asked about it through the same
-#          `createSsdDevice` the CLI ships. Blocked-then-clear is genuine — and
-#          it runs AFTER Docker has bind-mounted that same directory, which is
-#          what proves the container runtime's own descriptors do not stand in
-#          for a user's shell (see `isRuntimeHolder`).
-#   STOOD  the SSD itself, as in phases 1-3: `$CPROJ_SSD_ROOT` points at a temp
-#     IN   directory (§8), so this runs with no SSD attached.
-#   STUB   `diskutil eject` alone. A temp directory is not a mountable volume,
-#          and this check must never unmount a real disk. `runEject` is driven
-#          through a Context whose device does the real lsof probe and records
-#          the unmount instead of performing it — the ordering, the refusal and
-#          the success path are all exercised; only the syscall is not.
-#
-# Keep this script: per CLAUDE.md, each CLI phase's done-check becomes a
-# regression check.
+# REAL: Docker, the dev container, postgres, named volumes, sizes from
+# `docker system df`, and the lsof holder probe — which runs AFTER Docker has
+# bind-mounted the same directory, proving the runtime's own descriptors do not
+# stand in for a user's shell (`isRuntimeHolder`).
+# STOOD IN: the SSD (temp dir, §8).
+# STUBBED: `diskutil eject` alone — a done-check must never unmount a real disk,
+# so the Context records the unmount instead of performing it.
 #
 #   bash test/phase4-done-check.sh
 set -euo pipefail
@@ -39,7 +22,7 @@ CPROJ="node cli/bin/cproj.js"
 pass=0
 fail=0
 
-ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; pass=$((pass + 1)); }
+ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
 skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
@@ -52,6 +35,9 @@ cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
     docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-redis >/dev/null 2>&1 || true
     docker volume rm alpha_pgdata beta_redisdata >/dev/null 2>&1 || true
+  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
+    # Every project now owns a $HOME volume (cli-spec.md §9).
+    docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -137,6 +123,7 @@ fi
 if [ "$DOCKER_OK" = "1" ]; then
   docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-redis >/dev/null 2>&1 || true
   docker volume rm alpha_pgdata beta_redisdata >/dev/null 2>&1 || true
+  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
 
   if ! docker image inspect claude-web:latest >/dev/null 2>&1; then
     printf '    building claude-web (first run only, this takes a few minutes)…\n'
