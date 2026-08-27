@@ -22,6 +22,12 @@ sender is another. The `web` archetype's frontend can proxy to an internal
 backend (Part 2, option A of the guide) when only the browser needs to reach
 it, but a mobile client has no such intermediary to go through.
 
+The same limit shows up even when every consumer is a browser: a project
+with more than one of its own independently-served frontend/UI apps (a
+public site plus a separate staff/admin app, an internal tooling dashboard,
+...) needs each one reachable directly, and only the first can hold the
+archetype's single `app_port`.
+
 **Why it doesn't work today:** `project.yml` has one `app_port` field,
 assigned once by `new`/`up`; `status` and the app both assume one. The
 generated `docker-compose.yml` publishes exactly one port (§9,

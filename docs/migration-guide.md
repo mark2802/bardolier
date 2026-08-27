@@ -138,11 +138,19 @@ If the old Dockerfile (or CI config) pinned an exact language version, pin
 the same version in the new container so behaviour doesn't drift: a
 `.python-version` file for `uv`, an `.nvmrc`-equivalent for Node. This is
 free — it's not a new capability, just carrying an existing decision over.
+Check the file's content actually resolves as a plain interpreter version
+before copying it verbatim — some version-manager files instead name a
+pyenv-virtualenv (or similar) alias, which `uv`/an `.nvmrc`-equivalent can't
+resolve. If so, find the real underlying version wherever it's actually
+recorded (`pyenv versions`, the project's CI config, a lockfile) and pin that
+instead.
 
 ### 8. Decide how a second app process is reached
 
-If the project is frontend-only, skip this step. If it also has its own
-backend process (API, worker, ...), read **Part 2** now and make the call
+If the project is frontend-only and has only one frontend app, skip this
+step. If it has its own backend process (API, worker, ...), **or more than
+one of its own frontend/UI apps** (a public site plus a separate staff/admin
+app, an internal tooling UI, ...), read **Part 2** now and make the call
 before `up`.
 
 ### 9. Bring it up and verify
@@ -207,6 +215,11 @@ no second port field anywhere in the data model. This is a real, tracked gap
     compose file — it won't survive the next `up`, and it's exactly the kind
     of unreviewed one-off `docs/migration-guide-gaps.md` exists to prevent.
 
+- More than one of the project's own frontend/UI apps needs to be reached
+  directly by a browser (not just a backend) — there's no proxy relationship
+  between two sibling frontends, so each one beyond the first has the same
+  shape as case B. File it in the gaps doc the same way.
+
 **STOP:** if this project has (or will soon have) a native mobile client
 that needs the backend directly, say so explicitly before continuing past
 step 8 — confirm A is still worth wiring now versus waiting, and confirm the
@@ -263,6 +276,12 @@ gaps entry is filed.
   Their job moves to the generated compose + the shared base image. Safe to
   leave them in place, unused (useful as prod-deploy reference) — deleting is
   the project owner's call, not a required step.
+
+- **An env var points at a genuinely external, LAN-only service** (a local
+  LLM server, lab/dev hardware, a teammate's machine) by a raw IP or
+  non-`localhost` hostname. Leave it as-is — Docker's default bridge network
+  reaches the LAN the same way the Mac does — but confirm reachability from
+  inside the container once, after the first `up`, rather than assuming it.
 
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
