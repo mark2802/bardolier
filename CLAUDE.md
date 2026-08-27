@@ -7,6 +7,9 @@ whose data lives on an external SSD.
 - `docs/app-spec.md` — the menu-bar app; a thin client over the CLI.
 - `docs/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
   Phases 0-9 are done; their plan is history in `docs/archive/`.
+- `docs/migration-guide.md` — bringing an existing (non-cproj) project onto
+  cproj; `docs/migration-guide-gaps.md` tracks capabilities it needs that
+  don't exist yet.
 
 Read only the spec **section** a task needs (`sed -n` a range), not the whole file.
 
