@@ -43,7 +43,13 @@ Before touching anything, read (don't yet act on):
 
 - Archetype is `web` unless the project is actually a native mobile client
   with no web/API half (then see the `ios`/`android` phases instead — this
-  guide doesn't cover that side).
+  guide doesn't cover that side), or the project has no frontend/dev-server
+  at all — a research/analysis codebase, a CLI tool, a batch pipeline, a
+  redistributable package — in which case it's `library`: same base image
+  and toolchain as `web`, but no `app_port` and nothing published. Most of
+  the rest of this guide (step 6's service hostnames, step 8, and all of
+  Part 2) only applies when there are backing services or a dev server to
+  worry about — skip what doesn't apply.
 - For each backing service in the old compose file, decide:
   - **It's postgres/redis/mongo and an official image** → use the catalogue
     entry as-is. Don't pin a project-specific version unless step-9-style
@@ -75,6 +81,12 @@ However it arrives, exclude anything regenerable that shouldn't cost SSD
 space: `node_modules`, `.venv`, `__pycache__`, build output (`.next`, `dist`,
 `build`), `.DS_Store`, tool caches (`.mypy_cache`, `.pytest_cache`). These are
 already excluded by the project's own `.gitignore` in most cases — check.
+Don't treat "excluded by the project's `.gitignore`" as a synonym for "safe
+to skip," though — a `.gitignore` also commonly excludes large raw datasets,
+model checkpoints, or media assets purely for size, not because they're
+regenerable. Check what a gitignored entry actually *is* before leaving it
+behind; anything irreplaceable still needs to move (by hand, not via git)
+even though git itself will never carry it.
 Which of the three below applies is exactly what step 1's `git remote -v`
 check was for.
 
@@ -164,7 +176,9 @@ hand — this container is a devbox to exec into, nothing supervises processes
 for you. Then verify from the **Mac**, not from inside the container:
 `cproj status <name>` for the URL, load it in a browser, confirm a page that
 hits the backend actually gets data, confirm the backend can reach its
-services by name.
+services by name (archetypes with a dev server; a `library` project instead
+just runs its scripts/test suite by hand inside the container and confirms
+they complete — there's no URL to load).
 
 ### 10. Note anything the project needed that cproj couldn't do
 

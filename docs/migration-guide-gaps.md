@@ -46,6 +46,34 @@ that pairs a web frontend with native mobile clients.
 
 ---
 
+### An interactive dev-tool port for `library` (and other portless) archetypes
+
+**Need:** a `library`-archetype project wants a browser-reachable tool
+running inside its dev container during interactive work — a
+Jupyter/notebook server, a local dashboard, a debugger UI — not a frontend
+dev server, just an interactive process a human wants to point a Mac browser
+at while working.
+
+**Why it doesn't work today:** `library` (like `ios`/`android`) publishes
+nothing at all — there's no `app_port` field to reuse, and the `web`
+archetype's single published port is specifically the frontend dev server,
+not a general-purpose slot. This is a different shape from the second-port
+gap above: that one is about a *second* port beside an archetype that
+already has one; this is about archetypes that start with *zero*.
+
+**Shape a future phase would need to decide:** whether this is an opt-in
+port some archetypes can declare (and if so, on what basis it's
+allocated/persisted — a per-project flag rather than anything
+service-catalogue-shaped, since it's not a sibling container), or whether it
+stays out of scope and such tools are expected to run without browser access
+(CLI-driven / VS Code remote / etc.) in a container devbox. Not designed
+yet.
+
+**First seen:** while writing the migration guide, considering a project
+shaped like pure research/analysis code that also pins a notebook server.
+
+---
+
 ## Resolved
 
 (none yet)
