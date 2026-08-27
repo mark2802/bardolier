@@ -53,6 +53,15 @@ export function orderManifest(manifest: ProjectManifest): Record<string, unknown
   // After the services, because it is the same kind of thing — a host port
   // assigned once and kept (§5, §9) — and before `created`, which stays last.
   if (typeof manifest.app_port === 'number') ordered.app_port = manifest.app_port
+  const extraPorts = manifest.extra_ports ?? {}
+  const extraPortNames = Object.keys(extraPorts).sort()
+  if (extraPortNames.length > 0) {
+    const sorted: Record<string, unknown> = {}
+    for (const name of extraPortNames) {
+      sorted[name] = { container_port: extraPorts[name]?.container_port, host_port: extraPorts[name]?.host_port }
+    }
+    ordered.extra_ports = sorted
+  }
   ordered.created = manifest.created
   return ordered
 }

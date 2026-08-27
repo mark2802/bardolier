@@ -7,6 +7,7 @@
  */
 
 import type { Archetype } from './archetype.ts'
+import type { AttachedExtraPort } from './extraport.ts'
 
 /** A project is `partial` when some but not all of its containers are up. */
 export const PROJECT_STATES = ['running', 'stopped', 'partial'] as const
@@ -53,6 +54,8 @@ export type StatusProject = {
    * composed by the caller, for the same reason `connection_hint` is.
    */
   app_url: string | null
+  /** Extra ports declared on this project (§5.1), sorted by name. Additive since Phase 12. */
+  extra_ports?: AttachedExtraPort[]
 }
 
 export type OrphanedVolume = {

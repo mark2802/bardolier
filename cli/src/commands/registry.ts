@@ -47,8 +47,9 @@ import {
   runServiceAdd,
   runServiceRemove,
 } from './service.ts'
+import { collectPortList, renderPortAdd, renderPortList, renderPortRemove, runPortAdd, runPortRemove } from './port.ts'
 
-export const COMMAND_GROUPS = ['Projects', 'Services', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
+export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
 
 export type FlagSpec = {
@@ -318,6 +319,58 @@ export const COMMANDS: readonly CommandNode[] = [
       noArgs(inv, 'catalogue')
       return output(collectCatalogue(createContext()), renderCatalogue)
     },
+  },
+
+  // ── Ports ──────────────────────────────────────────────────────────────────
+  {
+    path: ['port'],
+    group: 'Ports',
+    usage: 'port <add | remove | list>',
+    summary: 'Named ports published from the dev container, beyond the archetype\'s own app_port. Add/remove require the project stopped.',
+    flags: [],
+    errors: [],
+    run: group('port'),
+    children: [
+      {
+        path: ['port', 'add'],
+        group: 'Ports',
+        usage: 'port add <project> <name> --container-port <n>',
+        summary: 'Declare an extra port, assign its host port, regenerate compose.',
+        flags: [{ name: '--container-port', arg: '<n>', description: 'Fixed port inside the container. Required.' }],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'INVALID_ARGUMENT'],
+        run: async (inv) => {
+          const [project, name] = exactArgs(inv, byPath('port add'), 2)
+          return output(
+            await runPortAdd(createContext(), { project, name, containerPort: stringFlag(inv, '--container-port') }),
+            renderPortAdd,
+          )
+        },
+      },
+      {
+        path: ['port', 'remove'],
+        group: 'Ports',
+        usage: 'port remove <project> <name>',
+        summary: 'Remove a declared extra port and release its host port.',
+        flags: [],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'EXTRA_PORT_NOT_ATTACHED'],
+        run: async (inv) => {
+          const [project, name] = exactArgs(inv, byPath('port remove'), 2)
+          return output(await runPortRemove(createContext(), { project, name }), renderPortRemove)
+        },
+      },
+      {
+        path: ['port', 'list'],
+        group: 'Ports',
+        usage: 'port list <project>',
+        summary: 'Declared extra ports with their resolved host ports.',
+        flags: [],
+        errors: ['PROJECT_NOT_FOUND'],
+        run: (inv) => {
+          const [project] = exactArgs(inv, byPath('port list'), 1)
+          return output(collectPortList(createContext(), project), renderPortList)
+        },
+      },
+    ],
   },
 
   // ── Shell ──────────────────────────────────────────────────────────────────

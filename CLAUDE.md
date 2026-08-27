@@ -223,12 +223,25 @@ file is byte-identical on a Mac holding every token and one holding none. `up`
 fills `GIT_*` from the host's `git config` through the `Git` seam. No credential
 is ever written to `config.yml`.
 
-**The dev container publishes exactly one thing.** `ARCHETYPE_APP_PORT`: fixed
-inside the container (3000, with `PORT` set), allocated from a host band and
-persisted as `app_port`, assigned once and never revisited. Projects predating
-the field get one on their next `up`. This is the one exception to
-"a published port is a debugging tap" — a browser on the Mac cannot join the
-Docker network. `status` reports `app_url`, as it reports `connection_hint`.
+**The dev container publishes exactly one *fixed* thing, plus what's declared.**
+`ARCHETYPE_APP_PORT`: fixed inside the container (3000, with `PORT` set),
+allocated from a host band and persisted as `app_port`, assigned once and never
+revisited. Projects predating the field get one on their next `up`. This is
+the first exception to "a published port is a debugging tap" — a browser on
+the Mac cannot join the Docker network. `status` reports `app_url`, as it
+reports `connection_hint`.
+
+**Extra ports are the same exception, opted into by name.** `cproj port
+add <project> <name> --container-port <n>` (§5.1, `cli/src/extraports.ts`)
+declares a port independent of archetype — no catalogue, no image, no volume,
+just a name and two port numbers persisted under `extra_ports` and published
+in compose alongside `app_port`. It closes two gaps: a mobile client or a
+second UI app that must reach a project's own process directly (not just the
+browser, which can go through the frontend dev server's proxy config instead),
+and a browser-reachable dev tool on `library`/`ios`/`android`, which otherwise
+publish nothing at all. Allocated like `app_port` — search starts at
+`--container-port` itself, no band to inherit from a catalogue that doesn't
+apply. `port add`/`remove` require the project stopped, same as `service`.
 
 **`down` writes down where you were.** `cli/src/handoff.ts` writes
 `.cproj/handoff.md` on every stop: repository state from `Git`, plus the agent's

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/port-list.schema.json",
+  "title": "cproj port list output",
+  "description": "Declared extra ports with their resolved host ports. cli-spec.md §6 (Ports). Manifest only — no daemon is consulted, so it answers with Docker down.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "extra_ports"
+  ],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extra_ports": {
+      "type": "array",
+      "description": "Declared extra ports, sorted by name.",
+      "items": {
+        "$ref": "#/$defs/attached_extra_port"
+      }
+    }
+  },
+  "$defs": {
+    "attached_extra_port": {
+      "type": "object",
+      "description": "A declared extra port: the manifest's host port plus the caller's own name. cli-spec.md §5.1, §6 (Ports). Duplicated verbatim across status/port-add/port-remove/port-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "host_port",
+        "container_port",
+        "url"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "container_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

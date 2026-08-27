@@ -67,6 +67,12 @@ export function assignedPorts(config: Config): Map<number, PortHolder> {
       // the allocator's job is to avoid both, not to arbitrate between them.
       if (!holders.has(attachment.host_port)) holders.set(attachment.host_port, { project: project.name, service })
     }
+    // A named extra port (§5.1) is spoken for exactly as a service's is — same
+    // manifest, same "must not be handed out twice" rule.
+    for (const [name, attachment] of Object.entries(project.manifest.extra_ports ?? {})) {
+      if (typeof attachment?.host_port !== 'number') continue
+      if (!holders.has(attachment.host_port)) holders.set(attachment.host_port, { project: project.name, service: name })
+    }
   }
   return holders
 }
@@ -120,6 +126,17 @@ export async function allocatePorts(
 export async function allocateAppPort(ctx: Context, project: string, base: number): Promise<number> {
   const taken = new Set(assignedPorts(ctx.config).keys())
   return allocateOne(ctx, project, DEV_SERVER_KEY, base, taken)
+}
+
+/**
+ * A named extra port's host port (§5.1, `port add`). Same rules as the dev
+ * server's: no catalogue band to start from, so the search starts at the
+ * container port the caller declared and counts up — the number a second
+ * `port add --container-port 8081` on this Mac would otherwise collide on.
+ */
+export async function allocateExtraPort(ctx: Context, project: string, name: string, containerPort: number): Promise<number> {
+  const taken = new Set(assignedPorts(ctx.config).keys())
+  return allocateOne(ctx, project, name, containerPort, taken)
 }
 
 async function allocateOne(

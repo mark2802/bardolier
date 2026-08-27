@@ -42,6 +42,8 @@ nonisolated struct CprojErrorCode: CprojToken {
     static let notImplemented = CprojErrorCode(rawValue: "NOT_IMPLEMENTED")
     static let configInvalid = CprojErrorCode(rawValue: "CONFIG_INVALID")
     static let volumeNotFound = CprojErrorCode(rawValue: "VOLUME_NOT_FOUND")
+    static let extraPortAttached = CprojErrorCode(rawValue: "EXTRA_PORT_ATTACHED")
+    static let extraPortNotAttached = CprojErrorCode(rawValue: "EXTRA_PORT_NOT_ATTACHED")
     static let ejectNotApplicable = CprojErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
     static let internalError = CprojErrorCode(rawValue: "INTERNAL_ERROR")
 

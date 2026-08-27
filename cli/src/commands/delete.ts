@@ -19,6 +19,7 @@ import { rmSync } from 'node:fs'
 import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
 import { attachedKeys, projectVolumes } from '../compose.ts'
+import { extraPortNames } from '../extraports.ts'
 import { homeVolumeName } from '../naming.ts'
 import type { DeleteOutput } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
@@ -35,8 +36,9 @@ export type DeleteRequest = {
 }
 
 function assignedPorts(manifest: ProjectManifest): number[] {
-  return attachedKeys(manifest)
-    .map((key) => manifest.services?.[key]?.host_port)
+  const servicePorts = attachedKeys(manifest).map((key) => manifest.services?.[key]?.host_port)
+  const extraPorts = extraPortNames(manifest).map((name) => manifest.extra_ports?.[name]?.host_port)
+  return [...servicePorts, ...extraPorts]
     .filter((port): port is number => typeof port === 'number')
     .sort((a, b) => a - b)
 }

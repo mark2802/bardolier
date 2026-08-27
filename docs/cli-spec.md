@@ -33,10 +33,11 @@ grows to provide it.
 - **Stable error codes** (not exhaustive): `SSD_NOT_MOUNTED`,
   `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_RUNNING`, `PROJECT_STOPPED`,
   `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
+  `EXTRA_PORT_ATTACHED`, `EXTRA_PORT_NOT_ATTACHED`,
   `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
   `DOCKER_UNAVAILABLE`.
-- **No partial mutation of a running project:** service add/remove require the
-  project stopped and fail `PROJECT_RUNNING` otherwise.
+- **No partial mutation of a running project:** service add/remove and port
+  add/remove require the project stopped and fail `PROJECT_RUNNING` otherwise.
 - **Idempotency:** `up` on a running project is a no-op success; `down` on a
   stopped project is a no-op success.
 - **Read-only commands never mutate.** `status`, `list`, `volumes orphaned`.
@@ -109,6 +110,10 @@ services:
     host_port: 6379
 app_port: 3000            # dev-server host port (§9); absent when the
                           # archetype serves nothing, or predates the field
+extra_ports:              # named ports beyond app_port (§5.1); absent/empty = none
+  notebook:
+    container_port: 8888
+    host_port: 8888
 created: 2026-08-19T10:00:00Z
 ```
 
@@ -175,6 +180,36 @@ Dev app connects to services over the **internal Docker network** by service
 name (`postgres:5432`), matching prod. The host port is a debugging tap only.
 This is stated in CLAUDE.md so the agent never wires the app to `localhost`.
 
+### 5.1 Extra ports (named, archetype-independent)
+
+A **named** port published from the dev container, independent of archetype —
+`extra_ports` in `project.yml`. Unlike `app_port` (§9), it is not fixed by the
+archetype; unlike a service, it has no catalogue entry, no image and no
+volume. It exists for two shapes of need, both closed by the same mechanism:
+
+- A second, real, host-published port a **mobile client or another browser
+  tab** must reach directly — the project's own backend, or a second
+  frontend/UI app, beside the one `app_port` already covers.
+- A **browser-reachable dev tool** (a notebook server, a debugger UI) on an
+  archetype that otherwise publishes nothing at all (`library`, `ios`,
+  `android`).
+
+`cproj port add <project> <name> --container-port <n>` declares one: the
+caller states the container-side port, and the allocator finds a free host
+port starting there — same rule as `app_port`, no catalogue band to start
+from instead. Persisted as `extra_ports.<name>.{container_port,host_port}`,
+assigned once and stable for life like any other port in §5. `cproj port
+remove <project> <name>` detaches it and releases the host port; `cproj port
+list <project>` reports what is declared, manifest-only, no daemon consulted.
+Add/remove require the project stopped, exactly as service add/remove do (§6).
+
+Compose publishes every declared extra port from the dev container alongside
+`app_port` when present — the same `ports:` list, app_port first, then extra
+ports sorted by name (§9's determinism rule). `status` and `up`'s JSON report
+them as `extra_ports`, each with a ready-to-open `url`
+(`http://localhost:<host_port>`) for the same reason `connection_hint` exists
+for a service — the app renders it, it does not compose it.
+
 ## 6. Command surface
 
 All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
@@ -204,6 +239,14 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   volume** (it becomes an orphan). Release the host port. Errors
   `PROJECT_RUNNING`, `SERVICE_NOT_ATTACHED`.
 - `cproj service list <project>` — attached services + resolved host ports.
+
+### Ports
+- `cproj port add <project> <name> --container-port <n>` — declare an extra
+  port (§5.1); assign its host port; regenerate compose. Errors
+  `PROJECT_RUNNING`, `EXTRA_PORT_ATTACHED`.
+- `cproj port remove <project> <name>` — remove it; regenerate compose;
+  release the host port. Errors `PROJECT_RUNNING`, `EXTRA_PORT_NOT_ATTACHED`.
+- `cproj port list <project>` — declared extra ports + resolved host ports.
 
 ### Shell
 - `cproj shell <name> [--print]`
@@ -314,7 +357,11 @@ changed to accommodate them.
       ],
       "dev_container": "cproj-myapp",   // null if stopped
       "app_port": 3000,                 // dev-server host port (§9); null if none
-      "app_url": "http://localhost:3000" // null alongside it
+      "app_url": "http://localhost:3000", // null alongside it
+      "extra_ports": [                  // named ports beyond app_port (§5.1)
+        { "name": "notebook", "host_port": 8888, "container_port": 8888,
+          "url": "http://localhost:8888" }
+      ]
     }
   ],
   "orphaned_volumes": [
@@ -379,14 +426,18 @@ Schema stability is the contract. Additive changes only once the app ships.
 - Services: image from catalogue, named volume, `host_port:container_port`
   published, env interpolated (`{project}` → name).
 - The dev container publishes NOTHING except its archetype's dev server, where
-  the archetype has one (`ARCHETYPE_APP_PORT`; `web` → 3000). That port is a
-  service-like allocation: fixed inside the container so every project's server
-  config is identical, allocated from a band on the host so two web projects
-  cannot clash, assigned once and persisted as `app_port` (§5). `PORT` is set in
-  the container to the fixed side. A project created before the field existed is
-  assigned one on its next `up` — the only moment its manifest is being written
-  anyway. This is the one exception to the rule that services' host ports are
-  debugging taps: a browser on the Mac cannot join the Docker network.
+  the archetype has one (`ARCHETYPE_APP_PORT`; `web` → 3000), plus any extra
+  ports declared on it (§5.1). `app_port` is a service-like allocation: fixed
+  inside the container so every project's server config is identical,
+  allocated from a band on the host so two web projects cannot clash, assigned
+  once and persisted as `app_port` (§5). `PORT` is set in the container to the
+  fixed side. A project created before the field existed is assigned one on
+  its next `up` — the only moment its manifest is being written anyway. This
+  and extra ports are the only exceptions to the rule that services' host
+  ports are debugging taps: a browser on the Mac cannot join the Docker
+  network, and a native client outside the project entirely cannot either.
+  Extra ports have no such retrofit — `port add` always writes both sides at
+  once — and publish in `ports:` sorted by name, after `app_port` when present.
 
 ## 10. Seeded files (by `new`)
 

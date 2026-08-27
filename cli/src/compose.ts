@@ -19,6 +19,7 @@ import { stringify as stringifyYaml } from 'yaml'
 import { CprojError } from './errors.ts'
 import { CONTAINER_HOME, IMAGE_CACHE, IMAGE_PLATFORM } from './images.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
+import { extraPortNames } from './extraports.ts'
 import { composeProject, devContainerName, homeVolumeName, serviceContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
@@ -149,6 +150,19 @@ function appPublication(manifest: ProjectManifest): { host: number; container: n
   return { host, container }
 }
 
+/**
+ * Extra ports' `host:container` publications, sorted by name (the determinism
+ * rule) — `cli-spec.md` §5.1, §9. Archetype-independent: unlike
+ * `appPublication`, nothing here asks what the archetype serves, because these
+ * are declared by the caller (`port add`) rather than fixed by the image.
+ */
+function extraPublications(manifest: ProjectManifest): string[] {
+  return extraPortNames(manifest).map((name) => {
+    const attachment = manifest.extra_ports?.[name]
+    return `${attachment?.host_port}:${attachment?.container_port}`
+  })
+}
+
 function devService(manifest: ProjectManifest): ComposeService {
   // Present only when the base image is pinned (`claude-and`, whose SDK tools
   // are x86_64-only): the key is absent otherwise, so no existing project's
@@ -158,6 +172,8 @@ function devService(manifest: ProjectManifest): ComposeService {
   // `up` creates it and Compose only mounts it (`external: true` below).
   const cache = cacheFor(manifest)
   const app = appPublication(manifest)
+  const extra = extraPublications(manifest)
+  const ports = [...(app ? [`${app.host}:${app.container}`] : []), ...extra]
 
   return {
     container_name: devContainerName(manifest.name),
@@ -183,12 +199,14 @@ function devService(manifest: ProjectManifest): ComposeService {
       `${homeVolumeName(manifest.name)}:${CONTAINER_HOME}`,
       ...(cache ? [`${cache.volume}:${cache.mount}`] : []),
     ],
-    // §9's ONE exception to "the dev container publishes nothing": the
+    // §9's exceptions to "the dev container publishes nothing": the
     // archetype's dev server, which a browser on the Mac has to reach and
-    // cannot reach over the Docker network. Services are still the other way
+    // cannot reach over the Docker network, plus any extra ports the caller
+    // declared (§5.1) for the same reason — a mobile client, a second
+    // frontend, an interactive dev tool. Services are still the other way
     // round — their host port is a debugging tap and the app inside talks to
     // them by service name (§5).
-    ...(app ? { ports: [`${app.host}:${app.container}`] } : {}),
+    ...(ports.length > 0 ? { ports } : {}),
     labels: {
       [LABEL_PROJECT]: manifest.name,
       [LABEL_ROLE]: 'dev',

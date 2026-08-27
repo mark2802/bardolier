@@ -31,6 +31,8 @@
             "NOT_IMPLEMENTED",
             "CONFIG_INVALID",
             "VOLUME_NOT_FOUND",
+            "EXTRA_PORT_ATTACHED",
+            "EXTRA_PORT_NOT_ATTACHED",
             "EJECT_NOT_APPLICABLE",
             "INTERNAL_ERROR"
           ]

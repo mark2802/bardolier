@@ -14,6 +14,10 @@
  *
  * `list` is Docker-free by design — manifest plus catalogue, no daemon — so it
  * answers while Docker is down. Live state comes from `status` (§7).
+ *
+ * `requireStopped` and `persist` are exported for `port.ts`: an extra port
+ * (§6, Ports) needs the identical stopped-precondition and write-then-render
+ * sequence, and neither depends on anything service-specific.
  */
 
 import type { Context } from '../context.ts'
@@ -39,7 +43,7 @@ function requireServiceKey(value: string | undefined, usage: string): string {
 }
 
 /** The catalogue is consulted only when something references it (§4.1 chain can fail). */
-function catalogueIfNeeded(ctx: Context, manifest: ProjectManifest): ServiceCatalogue | null {
+export function catalogueIfNeeded(ctx: Context, manifest: ProjectManifest): ServiceCatalogue | null {
   return attachedKeys(manifest).length > 0 ? ctx.catalogue().catalogue : null
 }
 
@@ -48,7 +52,7 @@ function catalogueIfNeeded(ctx: Context, manifest: ProjectManifest): ServiceCata
  * container or a single service — blocks the change; a partially running
  * project is exactly the state a mid-flight rewire would make permanent.
  */
-async function requireStopped(ctx: Context, project: DiscoveredProject, action: string): Promise<void> {
+export async function requireStopped(ctx: Context, project: DiscoveredProject, action: string): Promise<void> {
   const observed = await observeProject(ctx, project.manifest)
   if (observed.state === 'stopped') return
   throw new CprojError(
@@ -66,7 +70,7 @@ async function requireStopped(ctx: Context, project: DiscoveredProject, action: 
  * with the project untouched, rather than leaving `project.yml` describing
  * something `docker-compose.yml` does not.
  */
-function persist(dir: string, manifest: ProjectManifest, catalogue: ServiceCatalogue | null) {
+export function persist(dir: string, manifest: ProjectManifest, catalogue: ServiceCatalogue | null) {
   renderCompose({ manifest, catalogue })
 
   const { valid, errors } = validate('project', manifest)

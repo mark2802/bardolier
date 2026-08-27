@@ -28,6 +28,7 @@ import type {
   ServiceListOutput,
   ServiceRemoveOutput,
 } from '../cli/src/model/service.ts'
+import type { AttachedExtraPort, PortAddOutput, PortListOutput, PortRemoveOutput } from '../cli/src/model/extraport.ts'
 import type { ShellOutput } from '../cli/src/model/shell.ts'
 import type { OrphanedVolume, VolumesOrphanedOutput, VolumesRemoveOutput } from '../cli/src/model/volumes.ts'
 import type { DownAllOutput, EjectHolder, EjectOutput } from '../cli/src/model/ssd.ts'
@@ -156,6 +157,16 @@ describe('project manifest contract (cli-spec.md §4.2)', () => {
 
   test('rejects a service entry missing its host_port', () => {
     const bad = { ...manifest, services: { postgres: {} } }
+    assert.equal(validate('project', bad).valid, false)
+  })
+
+  test('accepts extra_ports (§5.1), keyed by a user-chosen name', () => {
+    const withExtra = { ...manifest, extra_ports: { notebook: { container_port: 8888, host_port: 8888 } } }
+    assert.ok(validate('project', withExtra).valid)
+  })
+
+  test('rejects an extra_ports entry missing either port', () => {
+    const bad = { ...manifest, extra_ports: { notebook: { container_port: 8888 } } }
     assert.equal(validate('project', bad).valid, false)
   })
 })
@@ -322,6 +333,75 @@ describe('service contracts (cli-spec.md §6, Services)', () => {
   })
 })
 
+describe('extra port contracts (cli-spec.md §6, Ports; §5.1)', () => {
+  /** The row shape shared by status/port-add/port-remove/port-list. */
+  const CARRIERS = ['status', 'port-add', 'port-remove', 'port-list'] as const
+
+  const attached: AttachedExtraPort = {
+    name: 'notebook',
+    host_port: 8888,
+    container_port: 8888,
+    url: 'http://localhost:8888',
+  }
+
+  test('the attached-extra-port block is identical in every schema that carries it', () => {
+    const blocks = CARRIERS.map((name) => {
+      const schema = loadSchema(name) as { $defs?: { attached_extra_port?: unknown } }
+      assert.ok(schema.$defs?.attached_extra_port, `${name}.schema.json has no $defs.attached_extra_port`)
+      return JSON.stringify(schema.$defs.attached_extra_port)
+    })
+    assert.equal(new Set(blocks).size, 1, 'the duplicated $defs blocks have drifted apart')
+  })
+
+  test('the typed model satisfies the schema it is mirrored by', () => {
+    const add: PortAddOutput = {
+      project: 'myapp',
+      added: attached,
+      extra_ports: [attached],
+      compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
+      compose_regenerated: true,
+    }
+    assert.ok(validate('port-add', add).valid, validate('port-add', add).errors.join('\n'))
+
+    const remove: PortRemoveOutput = {
+      project: 'myapp',
+      removed: { name: 'notebook', host_port: 8888 },
+      extra_ports: [],
+      compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
+      compose_regenerated: true,
+    }
+    assert.ok(validate('port-remove', remove).valid)
+
+    const list: PortListOutput = { project: 'myapp', extra_ports: [attached] }
+    assert.ok(validate('port-list', list).valid)
+  })
+
+  test('a project with nothing declared is valid everywhere', () => {
+    assert.ok(validate('port-list', { project: 'bare', extra_ports: [] }).valid)
+  })
+
+  test('rejects a row missing its host port — the whole point of the record (§5.1)', () => {
+    const { name, container_port, url } = attached
+    const bad = { project: 'myapp', extra_ports: [{ name, container_port, url }] }
+    assert.equal(validate('port-list', bad).valid, false)
+  })
+
+  test('status may report extra_ports, and a project reporting none is still valid', () => {
+    const withPorts = {
+      name: 'myapp',
+      dir: '/Volumes/ssd/claude-projects/myapp',
+      archetype: 'web',
+      state: 'stopped',
+      services: [],
+      dev_container: null,
+      app_port: null,
+      app_url: null,
+      extra_ports: [attached],
+    }
+    assert.ok(validate('status', { ssd: { mounted: true, root: '/x' }, docker: { available: true }, projects: [withPorts], orphaned_volumes: [] }).valid)
+  })
+})
+
 describe('config contract (cli-spec.md §8)', () => {
   test('every §8 key is accepted and every key is optional', () => {
     assert.ok(validate('config', {}).valid)
@@ -433,7 +513,11 @@ describe('command surface (cli-spec.md §6)', () => {
   const leaves = walk(ROOT)
   const names = leaves.map((c) => c.path.join(' '))
 
-  /** Every command §6 itself names. Phase 4 completed this set. */
+  /**
+   * Every command §6 itself names. Phase 4 completed the original set; Phase
+   * 12 extended §6 with Ports (`port add/remove/list`), additively — the
+   * "declares nothing beyond §6" test below still holds because §6 itself grew.
+   */
   const SPEC_COMMANDS = [
     'build',
     'delete',
@@ -443,6 +527,9 @@ describe('command surface (cli-spec.md §6)', () => {
     'eject',
     'list',
     'new',
+    'port add',
+    'port list',
+    'port remove',
     'service add',
     'service list',
     'service remove',
@@ -513,7 +600,8 @@ describe('command surface (cli-spec.md §6)', () => {
     // Phase 1 was the read-only core; Phase 2 the project lifecycle; Phase 3
     // services and ports; Phase 4 shell, volumes, down-all and eject, which
     // completed §6 and froze the contract. Phase 6 added the app-support
-    // commands above — additively, which is why the freeze survives it.
+    // commands above and Phase 12 the Ports group — both additively, which is
+    // why the freeze survives them.
     assert.deepEqual([...IMPLEMENTED].sort(), [...names].sort())
   })
 })

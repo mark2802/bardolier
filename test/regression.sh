@@ -20,7 +20,7 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-LAST=11
+LAST=12
 THROUGH="$LAST"
 
 while [ $# -gt 0 ]; do

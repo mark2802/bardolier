@@ -23,6 +23,7 @@ import type { Context } from '../context.ts'
 import { CprojError } from '../errors.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../naming.ts'
 import { attachedKeys, CACHE_VOLUME_LABELS, cacheFor, PASSTHROUGH_ENV } from '../compose.ts'
+import { attachedExtraPorts, extraPortNames } from '../extraports.ts'
 import { ARCHETYPE_APP_PORT } from '../model/archetype.ts'
 import { allocateAppPort } from '../allocator.ts'
 import { appUrl } from '../services.ts'
@@ -68,6 +69,22 @@ async function validatePorts(
         `Host port ${port} (for \`${key}\` in \`${manifest.name}\`) is already in use. cproj will not remap it — free the port, or remove and re-add the service to assign a new one.`,
         { port, service: key, project: manifest.name },
       )
+    }
+  }
+
+  // Extra ports (§5.1) live on the dev container, so they follow app_port's
+  // rule, not a service's: already-up (devRunning) means WE hold them.
+  if (!devRunning) {
+    for (const name of extraPortNames(manifest)) {
+      const port = manifest.extra_ports?.[name]?.host_port
+      if (port === undefined) continue
+      if (!(await ctx.ports.isFree(port))) {
+        throw new CprojError(
+          'PORT_UNAVAILABLE',
+          `Host port ${port} (extra port \`${name}\` in \`${manifest.name}\`) is already in use. cproj will not remap it — free the port, or remove and re-add it to assign a new one.`,
+          { port, name, project: manifest.name },
+        )
+      }
     }
   }
 }
@@ -173,6 +190,7 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
     open_shell: !request.noShell,
     app_port: manifest.app_port ?? null,
     app_url: appUrl(manifest) ?? null,
+    extra_ports: attachedExtraPorts(manifest),
   }
 }
 
@@ -191,6 +209,7 @@ export function renderUp(output: UpOutput): string[] {
     }
   }
   if (output.app_url) lines.push(`  dev server:    ${output.app_url}`)
+  for (const port of output.extra_ports ?? []) lines.push(`  ${port.name}:   ${port.url}`)
   if (output.compose_regenerated) lines.push('  (docker-compose.yml regenerated from project.yml)')
   if (output.state !== 'running') {
     lines.push('')

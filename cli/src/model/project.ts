@@ -17,6 +17,19 @@ export type ProjectService = {
   host_port: number
 }
 
+/**
+ * A named port published from the dev container, independent of archetype —
+ * `cli-spec.md` §5.1. Unlike a service, there is no catalogue entry behind it:
+ * the caller states `container_port` and the allocator finds a free host port
+ * starting there, exactly as it does for `app_port`.
+ */
+export type ProjectExtraPort = {
+  /** Fixed port inside the container; whatever `port add --container-port` was given. */
+  container_port: number
+  /** Host port, assigned at `port add` and STABLE for life (§5), like a service's. */
+  host_port: number
+}
+
 export type ProjectManifest = {
   name: string
   archetype: Archetype
@@ -24,6 +37,14 @@ export type ProjectManifest = {
   base_image: BaseImage
   /** Keyed by catalogue key (`postgres`, `redis`, …). Absent/empty = no services. */
   services?: Record<string, ProjectService>
+  /**
+   * Named ports published from the dev container beyond the archetype's own
+   * `app_port` (§5.1) — a second frontend/backend a mobile client or another
+   * browser tab needs to reach directly, or an interactive tool (a notebook
+   * server, a debugger UI) on an archetype that otherwise publishes nothing.
+   * Keyed by a user-chosen name, not a catalogue key. Absent/empty = none.
+   */
+  extra_ports?: Record<string, ProjectExtraPort>
   /**
    * Host port published for the archetype's dev server (§9,
    * `ARCHETYPE_APP_PORT`), assigned once and stable exactly like a service's.

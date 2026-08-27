@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/port-add.schema.json",
+  "title": "cproj port add output",
+  "description": "What `cproj port add` declared, and on which host port. cli-spec.md §6 (Ports), §5.1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "added",
+    "extra_ports",
+    "compose_path",
+    "compose_regenerated"
+  ],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "added": {
+      "$ref": "#/$defs/attached_extra_port"
+    },
+    "extra_ports": {
+      "type": "array",
+      "description": "Every extra port declared afterwards, sorted by name.",
+      "items": {
+        "$ref": "#/$defs/attached_extra_port"
+      }
+    },
+    "compose_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compose_regenerated": {
+      "type": "boolean",
+      "description": "False when the regenerated compose file was byte-identical to the old one (§9)."
+    }
+  },
+  "$defs": {
+    "attached_extra_port": {
+      "type": "object",
+      "description": "A declared extra port: the manifest's host port plus the caller's own name. cli-spec.md §5.1, §6 (Ports). Duplicated verbatim across status/port-add/port-remove/port-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "host_port",
+        "container_port",
+        "url"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "container_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

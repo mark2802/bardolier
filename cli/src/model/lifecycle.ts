@@ -9,6 +9,7 @@
  */
 
 import type { Archetype, BaseImage } from './archetype.ts'
+import type { AttachedExtraPort } from './extraport.ts'
 import type { AttachedService } from './service.ts'
 import type { ProjectState } from './status.ts'
 
@@ -63,6 +64,8 @@ export type UpOutput = {
    */
   app_port?: number | null
   app_url?: string | null
+  /** Extra ports published alongside it (§5.1), sorted by name. Additive since Phase 12. */
+  extra_ports?: AttachedExtraPort[]
 }
 
 export type DownOutput = {

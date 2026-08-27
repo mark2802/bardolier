@@ -184,60 +184,53 @@ they complete — there's no URL to load).
 
 If step 8, or anything else, needed a capability cproj doesn't have — don't
 build a per-project workaround for it. Add it to
-`docs/migration-guide-gaps.md` and route around it in this migration (see
-Part 2 for the specific case of a second published port).
+`docs/migration-guide-gaps.md` and route around it in this migration (Part 2
+covers the port-policy decision itself, including a second published port,
+which `cproj port add` now handles).
 
 ---
 
 ## Part 2 — The port-policy decision
 
-cproj's `web` archetype publishes **exactly one port** — the frontend's dev
-server. That's a real constraint, not an oversight: `project.yml` has one
-`app_port` field, assigned once, and `status`/the app both assume there's one
-to report. A project with its own backend process wants that process
-reachable by *something* — the question is by what, and there are two shapes:
+cproj's `web` archetype publishes **exactly one *fixed* port** — the
+frontend's dev server, `app_port`. A project with its own backend process, or
+a second UI app, wants *that* process reachable by *something* — the question
+is by what, and there are two shapes:
 
-**A — Proxy through the one published port.** The frontend dev server
-(Next.js `rewrites()`, Vite's `server.proxy`, CRA's `package.json` `proxy`
-field — all mainstream dev servers support this) forwards a path
-(`/api/*`) to the backend running on an **unpublished, internal-only** port
-in the same container. The browser only ever talks to one origin. No CORS
-needed (same-origin). No cproj changes required — this works today.
+**A — Proxy through the one fixed port.** The frontend dev server (Next.js
+`rewrites()`, Vite's `server.proxy`, CRA's `package.json` `proxy` field — all
+mainstream dev servers support this) forwards a path (`/api/*`) to the
+backend running on an **unpublished, internal-only** port in the same
+container. The browser only ever talks to one origin. No CORS needed
+(same-origin). No cproj changes required.
 
-**B — A second, real, published port for the backend**, reachable directly
-from the Mac's network — required when something *other than the browser
-hitting the frontend* needs to reach the backend: a native mobile client
-running in the Simulator/emulator during dev, a third-party webhook sender,
-a second team's service. **cproj cannot do this today.** There is no
-supported way to add a second published port to a project — hand-editing the
-generated `docker-compose.yml` is overwritten on the next `up`, and there is
-no second port field anywhere in the data model. This is a real, tracked gap
-— see `docs/migration-guide-gaps.md`.
+**B — A second, real, published port**, reachable directly from the Mac's
+network — needed when something *other than the browser hitting the
+frontend* must reach a process directly: a native mobile client running in
+the Simulator/emulator during dev, a third-party webhook sender, a second
+team's service, or a second UI app of the project's own with no proxy
+relationship to the first. `cproj port add <project> <name>
+--container-port <n>` declares one — independent of archetype, so it also
+covers a `library`/`ios`/`android` project that wants a browser-reachable dev
+tool (a notebook server, a debugger UI) and otherwise publishes nothing at
+all. See `cli-spec.md` §5.1.
 
 **Decision tree:**
 - Only the browser (via the web frontend) ever needs to reach the backend →
-  **use A.** Simple, works today, nothing to track.
-- A native mobile client, or anything else outside the project's own
-  frontend, needs direct access → **you need B, which doesn't exist yet.**
-  Record the need in the gaps doc (one entry per *kind* of need, not per
-  project) and, for now:
-  - Still wire the web frontend through A (it costs nothing extra and keeps
-    the browser off a second port even while the gap is open).
-  - Leave mobile-client development against whatever setup it already used
-    (a previous native run, a staging environment, ...) until B lands as a
-    real phase. Don't invent a stopgap second port by hand-editing the
-    compose file — it won't survive the next `up`, and it's exactly the kind
-    of unreviewed one-off `docs/migration-guide-gaps.md` exists to prevent.
+  **use A.** Simple, one origin, nothing to declare.
+- A native mobile client, a second UI app, or anything else outside the
+  project's own frontend needs direct access → **use B**: `cproj port add
+  <project> <name> --container-port <n>`, then point the client at
+  `http://localhost:<host_port>` (from the command's own output, or `cproj
+  status`/`port list` afterwards — never guess or hand-compose the host
+  port). Still wire the web frontend through A too, where it applies — the
+  two are not exclusive, and A costs nothing extra.
+- An interactive dev tool on a `library`/`ios`/`android` project needs a
+  browser to reach it → **use B** the same way; there is no `app_port` to
+  proxy through on those archetypes.
 
-- More than one of the project's own frontend/UI apps needs to be reached
-  directly by a browser (not just a backend) — there's no proxy relationship
-  between two sibling frontends, so each one beyond the first has the same
-  shape as case B. File it in the gaps doc the same way.
-
-**STOP:** if this project has (or will soon have) a native mobile client
-that needs the backend directly, say so explicitly before continuing past
-step 8 — confirm A is still worth wiring now versus waiting, and confirm the
-gaps entry is filed.
+Don't hand-edit `docker-compose.yml` to add a port — it is regenerated on
+every `up`/service change and a hand-added `ports:` entry is silently lost.
 
 ---
 
@@ -328,9 +321,10 @@ the project in those updates.
 >   there is actually wrong or incomplete) — phrased entirely generically,
 >   describing the *situation and the instruction*, never this project by
 >   name or anything identifying about it.
-> - If it needs a cproj/app capability that doesn't exist (like Part 2's
->   second-port gap), propose a new entry for `docs/migration-guide-gaps.md`
->   instead of a workaround — also phrased generically.
+> - If it needs a cproj/app capability that doesn't exist (check
+>   `docs/migration-guide-gaps.md`'s Open section first — it may already be
+>   tracked), propose a new entry instead of a workaround — also phrased
+>   generically.
 >
 > Show me every proposed addition before editing either file, grouped by
 > which file it belongs in. Ask me directly wherever you're genuinely unsure

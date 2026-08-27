@@ -46,6 +46,30 @@
       "minimum": 1024,
       "maximum": 65535
     },
+    "extra_ports": {
+      "type": "object",
+      "description": "Named ports published from the dev container beyond app_port (cli-spec.md §5.1), keyed by a user-chosen name. Absent or empty means none declared.",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["container_port", "host_port"],
+        "properties": {
+          "container_port": {
+            "type": "integer",
+            "description": "Fixed port inside the container; whatever `port add --container-port` was given.",
+            "minimum": 1024,
+            "maximum": 65535
+          },
+          "host_port": {
+            "type": "integer",
+            "description": "Assigned at `port add`, stable for life, released on remove/delete. cli-spec.md §5.1.",
+            "minimum": 1024,
+            "maximum": 65535
+          }
+        }
+      }
+    },
     "created": {
       "type": "string",
       "format": "date-time"

@@ -37,6 +37,10 @@ const EXTENDED_ERROR_CODES = [
   'CONFIG_INVALID',
   /** `volumes rm` was given a name Docker does not have. Distinct from VOLUME_IN_USE. */
   'VOLUME_NOT_FOUND',
+  /** `port add` reused a name already declared on the project. */
+  'EXTRA_PORT_ATTACHED',
+  /** `port remove` named something not declared. */
+  'EXTRA_PORT_NOT_ATTACHED',
   /** `eject` on an `ssd_volume` that isn't a removable volume — use `down-all` instead. */
   'EJECT_NOT_APPLICABLE',
   /** Anything that escaped as an unexpected exception. */

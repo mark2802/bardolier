@@ -36,6 +36,21 @@
       "description": "Ready-to-open URL for app_port, or null when there is no dev-server port.",
       "minLength": 1
     },
-    "open_shell": { "type": "boolean", "description": "The app's cue to open a shell; false under --no-shell. The CLI spawns no terminal." }
+    "open_shell": { "type": "boolean", "description": "The app's cue to open a shell; false under --no-shell. The CLI spawns no terminal." },
+    "extra_ports": {
+      "type": "array",
+      "description": "Extra ports published alongside app_port (cli-spec.md §5.1), sorted by name. Additive since Phase 12.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "host_port", "container_port", "url"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "host_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+          "container_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+          "url": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
   }
 }

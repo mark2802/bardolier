@@ -171,6 +171,9 @@ nonisolated struct CprojProject: Codable, Hashable, Identifiable, Sendable {
     /// maps it — the decoder produces `appUrl` from `app_url`, and an API-style
     /// rename here would need a `CodingKeys` that says the same thing twice.
     let appUrl: String?
+    /// Extra ports declared on this project (§5.1), sorted by name. Additive
+    /// since Phase 12 — absent on an older CLI, decoded as nil either way.
+    let extraPorts: [AttachedExtraPort]?
 
     var id: String { name }
 }
@@ -273,6 +276,19 @@ nonisolated struct AttachedService: Codable, Hashable, Identifiable, Sendable {
     var id: String { key }
 }
 
+/// A declared extra port (cli-spec.md §5.1): no catalogue behind it, unlike
+/// `AttachedService` — just the caller's own name and the two ports. `url`
+/// stands in for `connectionHint`, for the same reason: the scheme is the
+/// contract's business, not the menu's.
+nonisolated struct AttachedExtraPort: Codable, Hashable, Identifiable, Sendable {
+    let name: String
+    let hostPort: Int
+    let containerPort: Int
+    let url: String
+
+    var id: String { name }
+}
+
 nonisolated struct UpOutput: Codable, Hashable, Sendable {
     let project: String
     let state: ProjectState
@@ -347,6 +363,37 @@ nonisolated struct RemovedService: Codable, Hashable, Sendable {
 nonisolated struct ServiceListOutput: Codable, Hashable, Sendable {
     let project: String
     let services: [AttachedService]
+}
+
+// MARK: - port add / remove / list
+
+nonisolated struct PortAddOutput: Codable, Hashable, Sendable {
+    let project: String
+    let added: AttachedExtraPort
+    /// Every extra port declared afterwards, sorted by name.
+    let extraPorts: [AttachedExtraPort]
+    let composePath: String
+    let composeRegenerated: Bool
+}
+
+nonisolated struct PortRemoveOutput: Codable, Hashable, Sendable {
+    let project: String
+    let removed: RemovedExtraPort
+    /// Every extra port still declared, sorted by name.
+    let extraPorts: [AttachedExtraPort]
+    let composePath: String
+    let composeRegenerated: Bool
+}
+
+nonisolated struct RemovedExtraPort: Codable, Hashable, Sendable {
+    let name: String
+    /// Released — free for the next allocation (§5.1).
+    let hostPort: Int
+}
+
+nonisolated struct PortListOutput: Codable, Hashable, Sendable {
+    let project: String
+    let extraPorts: [AttachedExtraPort]
 }
 
 // MARK: - volumes
