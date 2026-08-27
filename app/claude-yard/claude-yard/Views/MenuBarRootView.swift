@@ -39,7 +39,11 @@ struct MenuBarRootView: View {
     @EnvironmentObject private var preferences: AppPreferences
 
     @State private var panel: MenuPanel = .root
-    @State private var expanded: Set<String> = []
+    // Accordion, not a Set: expanding a second project while one is already
+    // open used to stack both blocks inside the fixed-height scroll area,
+    // pushing later rows off the bottom with no visible indicator that they'd
+    // scrolled off — that's how Delete… came to look state-gated.
+    @State private var expandedProject: String?
     @State private var confirmation: ConfirmationRequest?
 
     var body: some View {
@@ -105,6 +109,13 @@ struct MenuBarRootView: View {
                     projectList
                 }
             }
+            // A row clipped by maxHeight below with no visible scrollbar reads
+            // as absent rather than scrollable — that's how Delete… came to
+            // look state-gated when it was really just off the bottom of an
+            // unindicated scroll area. The accordion above bounds a single
+            // expansion's height; a long collapsed project list can still
+            // overflow, so the indicator stays.
+            .scrollIndicators(.visible)
             .frame(maxHeight: 360)
 
             Divider().padding(.vertical, 4)
@@ -196,7 +207,7 @@ struct MenuBarRootView: View {
             ForEach(store.projects) { project in
                 ProjectRow(
                     project: project,
-                    isExpanded: expanded.contains(project.name),
+                    isExpanded: expandedProject == project.name,
                     canMutate: canMutate,
                     disabledReason: mutationBlockedReason,
                     toggleExpanded: { toggle(project.name) },
@@ -256,11 +267,7 @@ struct MenuBarRootView: View {
     }
 
     private func toggle(_ name: String) {
-        if expanded.contains(name) {
-            expanded.remove(name)
-        } else {
-            expanded.insert(name)
-        }
+        expandedProject = expandedProject == name ? nil : name
     }
 
     /// Show a confirmation. The panel dismisses itself before running the
