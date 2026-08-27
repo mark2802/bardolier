@@ -23,6 +23,8 @@ export type BuiltImage = {
   reason?: string
   /** Platform the image is pinned to; absent when it builds for the host's own. */
   platform?: string
+  /** The Claude Code version passed to this build — `latest` by default, or the exact `X.Y.Z` `--claude-code-version` asked for. Present whenever `status` is `built`; absent for `unavailable`, which never reaches a Docker build. */
+  claudeCodeVersion?: string
 }
 
 export type BuildOutput = {

@@ -87,10 +87,11 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
         ['claude-and', 'built'],
       ],
     )
-    // Every build carries the host identity — the point of the command.
+    // Every build carries the host identity — the point of the command —
+    // plus the Claude Code pin, defaulted to `latest`.
     for (const call of docker.calls) {
       assert.ok(call.kind === 'build')
-      assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20' })
+      assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
     }
   })
 
@@ -181,6 +182,46 @@ describe('claude-and is pinned to linux/amd64, consistently (images.ts)', () => 
     const compose = readFileSync(join(box.root, 'droid', 'docker-compose.yml'), 'utf8')
     assert.match(compose, /image: claude-and:latest/)
     assert.match(compose, /platform: linux\/amd64/)
+  })
+})
+
+// ── Claude Code defaults to `latest`; `--claude-code-version` pins it ─────────
+
+describe('`build --claude-code-version` (default `latest`, pin with an exact release)', () => {
+  test('unset defaults to `latest`, passed to every image and reported in the output', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), undefined)
+    assert.deepEqual(
+      result.images.map((image) => image.claudeCodeVersion),
+      ['latest', 'latest', 'latest'],
+    )
+    for (const call of docker.calls) {
+      assert.ok(call.kind === 'build')
+      assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
+    }
+  })
+
+  test('an exact `X.Y.Z` pins it instead, passed through to every image and the output', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), undefined, '2.1.999')
+    assert.deepEqual(
+      result.images.map((image) => image.claudeCodeVersion),
+      ['2.1.999', '2.1.999', '2.1.999'],
+    )
+    for (const call of docker.calls) {
+      assert.ok(call.kind === 'build')
+      assert.equal(call.request.args.CLAUDE_CODE_VERSION, '2.1.999')
+    }
+  })
+
+  test('rejects anything that is not `latest` or `X.Y.Z`', async () => {
+    const box = sandbox()
+    await assert.rejects(
+      () => runBuild(makeContext(box, stubDocker()), undefined, 'v2.1.247'),
+      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+    )
   })
 })
 

@@ -475,6 +475,8 @@ nonisolated struct BaseImage: Codable, Hashable, Identifiable, Sendable {
     let reason: String?
     /// Platform the image is pinned to; absent when it builds for this Mac's own.
     let platform: String?
+    /// The Claude Code version passed to this build — `latest` by default, or the exact `X.Y.Z` `--claude-code-version` asked for. Present whenever `status` is `built`; absent for `unavailable`.
+    let claudeCodeVersion: String?
 
     var id: String { image }
 }

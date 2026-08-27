@@ -27,6 +27,10 @@
           "platform": {
             "type": "string",
             "description": "Platform the image is pinned to (e.g. linux/amd64); absent when it builds for the host's own architecture."
+          },
+          "claudeCodeVersion": {
+            "type": "string",
+            "description": "The Claude Code version passed to this build — `latest` by default, or the exact X.Y.Z --claude-code-version asked for. Present whenever status is built; absent for unavailable."
           }
         }
       }

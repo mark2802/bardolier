@@ -514,13 +514,24 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['build'],
     group: 'Images',
-    usage: 'build [--archetype <a>]',
+    usage: 'build [--archetype <a>] [--claude-code-version <v>]',
     summary: "Build base image(s) with host UID/GID build args. No arg builds every archetype's base.",
-    flags: [{ name: '--archetype', arg: '<a>', description: 'Build only this archetype’s base image.' }],
-    errors: ['DOCKER_UNAVAILABLE'],
+    flags: [
+      { name: '--archetype', arg: '<a>', description: 'Build only this archetype’s base image.' },
+      {
+        name: '--claude-code-version',
+        arg: '<v>',
+        description:
+          'Claude Code version to install — defaults to `latest`. Pass an exact `X.Y.Z` to pin, e.g. to reproduce an old image. Always checksum-verified either way.',
+      },
+    ],
+    errors: ['DOCKER_UNAVAILABLE', 'INVALID_ARGUMENT'],
     run: async (inv) => {
       noArgs(inv, 'build')
-      return output(await runBuild(createContext(), stringFlag(inv, '--archetype')), renderBuild)
+      return output(
+        await runBuild(createContext(), stringFlag(inv, '--archetype'), stringFlag(inv, '--claude-code-version')),
+        renderBuild,
+      )
     },
   },
 ]

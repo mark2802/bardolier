@@ -201,10 +201,14 @@ manifest names that base image, never taken by `delete --purge`.
 `/cache/uv`) — a Python API and its React frontend run in one dev container,
 no second port published; the dev server proxies to it (Phase 11).
 
-**The agent ships in the base image.** All three install Claude Code — pinned
-binary, checksum-verified, into `/usr/local/bin`. Not a catalogue service (the
-catalogue is for sibling containers with an image, port and volume), and not
-under `$HOME`, which is a mounted volume that would copy 236MB per project.
+**The agent ships in the base image.** All three install Claude Code,
+checksum-verified, into `/usr/local/bin`. It is the one toolchain version in
+these images that is NOT pinned by default — `cproj build` resolves
+`latest` at build time (`--claude-code-version <X.Y.Z>` pins an exact release
+when reproducibility matters more); every other component stays a fixed ARG.
+Not a catalogue service (the catalogue is for sibling containers with an
+image, port and volume), and not under `$HOME`, which is a mounted volume
+that would copy 236MB per project.
 
 **`$HOME` is a volume, because `down` destroys the container.**
 `CONTAINER_HOME` = `/state/home`, with `cproj-<project>-home` mounted there —

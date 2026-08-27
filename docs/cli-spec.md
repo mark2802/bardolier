@@ -309,8 +309,15 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   the app on launch.)
 
 ### Images
-- `cproj build [--archetype <a>]` — build base image(s) with host UID/GID build
-  args. No arg builds all archetypes' bases.
+- `cproj build [--archetype <a>] [--claude-code-version <v>]` — build base
+  image(s) with host UID/GID build args. No arg builds all archetypes' bases.
+  Claude Code defaults to `latest`, resolved and checksum-verified against the
+  publisher's manifest at build time; `--claude-code-version <X.Y.Z>` pins an
+  exact release instead (e.g. to reproduce an old image, or isolate a
+  regression to a specific agent build) and is checksum-verified the same way.
+  Every other toolchain version in these images (Swift, Gradle, the Android
+  SDK, …) stays a fixed pin — this default applies to Claude Code alone.
+  Errors: `INVALID_ARGUMENT` for a malformed version.
 
 ### App support
 

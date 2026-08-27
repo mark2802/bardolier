@@ -1,5 +1,5 @@
 /**
- * `cproj build [--archetype <a>]` — `cli-spec.md` §6 (Images).
+ * `cproj build [--archetype <a>] [--claude-code-version <v>]` — `cli-spec.md` §6 (Images).
  *
  * Builds base images with the HOST UID/GID as build args. That is the whole
  * reason this command exists rather than a plain `docker build`: the dev
@@ -9,6 +9,15 @@
  * Images live on the INTERNAL disk and are shared across projects (CLAUDE.md,
  * disk frugality) — nothing here writes to the SSD, so `build` works with the
  * SSD unplugged.
+ *
+ * Claude Code defaults to `latest`, not the Dockerfiles' own pinned ARG:
+ * `build` always passes CLAUDE_CODE_VERSION, resolving to the publisher's
+ * current release unless `--claude-code-version <X.Y.Z>` asks for an exact
+ * one (for reproducing an old image, or isolating a regression to a specific
+ * agent build). The Dockerfile resolves and checksum-verifies whichever it
+ * gets; `build` itself never talks to the publisher. This is scoped to Claude
+ * Code alone — every other pinned toolchain version in these images (Swift,
+ * Gradle, the Android SDK, …) stays a fixed ARG, no latest.
  */
 
 import type { Context } from '../context.ts'
@@ -17,9 +26,22 @@ import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetyp
 import type { BuildOutput, BuiltImage } from '../model/build.ts'
 import { baseImages } from '../images.ts'
 
-export async function runBuild(ctx: Context, archetype: string | undefined): Promise<BuildOutput> {
+/** `latest` (the escape hatch) or a bare `X.Y.Z` release — never a range or a `v` prefix. */
+const CLAUDE_CODE_VERSION_PATTERN = /^(latest|\d+\.\d+\.\d+)$/
+
+export async function runBuild(
+  ctx: Context,
+  archetype: string | undefined,
+  claudeCodeVersion?: string,
+): Promise<BuildOutput> {
   if (archetype !== undefined && !isArchetype(archetype)) {
     throw new CprojError('INVALID_ARGUMENT', `Unknown archetype \`${archetype}\`. Expected one of: ${ARCHETYPES.join(', ')}.`)
+  }
+  if (claudeCodeVersion !== undefined && !CLAUDE_CODE_VERSION_PATTERN.test(claudeCodeVersion)) {
+    throw new CprojError(
+      'INVALID_ARGUMENT',
+      `Invalid --claude-code-version \`${claudeCodeVersion}\`. Expected \`latest\` or \`X.Y.Z\`.`,
+    )
   }
 
   const wanted = archetype ? ARCHETYPE_BASE_IMAGE[archetype] : null
@@ -53,11 +75,21 @@ export async function runBuild(ctx: Context, archetype: string | undefined): Pro
       continue
     }
 
+    // Every base image installs Claude Code the same way (§10), so one
+    // resolved version applies uniformly; an image without the ARG just
+    // ignores an unconsumed build-arg rather than failing.
+    const claudeCodePin = claudeCodeVersion ?? 'latest'
+    const args: Record<string, string> = {
+      HOST_UID: String(uid),
+      HOST_GID: String(gid),
+      CLAUDE_CODE_VERSION: claudeCodePin,
+    }
+
     await ctx.docker.build({
       tag: definition.image,
       context: definition.context,
       dockerfile: definition.dockerfile,
-      args: { HOST_UID: String(uid), HOST_GID: String(gid) },
+      args,
       platform: definition.platform,
     })
 
@@ -66,6 +98,7 @@ export async function runBuild(ctx: Context, archetype: string | undefined): Pro
       archetypes: [...definition.archetypes],
       status: 'built',
       dockerfile: definition.dockerfile,
+      claudeCodeVersion: claudeCodePin,
     }
     // Reported only where it is true, so the common case says nothing about
     // architecture and the pinned one cannot be missed (`images.ts`).
@@ -81,9 +114,10 @@ export function renderBuild(output: BuildOutput): string[] {
   for (const image of output.images) {
     const serves = image.archetypes.join(', ')
     const platform = image.platform ? `, ${image.platform}` : ''
+    const pin = image.claudeCodeVersion ? `, claude-code=${image.claudeCodeVersion}` : ''
     lines.push(
       image.status === 'built'
-        ? `✓ ${image.image}:latest  built  (serves: ${serves}${platform})`
+        ? `✓ ${image.image}:latest  built  (serves: ${serves}${platform}${pin})`
         : `· ${image.image}  skipped  (serves: ${serves}) — ${image.reason ?? 'unavailable'}`,
     )
   }
