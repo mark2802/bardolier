@@ -73,7 +73,7 @@ const SOME_FACTS: GitFacts = {
 
 function context(box: Sandbox, options: Parameters<typeof createContext>[0] = {}) {
   return createContext({
-    env: { BARDOLIER_SSD_ROOT: box.root },
+    env: { BDLR_SSD_ROOT: box.root },
     home: box.home,
     path: box.configPath,
     ports: { isFree: async () => true },

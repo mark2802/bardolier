@@ -18,7 +18,7 @@ import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
 import { CONFIG_KEYS } from '../cli/src/config.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
-const APP_MODEL_DIR = 'app/claude-yard/claude-yard/Bardolier'
+const APP_MODEL_DIR = 'app/bardolier/bardolier/Bardolier'
 
 // ── Reading the Swift ────────────────────────────────────────────────────────
 
@@ -259,9 +259,9 @@ describe('the app re-derives nothing the CLI reports', () => {
    * value of its own.
    */
   const sources = new Map<string, string>(
-    readdirSync(repo('app/claude-yard/claude-yard'), { recursive: true, encoding: 'utf8' })
+    readdirSync(repo('app/bardolier/bardolier'), { recursive: true, encoding: 'utf8' })
       .filter((entry) => entry.endsWith('.swift') && !entry.endsWith('DebugStatusView.swift'))
-      .map((entry) => [entry, code(readFileSync(repo(`app/claude-yard/claude-yard/${entry}`), 'utf8'))]),
+      .map((entry) => [entry, code(readFileSync(repo(`app/bardolier/bardolier/${entry}`), 'utf8'))]),
   )
 
   /** Source with comment lines removed — prose may name what code may not do. */
@@ -295,7 +295,7 @@ describe('the app re-derives nothing the CLI reports', () => {
 })
 
 describe('the app can actually find the terminal (app-spec.md §7)', () => {
-  const source = readFileSync(repo('app/claude-yard/claude-yard/Shell/BardolierTerminal.swift'), 'utf8')
+  const source = readFileSync(repo('app/bardolier/bardolier/Shell/BardolierTerminal.swift'), 'utf8')
 
   // Guessing where an app lives was a real bug: Terminal.app is in
   // /System/Applications/Utilities, so a search of the obvious folders found
@@ -329,8 +329,8 @@ describe('the app can actually find the terminal (app-spec.md §7)', () => {
 })
 
 describe('a downgraded shell says so and keeps saying so (app-spec.md §7)', () => {
-  const store = readFileSync(repo('app/claude-yard/claude-yard/BardolierStore.swift'), 'utf8')
-  const menu = readFileSync(repo('app/claude-yard/claude-yard/Views/MenuBarRootView.swift'), 'utf8')
+  const store = readFileSync(repo('app/bardolier/bardolier/BardolierStore.swift'), 'utf8')
+  const menu = readFileSync(repo('app/bardolier/bardolier/Views/MenuBarRootView.swift'), 'utf8')
 
   // Opening the menu refreshes, and a refresh clears `notice` — so the note
   // explaining why a shell fell back to the .command route was wiped before
@@ -372,9 +372,9 @@ describe('the app calls the CLI the way the CLI expects', () => {
 describe('the app spawns nothing but bardolier', () => {
   /** Every Swift source in the app target, path → contents. */
   const sources = new Map<string, string>(
-    readdirSync(repo('app/claude-yard/claude-yard'), { recursive: true, encoding: 'utf8' })
+    readdirSync(repo('app/bardolier/bardolier'), { recursive: true, encoding: 'utf8' })
       .filter((entry) => entry.endsWith('.swift'))
-      .map((entry) => [entry, readFileSync(repo(`app/claude-yard/claude-yard/${entry}`), 'utf8')]),
+      .map((entry) => [entry, readFileSync(repo(`app/bardolier/bardolier/${entry}`), 'utf8')]),
   )
 
   test('there are Swift sources to check', () => {

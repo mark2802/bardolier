@@ -119,8 +119,8 @@ UID/GID, clock, `wait`. It never touches `process.env`, spawns processes, binds
 sockets, prompts, or hard-codes the SSD path. That is what lets mutations be
 tested with a temp dir and stubs (`test/helpers.ts`). **Anything with an
 observable side effect belongs on the Context**, including passing time. Config
-comes from `~/.config/bardolier/config.yml` with `BARDOLIER_SSD_ROOT` /
-`BARDOLIER_SSD_VOLUME` overrides and `BARDOLIER_CONFIG` to relocate the file — which is
+comes from `~/.config/bardolier/config.yml` with `BDLR_SSD_ROOT` /
+`BDLR_SSD_VOLUME` overrides and `BARDOLIER_CONFIG` to relocate the file — which is
 how done-checks stay hermetic.
 
 ## Behaviour that is easy to get wrong

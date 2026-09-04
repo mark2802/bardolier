@@ -71,11 +71,11 @@ describe('config (cli-spec.md §8)', () => {
     const loaded = loadConfig({
       path: box.configPath,
       home: box.home,
-      env: { BARDOLIER_SSD_ROOT: '/elsewhere/projects', BARDOLIER_SSD_VOLUME: '/elsewhere' },
+      env: { BDLR_SSD_ROOT: '/elsewhere/projects', BDLR_SSD_VOLUME: '/elsewhere' },
     })
     assert.equal(loaded.config.ssd_root, '/elsewhere/projects')
     assert.equal(loaded.config.ssd_volume, '/elsewhere')
-    assert.deepEqual([...loaded.overrides], ['BARDOLIER_SSD_ROOT', 'BARDOLIER_SSD_VOLUME'])
+    assert.deepEqual([...loaded.overrides], ['BDLR_SSD_ROOT', 'BDLR_SSD_VOLUME'])
   })
 
   test('the root defaults inside the configured volume, so the two cannot diverge', () => {
@@ -126,7 +126,7 @@ describe('config (cli-spec.md §8)', () => {
 describe('service catalogue resolution (cli-spec.md §4.1)', () => {
   test('falls back to the bundled default when the SSD has none', () => {
     const box = sandbox()
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_ROOT: box.root } })
     const resolved = resolveCatalogue(config)
     assert.equal(resolved.origin, 'bundled')
     assert.deepEqual(Object.keys(resolved.catalogue.services).sort(), ['mongo', 'postgres', 'redis'])
@@ -138,7 +138,7 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
       join('ssd', 'claude-projects', 'services.yml'),
       'services:\n  minio:\n    display: MinIO\n    image: minio/minio\n    container_port: 9000\n    host_port_base: 9000\n    volume: "{project}_minio"\n    mount: /data\n',
     )
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_ROOT: box.root } })
     const resolved = resolveCatalogue(config)
     assert.equal(resolved.origin, 'ssd')
     assert.deepEqual(Object.keys(resolved.catalogue.services), ['minio'])
@@ -147,7 +147,7 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
   test('a configured catalogue_path that does not exist is an error, not a silent fallback', () => {
     const box = sandbox()
     box.writeConfig({ catalogue_path: join(box.home, 'missing.yml') })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_ROOT: box.root } })
     assert.throws(
       () => resolveCatalogue(config),
       (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
@@ -157,7 +157,7 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
   test('a catalogue that breaks the schema is CONFIG_INVALID', () => {
     const box = sandbox()
     box.writeFile(join('ssd', 'claude-projects', 'services.yml'), 'services:\n  redis:\n    display: Redis\n')
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_ROOT: box.root } })
     assert.throws(
       () => resolveCatalogue(config),
       (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
@@ -191,7 +191,7 @@ describe('project discovery (cli-spec.md §3)', () => {
     const { config } = loadConfig({
       path: box.configPath,
       home: box.home,
-      env: { BARDOLIER_SSD_ROOT: join(box.root, 'not-here') },
+      env: { BDLR_SSD_ROOT: join(box.root, 'not-here') },
     })
     const discovery = discoverProjects(config)
     assert.equal(discovery.mounted, false)
@@ -305,7 +305,7 @@ describe('status (cli-spec.md §7)', () => {
 
   test('succeeds with the SSD unmounted — reporting is not failing', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
     const status = await collectStatus(ctx)
     assert.equal(status.ssd.mounted, false)
     assert.equal(status.ssd.root, join(box.root, 'unplugged'))
@@ -438,7 +438,7 @@ describe('list (cli-spec.md §6)', () => {
 
   test('raises SSD_NOT_MOUNTED where status deliberately does not', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => collectList(ctx),
       (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
@@ -466,7 +466,7 @@ describe('doctor (cli-spec.md §6)', () => {
 
   test('reports the SSD absent, with a remedy', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
     const report = await collectDoctor(ctx)
     const ssd = finding(report, 'ssd')
     assert.equal(ssd.ok, false)

@@ -48,8 +48,8 @@ the churn a rename costs isn't earned by this); no change to how
 `new`/`up`/`down`/services work, since they already don't care where the root
 lives.
 
-**Done-check:** point `BARDOLIER_SSD_ROOT` at a plain temp dir on the internal
-disk, `BARDOLIER_SSD_VOLUME` left at its default (so `removable` resolves false) —
+**Done-check:** point `BDLR_SSD_ROOT` at a plain temp dir on the internal
+disk, `BDLR_SSD_VOLUME` left at its default (so `removable` resolves false) —
 run the full lifecycle (`new` → `up` → `service add` → `status` → `down` →
 `delete`) and confirm every step behaves exactly as it does on the SSD;
 `bardolier doctor --json` reports the root `ok: true` with no "plug in" remedy;

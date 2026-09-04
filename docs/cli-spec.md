@@ -405,7 +405,7 @@ Schema stability is the contract. Additive changes only once the app ships.
   SSD is absent, so `doctor`/`status` can report "SSD not mounted").
   Keys: `ssd_root`, `ssd_volume`, `catalogue_path`, `terminal` (for the app's
   shell-open preference, surfaced here for a single source).
-- CLI reads env overrides `BARDOLIER_SSD_ROOT`, `BARDOLIER_SSD_VOLUME`.
+- CLI reads env overrides `BDLR_SSD_ROOT`, `BDLR_SSD_VOLUME`.
 - The app never edits this file itself: it reads it with `bardolier config get` and
   writes it with `bardolier config set`, so precedence, path expansion and the
   "`ssd_root` defaults inside `ssd_volume`" rule have one implementation.

@@ -71,7 +71,7 @@ describe('eject on a non-removable root (cli-spec.md §6)', () => {
   function ejectContext(box: Sandbox, running: readonly string[], removable: boolean): { ctx: Context; docker: ReturnType<typeof stubDocker> } {
     const docker = stubDocker({ running: [...running] })
     const device = stubDevice([], { removable })
-    const ctx = makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } })
     return { ctx, docker }
   }
 

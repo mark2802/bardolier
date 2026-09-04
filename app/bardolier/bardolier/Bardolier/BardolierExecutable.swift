@@ -30,7 +30,7 @@ nonisolated enum BardolierExecutable {
 
     /// Overrides the search entirely — how the app is run from Xcode against a
     /// working copy of the CLI.
-    static let environmentOverride = "BARDOLIER_BIN"
+    static let environmentOverride = "BDLR_BIN"
 
     /// Where a Mac keeps user-installed CLIs, in the order a shell would.
     /// Homebrew (Apple silicon, then Intel), npm's global prefix, and the two

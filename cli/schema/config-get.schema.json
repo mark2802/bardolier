@@ -16,7 +16,7 @@
     "config": { "$ref": "#/$defs/effective_config" },
     "overrides": {
       "type": "array",
-      "description": "Environment variables that overrode a value, e.g. BARDOLIER_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
+      "description": "Environment variables that overrode a value, e.g. BDLR_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
       "items": { "type": "string", "minLength": 1 }
     }
   },

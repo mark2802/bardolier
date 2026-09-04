@@ -226,7 +226,7 @@ nonisolated struct BardolierClient: Sendable {
 
         // A GUI app's PATH can't find node, docker or diskutil — see
         // BardolierExecutable. Everything else is inherited unchanged, so
-        // BARDOLIER_SSD_ROOT and friends still work when launched from a shell.
+        // BDLR_SSD_ROOT and friends still work when launched from a shell.
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = BardolierExecutable.childSearchPath
         process.environment = environment

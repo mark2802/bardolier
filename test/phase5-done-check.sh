@@ -111,7 +111,7 @@ The half a terminal cannot check — on the Mac, in Xcode:
        defaults write com.mw.bardolier BardolierPath "$PWD/cli/bin/bardolier.js"
      or install it once and let the search find it:
        ln -s "$PWD/cli/bin/bardolier.js" /usr/local/bin/bardolier
-     (Running from Xcode instead? Set BARDOLIER_BIN in the scheme's environment.)
+     (Running from Xcode instead? Set BDLR_BIN in the scheme's environment.)
   4. Run. A box icon appears in the menu bar and no dock icon does.
   5. Click it. The debug view shows the SSD root, Docker, each project with its
      archetype and state, each service with `host → container` ports and its

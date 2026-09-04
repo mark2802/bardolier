@@ -48,8 +48,8 @@ MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_SSD_VOLUME="$VOLUME"
-export BARDOLIER_SSD_ROOT="$MOUNTED"
+export BDLR_SSD_VOLUME="$VOLUME"
+export BDLR_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -220,7 +220,7 @@ else
   skip "no daemon — the in-use refusal needs a real volume"
 fi
 
-UNMOUNTED="$(BARDOLIER_SSD_ROOT="$TMP/not-mounted" $BARDOLIER volumes orphaned --json 2>/dev/null || true)"
+UNMOUNTED="$(BDLR_SSD_ROOT="$TMP/not-mounted" $BARDOLIER volumes orphaned --json 2>/dev/null || true)"
 json_assert "$UNMOUNTED" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
   && ok "with the SSD absent it refuses rather than calling every volume an orphan" || bad "orphan listing answered without the manifests"
 
@@ -280,7 +280,7 @@ schema_assert eject "$(json_value "$CLEAR" 'JSON.stringify(d.output)')" \
 json_assert "$CLEAR" 'd.unmounted.length === 1' \
   && ok "and the unmount was reached exactly once" || bad "the unmount did not happen"
 
-GONE="$(BARDOLIER_SSD_VOLUME="$TMP/not-a-volume" $BARDOLIER eject --json 2>/dev/null || true)"
+GONE="$(BDLR_SSD_VOLUME="$TMP/not-a-volume" $BARDOLIER eject --json 2>/dev/null || true)"
 json_assert "$GONE" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
   && ok "ejecting what is not mounted is SSD_NOT_MOUNTED" || bad "eject accepted an absent volume"
 

@@ -7,7 +7,7 @@
  * touches the SSD; loading never throws SSD_NOT_MOUNTED.
  *
  * Precedence, lowest to highest: built-in defaults → config file → environment.
- * §8 names `BARDOLIER_SSD_ROOT` and `BARDOLIER_SSD_VOLUME`; `BARDOLIER_CONFIG` is an
+ * §8 names `BDLR_SSD_ROOT` and `BDLR_SSD_VOLUME`; `BARDOLIER_CONFIG` is an
  * implementation addition that relocates the file itself, which is what keeps
  * tests and the done-check hermetic on a machine that has a real config.
  */
@@ -43,7 +43,7 @@ export type LoadedConfig = {
   /** Absolute path consulted, whether or not it exists. */
   readonly path: string
   readonly exists: boolean
-  /** Env vars that overrode a value, e.g. `['BARDOLIER_SSD_ROOT']`. */
+  /** Env vars that overrode a value, e.g. `['BDLR_SSD_ROOT']`. */
   readonly overrides: readonly string[]
   /**
    * The inputs this load used, kept so a caller can reload the same way after
@@ -117,10 +117,10 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   const { file, exists } = readConfigFile(path)
 
   const overrides: string[] = []
-  const envRoot = env.BARDOLIER_SSD_ROOT
-  const envVolume = env.BARDOLIER_SSD_VOLUME
-  if (envRoot) overrides.push('BARDOLIER_SSD_ROOT')
-  if (envVolume) overrides.push('BARDOLIER_SSD_VOLUME')
+  const envRoot = env.BDLR_SSD_ROOT
+  const envVolume = env.BDLR_SSD_VOLUME
+  if (envRoot) overrides.push('BDLR_SSD_ROOT')
+  if (envVolume) overrides.push('BDLR_SSD_VOLUME')
 
   const volume = expandPath(envVolume || file.ssd_volume || DEFAULT_SSD_VOLUME, home)
   // The root defaults *inside* the configured volume, so setting only

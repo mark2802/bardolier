@@ -55,7 +55,7 @@ async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
       : `Nothing mounted at ${ssd.volume}; ${ssd.root} is unreachable.`,
     remedy: ssd.volumePresent
       ? `Create ${ssd.root}, or point ssd_root at the right directory in ${ctx.loaded.path}.`
-      : 'Plug in the SSD, or set ssd_volume / BARDOLIER_SSD_VOLUME to where it mounts.',
+      : 'Plug in the SSD, or set ssd_volume / BDLR_SSD_VOLUME to where it mounts.',
   }
 }
 

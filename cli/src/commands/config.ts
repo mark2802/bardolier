@@ -9,7 +9,7 @@
  * that and get the rest subtly wrong.
  *
  * `get` reports the EFFECTIVE config — what the CLI will actually use — plus
- * the environment overrides, because a value forced by `$BARDOLIER_SSD_ROOT` is one
+ * the environment overrides, because a value forced by `$BDLR_SSD_ROOT` is one
  * the file cannot change, and a preferences pane that silently wrote it anyway
  * would be lying to the user.
  *

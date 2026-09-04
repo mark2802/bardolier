@@ -36,7 +36,7 @@ cannot be one configured `ssd_volume`.
   naming a derived path. `EjectOutput.volume` already carries the answer to the
   app, so nothing downstream needs to compose it.
 - Config: `ssd_volume` leaves `Config`, `ConfigFile`, `CONFIG_KEYS`,
-  `config.schema.json`, `EffectiveConfig`, and the `$BARDOLIER_SSD_VOLUME`
+  `config.schema.json`, `EffectiveConfig`, and the `$BDLR_SSD_VOLUME`
   override. `DEFAULT_SSD_VOLUME` goes with it; the default `ssd_root` becomes
   the literal `/Volumes/ssd/claude-projects` for now — phase 18 is where the
   default stops assuming a disk exists.
@@ -61,6 +61,6 @@ the root on a removable volume (or a stubbed `removable()`), the volume in
 `EjectOutput` is the one derived from the root and not anything config said;
 with the root absent, `SSD_NOT_MOUNTED` names the root; a root *nested several
 directories deep* inside its volume still resolves to the mount point;
-`config get --json` has no `ssd_volume`; `$BARDOLIER_SSD_VOLUME` set is ignored and
+`config get --json` has no `ssd_volume`; `$BDLR_SSD_VOLUME` set is ignored and
 absent from `overrides`. Land as `test/phase17-done-check.sh` plus a section in
 `test/regression.sh` (`LAST=17`); unit coverage in `test/phase17.test.ts`.

@@ -241,7 +241,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
   test('with the SSD unmounted it refuses rather than calling everything an orphan', async () => {
     const box = sandbox()
     const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres') }] })
-    const ctx = makeContext(box, docker, { env: { BARDOLIER_SSD_ROOT: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { env: { BDLR_SSD_ROOT: `${box.root}-gone` } })
 
     await assert.rejects(
       () => collectOrphanedVolumes(ctx),
@@ -465,7 +465,7 @@ describe('down-all (cli-spec.md §6)', () => {
 describe('eject (cli-spec.md §6)', () => {
   /** A sandbox whose SSD_VOLUME is the temp dir standing in for the mount. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: StubDevice): Context {
-    return makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } })
+    return makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } })
   }
 
   test('stops everything, finds nothing holding it, and ejects', async () => {
@@ -550,7 +550,7 @@ describe('eject (cli-spec.md §6)', () => {
         await docker.composeDown(target)
       },
     }
-    const ctx = makeContext(box, recording, { device, env: { BARDOLIER_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, recording, { device, env: { BDLR_SSD_VOLUME: box.root } })
     await project(ctx, 'alpha')
 
     await runEject(ctx)
@@ -561,7 +561,7 @@ describe('eject (cli-spec.md §6)', () => {
     const box = sandbox()
     const docker = stubDocker({ running: ['bardolier-alpha'] })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: `${box.root}-gone` } })
 
     await assert.rejects(
       () => runEject(ctx),
@@ -635,7 +635,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
       volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }],
     })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BARDOLIER_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })
 
     await project(ctx, 'alpha', 'postgres')
     const up = await runUp(ctx, { name: 'alpha', noShell: false })

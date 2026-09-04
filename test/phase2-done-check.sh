@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 2 done-check — new → up → /work mounted and owned by the host user →
 # down (container gone, data kept) → delete, with `status` tracking each step.
-# The SSD is a temp dir (BARDOLIER_SSD_ROOT, §8); the Docker half is real and builds
+# The SSD is a temp dir (BDLR_SSD_ROOT, §8); the Docker half is real and builds
 # the base image if it is missing.
 #
 #   bash test/phase2-done-check.sh
@@ -38,8 +38,8 @@ ABSENT="$TMP/nowhere/claude-projects"
 mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_SSD_ROOT="$MOUNTED"
+export BDLR_SSD_VOLUME="$TMP/ssd"
+export BDLR_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -90,7 +90,7 @@ EXISTS="$($BARDOLIER new myapp --archetype web --json 2>/dev/null || true)"
 json_assert "$EXISTS" 'd.error && d.error.code === "PROJECT_EXISTS"' \
   && ok "a second new is PROJECT_EXISTS" || bad "duplicate new did not fail PROJECT_EXISTS"
 
-UNMOUNTED="$(BARDOLIER_SSD_ROOT="$ABSENT" $BARDOLIER new nope --archetype web --json 2>/dev/null || true)"
+UNMOUNTED="$(BDLR_SSD_ROOT="$ABSENT" $BARDOLIER new nope --archetype web --json 2>/dev/null || true)"
 json_assert "$UNMOUNTED" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
   && ok "new with the SSD absent is SSD_NOT_MOUNTED" || bad "new did not fail SSD_NOT_MOUNTED"
 [ ! -e "$ABSENT" ] && ok "no project directory was created on the internal disk" || bad "new created $ABSENT"

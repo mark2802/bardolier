@@ -42,8 +42,8 @@ MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_SSD_VOLUME="$VOLUME"
-export BARDOLIER_SSD_ROOT="$MOUNTED"
+export BDLR_SSD_VOLUME="$VOLUME"
+export BDLR_SSD_ROOT="$MOUNTED"
 
 cleanup() {
   # Never leave containers behind: the projects are in a temp dir that is about

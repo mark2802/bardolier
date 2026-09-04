@@ -70,7 +70,7 @@ defaults write com.mw.bardolier BardolierPath "$PWD/cli/bin/bardolier.js"
 ln -s "$PWD/cli/bin/bardolier.js" /usr/local/bin/bardolier   # or install it properly
 ```
 
-`BARDOLIER_BIN` in an Xcode scheme's environment overrides both.
+`BDLR_BIN` in an Xcode scheme's environment overrides both.
 
 ## Running it without Xcode
 
@@ -98,7 +98,7 @@ env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME="$HOME" bardolier doctor
 **The app** still has to be built once — Xcode is host-only (`CLAUDE.md`). After
 a ⌘B, drag `Bardolier.app` out of DerivedData into `/Applications`; the copy
 is self-contained and finds `bardolier` on its own through the search above, with no
-`BARDOLIER_BIN` and no `BardolierPath` preference. Rebuild and re-copy when the Swift
+`BDLR_BIN` and no `BardolierPath` preference. Rebuild and re-copy when the Swift
 changes. Nothing in the app needs the working copy at runtime.
 
 The gap this leaves is real and deliberate: a proper `.app` bundle with a signed,

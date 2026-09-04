@@ -15,7 +15,7 @@
 //  a fresh install can otherwise leave the menu with nothing to talk to (§13,
 //  the first-run message).
 //
-//  When the environment overrides a key (`$BARDOLIER_SSD_ROOT`), the write still
+//  When the environment overrides a key (`$BDLR_SSD_ROOT`), the write still
 //  happens but the panel says the environment wins — a preference that appears
 //  to save and then does nothing is worse than one that explains itself.
 //

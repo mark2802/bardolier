@@ -39,7 +39,7 @@ import {
 } from './helpers.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
-const APP_DIR = 'app/claude-yard/claude-yard'
+const APP_DIR = 'app/bardolier/bardolier'
 
 const sandboxes: Sandbox[] = []
 function sandbox(): Sandbox {
@@ -56,7 +56,7 @@ afterEach(() => {
 describe('the eject flow the menu drives (app-spec.md §10)', () => {
   /** A sandbox whose SSD_VOLUME is the temp dir standing in for the mount. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: SsdDevice): Context {
-    return makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } })
+    return makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } })
   }
 
   test('a blocked eject hands the app holders to render, and leaves the disk mounted', async () => {
@@ -186,7 +186,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
     const confirm = stubConfirm(true)
 
-    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BARDOLIER_SSD_VOLUME: box.root } }))
+    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BDLR_SSD_VOLUME: box.root } }))
 
     assert.equal(output.ejected, true)
     assert.equal(output.docker_stopped, true, 'the app has to be able to say the engine is down')
@@ -206,7 +206,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
         runEject(makeContext(box, docker, {
           device,
           confirm: stubConfirm(false),
-          env: { BARDOLIER_SSD_VOLUME: box.root },
+          env: { BDLR_SSD_VOLUME: box.root },
         })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
@@ -231,7 +231,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
 
     const output = await runEject(
-      makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }),
       { stopDocker: true },
     )
 
@@ -262,7 +262,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
     const confirm = stubConfirm(true)
 
-    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BARDOLIER_SSD_VOLUME: box.root } }))
+    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BDLR_SSD_VOLUME: box.root } }))
 
     assert.equal(output.docker_stopped, true)
     assert.match(confirm.questions[0] ?? '', /com\.docker\.backend/)
@@ -280,7 +280,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BARDOLIER_SSD_VOLUME: box.root } })),
+        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.deepEqual((error.details?.holders as { command: string }[]).map((h) => h.command), ['Xcode'])
@@ -300,7 +300,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BARDOLIER_SSD_VOLUME: box.root } })),
+        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.deepEqual((error.details?.holders as { command: string }[]).map((h) => h.command), ['mds_stores'])
@@ -323,7 +323,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     })
 
     await assert.rejects(
-      () => runEject(makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } }), { stopDocker: true }),
+      () => runEject(makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }), { stopDocker: true }),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')
@@ -355,7 +355,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => { vmAlive = false } })
 
     const output = await runEject(
-      makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BARDOLIER_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } }),
     )
 
     assert.equal(output.ejected, true)
@@ -397,7 +397,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
         runEject(makeContext(box, docker, {
           device,
           confirm: stubConfirm(false),
-          env: { BARDOLIER_SSD_VOLUME: box.root },
+          env: { BDLR_SSD_VOLUME: box.root },
         })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
@@ -417,7 +417,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     // Consenting — the button.
     const output = await runEject(
-      makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }),
       { stopDocker: true },
     )
     assert.equal(output.ejected, true)
@@ -438,7 +438,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const wait = stubWait()
 
     const output = await runEject(
-      makeContext(box, docker, { device, wait, env: { BARDOLIER_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, wait, env: { BDLR_SSD_VOLUME: box.root } }),
       { stopDocker: true },
     )
 
@@ -460,7 +460,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, wait, env: { BARDOLIER_SSD_VOLUME: box.root } }), {
+        runEject(makeContext(box, docker, { device, wait, env: { BDLR_SSD_VOLUME: box.root } }), {
           stopDocker: true,
         }),
       (error: unknown) => {
@@ -501,7 +501,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     })
 
     await assert.rejects(
-      () => runEject(makeContext(box, docker, { device, env: { BARDOLIER_SSD_VOLUME: box.root } }), { stopDocker: true }),
+      () => runEject(makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }), { stopDocker: true }),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')

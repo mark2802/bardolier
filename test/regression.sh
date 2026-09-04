@@ -61,7 +61,7 @@ export BARDOLIER_REGRESSION=1
 # (`config set did not record the change`). The ladder therefore hands every
 # phase a clean slate rather than whatever the shell above it happened to
 # export.
-CLEAN_ENV=(env -u BARDOLIER_CONFIG -u BARDOLIER_SSD_ROOT -u BARDOLIER_SSD_VOLUME)
+CLEAN_ENV=(env -u BARDOLIER_CONFIG -u BDLR_SSD_ROOT -u BDLR_SSD_VOLUME)
 
 pass=0
 fail=0
