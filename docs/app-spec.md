@@ -94,6 +94,11 @@ shows its host port and a copy-connection action.
   argv. The **app** launches the user's terminal running that command.
 - Terminal choice is a **Preference** (Terminal.app default; iTerm, Ghostty,
   etc. optional). The app uses the configured terminal to run the exec command.
+- When only a lesser route is available (macOS refusing the Automation
+  permission), the app opens the shell anyway and says why in a banner that
+  **survives refreshes** — opening the menu is a refresh, so an ordinary notice
+  would be wiped before it could be read. The user dismisses it, or a shell that
+  opens by the good route clears it.
 - **Start auto-opens a shell by default** (preference-controlled) so single-project
   starts drop you straight in. When batch-starting (Close-all's inverse isn't a
   thing, but multi-start via repeated clicks), the preference lets the user avoid

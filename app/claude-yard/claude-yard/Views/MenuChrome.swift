@@ -190,6 +190,30 @@ struct NoticeBanner: View {
     }
 }
 
+/// A degraded-but-working state: the thing the user asked for happened, by a
+/// worse route they can fix. Dismissible like a notice, but nothing clears it
+/// on their behalf — see `CprojStore.shellDowngrade`.
+struct WarningBanner: View {
+    var text: String
+    var dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            Text(text).font(.caption).textSelection(.enabled)
+            Spacer(minLength: 0)
+            Button(action: dismiss) {
+                Image(systemName: "xmark").font(.system(size: 9))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.yellow.opacity(0.12)))
+        .padding(.horizontal, 8)
+    }
+}
+
 /// A failure, in the words §13 asks for: the short message for the code, the
 /// CLI's own sentence underneath, and a recovery line when there is one. Never
 /// a stack trace, never a raw decoding error.

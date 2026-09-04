@@ -193,6 +193,12 @@ struct MenuBarRootView: View {
             ErrorBanner(failure: error) { store.clearError() }
                 .padding(.bottom, 4)
         }
+        // Last, and outliving both of the above: a shell that opened by the
+        // lesser route stays said until the user fixes it or dismisses it.
+        if let downgrade = store.shellDowngrade {
+            WarningBanner(text: downgrade) { store.clearShellDowngrade() }
+                .padding(.bottom, 4)
+        }
     }
 
     @ViewBuilder

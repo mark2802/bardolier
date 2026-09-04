@@ -102,6 +102,12 @@ final class CprojStore: ObservableObject {
     /// The result of the last action worth reporting — an assigned host port,
     /// a kept volume, reclaimed bytes (§6, §9).
     @Published private(set) var notice: String?
+    /// Why the last shell had to open by the lesser route (§7). Kept out of
+    /// `notice` because opening the menu IS a refresh, and a refresh wipes
+    /// `notice` — so the one sentence explaining a silent downgrade was gone
+    /// before it could be read. Same reasoning as `ejectPhase`: a state the
+    /// user acts on, not a receipt that flashes past.
+    @Published private(set) var shellDowngrade: String?
     /// What is running right now, or nil when idle. Drives the activity icon
     /// (§11) and disables conflicting actions (§4).
     @Published private(set) var activity: String?
@@ -409,7 +415,11 @@ final class CprojStore: ObservableObject {
             // A note comes back when the shell opened by a lesser route — say
             // so, rather than letting a silent downgrade look like normal.
             if let note = try CprojTerminal.open(invocation, in: terminalName) {
-                notice = note
+                shellDowngrade = note
+            } else {
+                // The good route worked, so whatever the banner still claims
+                // about a downgrade has stopped being true.
+                shellDowngrade = nil
             }
         } catch let failure as CprojFailure {
             lastError = failure
@@ -554,6 +564,10 @@ final class CprojStore: ObservableObject {
 
     func clearNotice() {
         notice = nil
+    }
+
+    func clearShellDowngrade() {
+        shellDowngrade = nil
     }
 
     // MARK: - Running one thing at a time

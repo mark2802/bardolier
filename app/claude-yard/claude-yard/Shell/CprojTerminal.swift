@@ -114,7 +114,10 @@ enum CprojTerminal {
             } catch let failure as TerminalFailure where failure.isPermissionDenied {
                 let fallback = try openViaCommandFile(command, project: invocation.project, terminal: terminal)
                 let extra = fallback.map { " \($0)" } ?? ""
-                return "Opened your shell through a .command file — \(failure.message)\(extra)"
+                return "Opened your shell through a .command file — \(failure.message)\(extra) "
+                    + "That route is typed at a fresh login shell, so a prompt in your shell startup "
+                    + "(oh-my-zsh\u{2019}s update check is the usual one) can swallow it: a window saying "
+                    + "\u{201C}no such file or directory\u{201D} is that, not a missing project."
             }
         }
         return try openViaCommandFile(command, project: invocation.project, terminal: terminal)
@@ -143,12 +146,30 @@ enum CprojTerminal {
     }
 
     /// AppleScript string literal escaping — backslash first, or it would
-    /// escape the escapes it just added.
+    /// escape the escapes it just added. A newline becomes the `\n` escape
+    /// rather than a raw line break, because `guarded` sends two lines and an
+    /// AppleScript literal is happier with the escape.
     nonisolated private static func literal(_ value: String) -> String {
         let escaped = value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
         return "\"\(escaped)\""
+    }
+
+    /// Terminal.app runs a command by TYPING it into a new login shell, and it
+    /// types it before the shell's rc files have finished. An rc that reads a
+    /// keystroke — oh-my-zsh's "Would you like to update? [Y/n]" is the common
+    /// one — swallows the first character of what we typed, so `'docker' …`
+    /// arrives as an unterminated quote and the shell hangs on `dquote>`.
+    ///
+    /// So type a sacrificial line first: `:` is the shell's silent no-op if it
+    /// survives, and a "not Y" answer if a prompt eats it instead. Either way
+    /// the command line behind it arrives whole. (The `.command` fallback below
+    /// has the same exposure and no cure — Terminal types the file's path there,
+    /// and that path is not ours to prefix.)
+    nonisolated static func guarded(_ command: String) -> String {
+        ":\n" + command
     }
 
     /// The script for a terminal we know how to drive, or nil for one we don't.
@@ -158,7 +179,7 @@ enum CprojTerminal {
             return """
             tell application "Terminal"
                 activate
-                do script \(literal(command))
+                do script \(literal(guarded(command)))
             end tell
             """
         case "iterm", "iterm2", "iterm.app":
