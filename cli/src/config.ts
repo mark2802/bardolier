@@ -1,13 +1,13 @@
 /**
  * Configuration — `cli-spec.md` §8.
  *
- * The config file lives on the INTERNAL disk (`~/.config/cproj/config.yml`) for
+ * The config file lives on the INTERNAL disk (`~/.config/bandolier/config.yml`) for
  * one reason: it must be readable while the SSD is unplugged, so `doctor` and
  * `status` can say "SSD not mounted" instead of failing. Nothing in this module
  * touches the SSD; loading never throws SSD_NOT_MOUNTED.
  *
  * Precedence, lowest to highest: built-in defaults → config file → environment.
- * §8 names `CPROJ_SSD_ROOT` and `CPROJ_SSD_VOLUME`; `CPROJ_CONFIG` is an
+ * §8 names `BANDOLIER_SSD_ROOT` and `BANDOLIER_SSD_VOLUME`; `BANDOLIER_CONFIG` is an
  * implementation addition that relocates the file itself, which is what keeps
  * tests and the done-check hermetic on a machine that has a real config.
  */
@@ -16,7 +16,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 import { assertValid, validate } from './schema.ts'
 
 export type Config = {
@@ -43,7 +43,7 @@ export type LoadedConfig = {
   /** Absolute path consulted, whether or not it exists. */
   readonly path: string
   readonly exists: boolean
-  /** Env vars that overrode a value, e.g. `['CPROJ_SSD_ROOT']`. */
+  /** Env vars that overrode a value, e.g. `['BANDOLIER_SSD_ROOT']`. */
   readonly overrides: readonly string[]
   /**
    * The inputs this load used, kept so a caller can reload the same way after
@@ -68,11 +68,11 @@ export function expandPath(value: string, home = homedir()): string {
 }
 
 export function defaultConfigPath(env: Env = process.env, home = homedir()): string {
-  const override = env.CPROJ_CONFIG
+  const override = env.BANDOLIER_CONFIG
   if (override && override.length > 0) return expandPath(override, home)
   const xdg = env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? expandPath(xdg, home) : join(home, '.config')
-  return join(base, 'cproj', 'config.yml')
+  return join(base, 'bandolier', 'config.yml')
 }
 
 function readConfigFile(path: string): { file: ConfigFile; exists: boolean } {
@@ -84,14 +84,14 @@ function readConfigFile(path: string): { file: ConfigFile; exists: boolean } {
     // A missing file is the normal first-run state, not a failure. Anything
     // else (EACCES, EISDIR) is real and must not be silently defaulted away.
     if (code === 'ENOENT') return { file: {}, exists: false }
-    throw new CprojError('CONFIG_INVALID', `Cannot read ${path}: ${(cause as Error).message}`)
+    throw new BandolierError('CONFIG_INVALID', `Cannot read ${path}: ${(cause as Error).message}`)
   }
 
   let parsed: unknown
   try {
     parsed = parseYaml(text)
   } catch (cause) {
-    throw new CprojError('CONFIG_INVALID', `${path} is not valid YAML: ${(cause as Error).message}`)
+    throw new BandolierError('CONFIG_INVALID', `${path} is not valid YAML: ${(cause as Error).message}`)
   }
 
   // An empty file parses to null; treat it as "no keys set".
@@ -117,10 +117,10 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   const { file, exists } = readConfigFile(path)
 
   const overrides: string[] = []
-  const envRoot = env.CPROJ_SSD_ROOT
-  const envVolume = env.CPROJ_SSD_VOLUME
-  if (envRoot) overrides.push('CPROJ_SSD_ROOT')
-  if (envVolume) overrides.push('CPROJ_SSD_VOLUME')
+  const envRoot = env.BANDOLIER_SSD_ROOT
+  const envVolume = env.BANDOLIER_SSD_VOLUME
+  if (envRoot) overrides.push('BANDOLIER_SSD_ROOT')
+  if (envVolume) overrides.push('BANDOLIER_SSD_VOLUME')
 
   const volume = expandPath(envVolume || file.ssd_volume || DEFAULT_SSD_VOLUME, home)
   // The root defaults *inside* the configured volume, so setting only
@@ -142,7 +142,7 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   }
 }
 
-// ── Writing (`cproj config set`, app-spec.md §12) ────────────────────────────
+// ── Writing (`bandolier config set`, app-spec.md §12) ────────────────────────────
 
 /**
  * The keys a caller may set. Mirrors `config.schema.json`'s properties, and
@@ -200,7 +200,7 @@ export function writeConfig(path: string, updates: Readonly<Partial<Record<Confi
 
   const { valid, errors } = validate('config', next)
   if (!valid) {
-    throw new CprojError('CONFIG_INVALID', `Refusing to write ${path}: ${errors.join('; ')}`)
+    throw new BandolierError('CONFIG_INVALID', `Refusing to write ${path}: ${errors.join('; ')}`)
   }
 
   try {
@@ -214,7 +214,7 @@ export function writeConfig(path: string, updates: Readonly<Partial<Record<Confi
     }
     writeFileSync(path, Object.keys(ordered).length === 0 ? '{}\n' : stringifyYaml(ordered), 'utf8')
   } catch (cause) {
-    throw new CprojError('CONFIG_INVALID', `Cannot write ${path}: ${(cause as Error).message}`)
+    throw new BandolierError('CONFIG_INVALID', `Cannot write ${path}: ${(cause as Error).message}`)
   }
 
   return { path, created: !exists, changed }

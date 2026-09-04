@@ -25,7 +25,7 @@ passes.
 the frozen contract, with no behaviour yet.
 
 Deliverables:
-- Repo layout: `cli/` (the `cproj` implementation), `app/` (empty for now,
+- Repo layout: `cli/` (the `bandolier` implementation), `app/` (empty for now,
   populated in Phase 5), `docs/` (these specs), `test/`.
 - `services.yml` default catalogue (postgres, redis, mongo) per `cli-spec.md` §4.1.
 - `project.yml` schema documented + a JSON Schema (or typed model) for it.
@@ -34,7 +34,7 @@ Deliverables:
 - Choose the CLI language/runtime (recommend: TypeScript on Node, since the base
   image already has Node; or Bun). Record the choice in `CLAUDE.md`.
 
-Done-check: `cproj --help` lists all commands (stubs allowed); schema files parse;
+Done-check: `bandolier --help` lists all commands (stubs allowed); schema files parse;
 error-code list exists in code.
 
 ---
@@ -44,17 +44,17 @@ error-code list exists in code.
 **Goal:** Everything that inspects without mutating.
 
 Deliverables:
-- Config loading (`~/.config/cproj/config.yml` + env overrides), readable when
+- Config loading (`~/.config/bandolier/config.yml` + env overrides), readable when
   the SSD is absent.
-- `cproj doctor --json` — Docker up? SSD mounted? base images present? catalogue
+- `bandolier doctor --json` — Docker up? SSD mounted? base images present? catalogue
   valid?
-- `cproj status [--json]` and `cproj list [--json]` — reading manifests + Docker
+- `bandolier status [--json]` and `bandolier list [--json]` — reading manifests + Docker
   state, emitting the frozen schema. With no projects, returns empty arrays
   cleanly.
 - `--json` plumbing + human output as separate renderers.
 
-Done-check: on an empty SSD, `cproj status --json` returns valid JSON with empty
-`projects`/`orphaned_volumes`; `cproj doctor --json` correctly reports SSD
+Done-check: on an empty SSD, `bandolier status --json` returns valid JSON with empty
+`projects`/`orphaned_volumes`; `bandolier doctor --json` correctly reports SSD
 mounted/absent as you plug/unplug.
 
 ---
@@ -64,12 +64,12 @@ mounted/absent as you plug/unplug.
 **Goal:** Create and run projects (services come in Phase 3).
 
 Deliverables:
-- `cproj new <name> --archetype <a>` — dir, `project.yml`, seeded `.gitignore`,
+- `bandolier new <name> --archetype <a>` — dir, `project.yml`, seeded `.gitignore`,
   `.dockerignore`, `CLAUDE.md`, and a compose file with just the dev
   container (no services yet).
 - Deterministic compose generation (`cli-spec.md` §9) — stable ordering.
-- `cproj up/down/delete` with idempotency and `PROJECT_*` errors.
-- Base-image build (`cproj build`) for at least the `web` archetype, with host
+- `bandolier up/down/delete` with idempotency and `PROJECT_*` errors.
+- Base-image build (`bandolier build`) for at least the `web` archetype, with host
   UID/GID build args; dev container bind-mounts project dir → `/work`.
 
 Done-check: `new` → `up` → shell in manually (`docker exec`) shows `/work`
@@ -102,10 +102,10 @@ port is reused by the next add.
 **Goal:** Complete the CLI surface; the whole lifecycle is terminal-drivable.
 
 Deliverables:
-- `cproj volumes orphaned` / `volumes rm` with sizes.
-- `cproj shell <name> --json` returning container + exec argv (no terminal spawn
+- `bandolier volumes orphaned` / `volumes rm` with sizes.
+- `bandolier shell <name> --json` returning container + exec argv (no terminal spawn
   in the CLI).
-- `cproj down-all`, `cproj eject` with `lsof` holder detection and
+- `bandolier down-all`, `bandolier eject` with `lsof` holder detection and
   `EJECT_BLOCKED { holders }`.
 
 Done-check: run the **full lifecycle script** end to end from the terminal
@@ -121,29 +121,29 @@ contract-freeze gate.** Do not proceed to the app until this passes.
 **Goal:** Stand up the app target and the CLI-wrapping layer inside it.
 
 ⚠️ **MANUAL STEP (you, in Xcode) — do this before running the phase goal:**
-1. In Xcode: File → New → Project → macOS → App. Name it (e.g. `CprojBar`),
+1. In Xcode: File → New → Project → macOS → App. Name it (e.g. `BandolierBar`),
    interface **SwiftUI**, language **Swift**. Save it into the repo's `app/`
    directory so it lives alongside the specs.
 2. Set the app to be a menu-bar app: in the App struct you'll use `MenuBarExtra`
    (Claude will write this), and set **`LSUIElement` = YES** (Info tab →
    "Application is agent (UIElement)") so there's no dock icon/window.
 3. Turn **App Sandbox OFF** (Signing & Capabilities) for v1 — the app shells out
-   to `docker`/`cproj` and the sandbox would block it. (Revisit later if you want
+   to `docker`/`bandolier` and the sandbox would block it. (Revisit later if you want
    to distribute it; for a local tool this is fine.)
 4. Confirm the project builds and runs (empty menu-bar item) before handing off.
 
 **Then the phase goal (Claude, editing files in `app/`):**
-- `CprojClient` (`app-spec.md` §4): process exec, `--json`, `Codable` models
+- `BandolierClient` (`app-spec.md` §4): process exec, `--json`, `Codable` models
   mirroring the frozen schemas, error-code mapping.
 - Models for `status`, project, service, orphaned volume.
 - A debug view or `#Preview` that dumps decoded `status` so you can verify
   decoding against real CLI output.
 
 ⚠️ **MANUAL — adding Claude-generated Swift files to the target:** Claude writes
-`.swift` files into `app/CprojBar/…`. New files created outside Xcode are **not
+`.swift` files into `app/BandolierBar/…`. New files created outside Xcode are **not
 automatically in the build**. After each phase that adds Swift files:
-- In Xcode, right-click the group → **Add Files to "CprojBar"…** → select the new
-  files → ensure **"Add to targets: CprojBar" is ticked** → Add. (Or drag them
+- In Xcode, right-click the group → **Add Files to "BandolierBar"…** → select the new
+  files → ensure **"Add to targets: BandolierBar" is ticked** → Add. (Or drag them
   from Finder into the Project Navigator with the target checked.)
 - If you use an Xcode version / setup with **synchronized folder groups**
   (Xcode 16+ file-system-synchronized groups), files added on disk appear
@@ -151,7 +151,7 @@ automatically in the build**. After each phase that adds Swift files:
   manual adding but still confirm target membership.
 - Build (⌘B) to confirm the new files compile and are in the target.
 
-Done-check: the app launches as a menu-bar item, calls `cproj status --json`, and
+Done-check: the app launches as a menu-bar item, calls `bandolier status --json`, and
 your debug view shows correctly decoded projects/services/ports.
 
 ---
@@ -193,10 +193,10 @@ reclaim the orphan, delete. Matches the Phase 4 terminal run.
 Deliverables:
 - Shell-open via the configured terminal (`app-spec.md` §7); Start-auto-shell
   preference (default ON).
-- Close-all & eject §10: call `cproj eject`, render `holders` on `EJECT_BLOCKED`,
+- Close-all & eject §10: call `bandolier eject`, render `holders` on `EJECT_BLOCKED`,
   Retry, ejected icon state.
 - Click-to-copy connection strings; empty/edge states; first-run message if
-  `cproj` isn't on PATH.
+  `bandolier` isn't on PATH.
 
 ⚠️ **MANUAL:** final "Add Files to target" pass if needed; ⌘B; then a full manual
 soak: start a couple of projects, open shells, quit them, Close-all & eject with
@@ -212,8 +212,8 @@ safely eject; with Xcode running, eject is correctly blocked and reported.
 **Goal:** Complete the mobile archetypes' base images and the archetype→image map.
 
 Deliverables:
-- `claude-ios` (Swift toolchain + swiftlint, edit/logic-test only) and
-  `claude-and` (Android SDK + Gradle) base images; archetype→image map complete.
+- `bandolier-ios` (Swift toolchain + swiftlint, edit/logic-test only) and
+  `bandolier-and` (Android SDK + Gradle) base images; archetype→image map complete.
 - CLAUDE.md boundary note verified: nothing in the container attempts
   `xcodebuild` or host-only build steps.
 
@@ -231,7 +231,7 @@ project you return to explain itself.
 Deliverables:
 - **Claude Code in all three base images**, pinned and checksum-verified, at a
   system path — not under `$HOME`, which is a mounted volume.
-- **A persistent per-project `$HOME`** (`cproj-<project>-home`), so a `down` no
+- **A persistent per-project `$HOME`** (`bandolier-<project>-home`), so a `down` no
   longer costs the login, the shell history and the dotfiles. Per project rather
   than shared, because Claude Code files sessions by working directory and every
   dev container works in `/work`.
@@ -240,7 +240,7 @@ Deliverables:
   commit made inside is attributed to the human.
 - **§9's dev-server port, finally implemented** — allocated, persisted as
   `app_port`, published, and retrofitted onto projects that predate the field.
-- **`.cproj/handoff.md`, written by `down`** before the containers go: the
+- **`.bandolier/handoff.md`, written by `down`** before the containers go: the
   repository's state plus the agent's own account of the session, best-effort
   and never able to fail the stop.
 - **Disabled menu items that say why** — a dimmed row and an absent row looked

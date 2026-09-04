@@ -9,7 +9,7 @@ import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { parse as parseYaml } from 'yaml'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { composeDocument } from '../cli/src/compose.ts'
 import { derivedDockerfile, derivedImageTag, selectedImage } from '../cli/src/deps.ts'
@@ -45,27 +45,27 @@ async function project(ctx: Context, name: string): Promise<void> {
 
 describe('derived-image mechanics (deps.ts)', () => {
   test('the tag is content-addressed: same base image + package set → same tag', () => {
-    assert.equal(derivedImageTag('claude-web', ['libnss3', 'libatk-bridge2.0-0']), derivedImageTag('claude-web', ['libatk-bridge2.0-0', 'libnss3']))
+    assert.equal(derivedImageTag('bandolier-web', ['libnss3', 'libatk-bridge2.0-0']), derivedImageTag('bandolier-web', ['libatk-bridge2.0-0', 'libnss3']))
   })
 
   test('a different package set gets a different tag', () => {
-    assert.notEqual(derivedImageTag('claude-web', ['libnss3']), derivedImageTag('claude-web', ['libnss3', 'libatk-bridge2.0-0']))
+    assert.notEqual(derivedImageTag('bandolier-web', ['libnss3']), derivedImageTag('bandolier-web', ['libnss3', 'libatk-bridge2.0-0']))
   })
 
   test('a different base image gets a different tag for the same packages', () => {
-    assert.notEqual(derivedImageTag('claude-web', ['libnss3']), derivedImageTag('claude-ios', ['libnss3']))
+    assert.notEqual(derivedImageTag('bandolier-web', ['libnss3']), derivedImageTag('bandolier-ios', ['libnss3']))
   })
 
   test('the Dockerfile confines root to image-build time and switches back', () => {
-    const text = derivedDockerfile('claude-web', ['libnss3'], 501, 20)
-    assert.match(text, /^FROM claude-web:latest/)
+    const text = derivedDockerfile('bandolier-web', ['libnss3'], 501, 20)
+    assert.match(text, /^FROM bandolier-web:latest/)
     assert.match(text, /USER root/)
     assert.match(text, /apt-get update && apt-get install -y --no-install-recommends libnss3 && rm -rf \/var\/lib\/apt\/lists\/\*/)
     assert.match(text, /USER 501:20\s*$/)
   })
 
   test('selectedImage falls back to the plain base image when nothing is declared', () => {
-    assert.equal(selectedImage(manifest('myapp')), 'claude-web:latest')
+    assert.equal(selectedImage(manifest('myapp')), 'bandolier-web:latest')
   })
 })
 
@@ -83,11 +83,11 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
     assert.ok(valid, `deps add output failed its schema:\n${errors.join('\n')}`)
     assert.deepEqual(result.added, ['libnss3'])
     assert.deepEqual(result.extra_packages, ['libnss3'])
-    assert.equal(result.image, derivedImageTag('claude-web', ['libnss3']))
+    assert.equal(result.image, derivedImageTag('bandolier-web', ['libnss3']))
     assert.deepEqual(readManifest(box, 'myapp').extra_packages, ['libnss3'])
 
     const compose = box.read('myapp', 'docker-compose.yml') ?? ''
-    assert.match(compose, new RegExp(`image: ${derivedImageTag('claude-web', ['libnss3'])}`))
+    assert.match(compose, new RegExp(`image: ${derivedImageTag('bandolier-web', ['libnss3'])}`))
   })
 
   test('accepts several packages in one call, sorted in the manifest', async () => {
@@ -107,7 +107,7 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
 
     await assert.rejects(
       () => runDepsAdd(ctx, { project: 'myapp', packages: ['libnss3'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PACKAGE_ATTACHED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PACKAGE_ATTACHED',
     )
     assert.deepEqual(readManifest(box, 'myapp').extra_packages, ['libnss3'])
   })
@@ -119,7 +119,7 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
 
     await assert.rejects(
       () => runDepsAdd(ctx, { project: 'myapp', packages: ['Not A Package'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
@@ -130,7 +130,7 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
 
     await assert.rejects(
       () => runDepsAdd(ctx, { project: 'myapp', packages: [] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
@@ -140,10 +140,10 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
     await project(ctx, 'myapp')
     const before = box.read('myapp', 'docker-compose.yml')
 
-    const running = makeContext(box, stubDocker({ running: ['cproj-myapp'] }))
+    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp'] }))
     await assert.rejects(
       () => runDepsAdd(running, { project: 'myapp', packages: ['libnss3'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.equal(box.read('myapp', 'docker-compose.yml'), before)
   })
@@ -153,7 +153,7 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
     const ctx = makeContext(box)
     await assert.rejects(
       () => runDepsAdd(ctx, { project: 'ghost', packages: ['libnss3'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 
@@ -184,11 +184,11 @@ describe('deps remove (cli-spec.md §6, Deps)', () => {
     assert.ok(valid, `deps remove output failed its schema:\n${errors.join('\n')}`)
     assert.deepEqual(result.removed, ['libnss3'])
     assert.deepEqual(result.extra_packages, [])
-    assert.equal(result.image, 'claude-web:latest')
+    assert.equal(result.image, 'bandolier-web:latest')
     assert.equal(readManifest(box, 'myapp').extra_packages, undefined, 'an empty list is omitted, not written empty')
 
     const compose = box.read('myapp', 'docker-compose.yml') ?? ''
-    assert.match(compose, /image: claude-web:latest/)
+    assert.match(compose, /image: bandolier-web:latest/)
   })
 
   test('removing what is not declared is PACKAGE_NOT_ATTACHED', async () => {
@@ -198,7 +198,7 @@ describe('deps remove (cli-spec.md §6, Deps)', () => {
 
     await assert.rejects(
       () => runDepsRemove(ctx, { project: 'myapp', packages: ['libnss3'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PACKAGE_NOT_ATTACHED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PACKAGE_NOT_ATTACHED',
     )
   })
 
@@ -208,10 +208,10 @@ describe('deps remove (cli-spec.md §6, Deps)', () => {
     await project(ctx, 'myapp')
     await runDepsAdd(ctx, { project: 'myapp', packages: ['libnss3'] })
 
-    const running = makeContext(box, stubDocker({ running: ['cproj-myapp'] }))
+    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp'] }))
     await assert.rejects(
       () => runDepsRemove(running, { project: 'myapp', packages: ['libnss3'] }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.deepEqual(readManifest(box, 'myapp').extra_packages, ['libnss3'])
   })
@@ -240,7 +240,7 @@ describe('deps list (cli-spec.md §6, Deps)', () => {
     const { valid } = validate('deps-list', result)
     assert.ok(valid)
     assert.deepEqual(result.extra_packages, ['libatk-bridge2.0-0', 'libnss3'])
-    assert.equal(result.image, derivedImageTag('claude-web', ['libnss3', 'libatk-bridge2.0-0']))
+    assert.equal(result.image, derivedImageTag('bandolier-web', ['libnss3', 'libatk-bridge2.0-0']))
   })
 
   test('a project with nothing declared lists nothing, no catalogue or daemon needed', async () => {
@@ -248,7 +248,7 @@ describe('deps list (cli-spec.md §6, Deps)', () => {
     const ctx = makeContext(box, stubDocker({ available: false }))
     await project(ctx, 'myapp')
 
-    assert.deepEqual(collectDepsList(ctx, 'myapp'), { project: 'myapp', extra_packages: [], image: 'claude-web:latest' })
+    assert.deepEqual(collectDepsList(ctx, 'myapp'), { project: 'myapp', extra_packages: [], image: 'bandolier-web:latest' })
   })
 
   test('an unknown project is PROJECT_NOT_FOUND', () => {
@@ -256,7 +256,7 @@ describe('deps list (cli-spec.md §6, Deps)', () => {
     const ctx = makeContext(box)
     assert.throws(
       () => collectDepsList(ctx, 'ghost'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -267,13 +267,13 @@ describe('extra packages elsewhere in the system', () => {
   test('compose selects the derived image when packages are declared', () => {
     const doc = composeDocument({ manifest: manifest('myapp', { extra_packages: ['libnss3'] }), catalogue: null })
     const services = doc.services as Record<string, { image?: string }>
-    assert.equal(services.dev?.image, derivedImageTag('claude-web', ['libnss3']))
+    assert.equal(services.dev?.image, derivedImageTag('bandolier-web', ['libnss3']))
   })
 
   test('compose selects the plain base image when nothing is declared', () => {
     const doc = composeDocument({ manifest: manifest('myapp'), catalogue: null })
     const services = doc.services as Record<string, { image?: string }>
-    assert.equal(services.dev?.image, 'claude-web:latest')
+    assert.equal(services.dev?.image, 'bandolier-web:latest')
   })
 
   test('`up` builds the derived image, with no build-args, before composeUp', async () => {
@@ -288,7 +288,7 @@ describe('extra packages elsewhere in the system', () => {
     const build = docker.calls.find((call) => call.kind === 'build')
     assert.ok(build, '`up` did not build the derived image')
     assert.ok(build.kind === 'build')
-    assert.equal(build.request.tag, derivedImageTag('claude-web', ['libnss3']))
+    assert.equal(build.request.tag, derivedImageTag('bandolier-web', ['libnss3']))
     assert.deepEqual(build.request.args, {})
 
     const buildIndex = docker.calls.indexOf(build)
@@ -317,7 +317,7 @@ describe('extra packages elsewhere in the system', () => {
     await project(ctx, 'myapp')
     await runDepsAdd(ctx, { project: 'myapp', packages: ['libnss3'] })
 
-    const docker = stubDocker({ running: ['cproj-myapp'] })
+    const docker = stubDocker({ running: ['bandolier-myapp'] })
     const running = makeContext(box, docker)
     await runUp(running, { name: 'myapp', noShell: true })
 

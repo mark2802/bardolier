@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/project.schema.json",
-  "title": "cproj project manifest (project.yml)",
+  "$id": "https://bandolier.local/schema/project.schema.json",
+  "title": "bandolier project manifest (project.yml)",
   "description": "Source of truth for one project. cli-spec.md §4.2. The compose file is generated from this and never hand-edited.",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +20,7 @@
     "base_image": {
       "type": "string",
       "description": "Resolved from archetype per cli-spec.md §4.3.",
-      "enum": ["claude-web", "claude-ios", "claude-and"]
+      "enum": ["bandolier-web", "bandolier-ios", "bandolier-and"]
     },
     "extra_packages": {
       "type": "array",

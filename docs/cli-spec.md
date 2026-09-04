@@ -1,4 +1,4 @@
-# CLI Spec — `cproj` (Container Project Manager engine)
+# CLI Spec — `bandolier` (Container Project Manager engine)
 
 Status: draft for implementation. This is the **engine**. The menu-bar app is a
 thin client over this CLI. **The CLI is the API; the app is a thin client.** All
@@ -104,7 +104,7 @@ Source of truth for one project. The compose file is derived from this.
 ```yaml
 name: myapp
 archetype: web            # web | ios | android | library
-base_image: claude-web    # resolved from archetype
+base_image: bandolier-web    # resolved from archetype
 extra_packages:            # OS packages beyond base_image (Phase 13); absent/empty = none
   - libnss3
 services:
@@ -125,10 +125,10 @@ created: 2026-08-19T10:00:00Z
 
 | Archetype | Base image   | In-container build?          | Host build step        |
 |-----------|--------------|------------------------------|------------------------|
-| web       | `claude-web` | full (Node/Next + Python via `uv`, services) | none    |
-| ios       | `claude-ios` | edit + swiftlint + logic test| Xcode (build/sim/sign) |
-| android   | `claude-and` | Gradle build + unit test     | emulator (host)        |
-| library   | `claude-web` | full                         | none                   |
+| web       | `bandolier-web` | full (Node/Next + Python via `uv`, services) | none    |
+| ios       | `bandolier-ios` | edit + swiftlint + logic test| Xcode (build/sim/sign) |
+| android   | `bandolier-and` | Gradle build + unit test     | emulator (host)        |
+| library   | `bandolier-web` | full                         | none                   |
 
 Base images carry the per-archetype toolchain, plus the two things every
 archetype needs: **Claude Code** — the agent the whole tool exists to host,
@@ -136,13 +136,13 @@ installed as the pinned standalone binary to a system path rather than under
 `$HOME`, which is a mounted volume (§9) — and the working kit (git, ripgrep, jq,
 curl). See CLAUDE.md.
 
-`claude-and` is built and run as `linux/amd64`: Google publishes the Linux
+`bandolier-and` is built and run as `linux/amd64`: Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
 that one image runs emulated. The pin lives in `cli/src/images.ts` and is read
 by both `build` and compose generation (§9), which must agree.
 
-`claude-and` also carries a SHARED dependency cache: `GRADLE_USER_HOME` is
-`/cache/gradle`, a named volume (`cproj-gradle-cache`) mounted into every
+`bandolier-and` also carries a SHARED dependency cache: `GRADLE_USER_HOME` is
+`/cache/gradle`, a named volume (`bandolier-gradle-cache`) mounted into every
 android dev container rather than a directory under the project's bind mount.
 The Android Gradle Plugin and its transitive dependencies are hundreds of
 megabytes of rebuildable data that is identical for every project, so it is kept
@@ -151,9 +151,9 @@ once, on the internal disk beside the image layers, and off the SSD. Declared in
 (which creates the volume) and the volume scan (§6), which treats it as claimed
 while any project's manifest names that base image.
 
-`claude-web` carries the same shape of cache for `uv`, the Python toolchain it
+`bandolier-web` carries the same shape of cache for `uv`, the Python toolchain it
 gained so a project can run a Python API alongside its React frontend in the
-one dev container: `UV_CACHE_DIR=/cache/uv`, volume `cproj-uv-cache`, same
+one dev container: `UV_CACHE_DIR=/cache/uv`, volume `bandolier-uv-cache`, same
 `IMAGE_CACHE` mechanism. `library` shares the image and the cache.
 
 ## 5. Port allocation (first-class)
@@ -198,12 +198,12 @@ volume. It exists for two shapes of need, both closed by the same mechanism:
   archetype that otherwise publishes nothing at all (`library`, `ios`,
   `android`).
 
-`cproj port add <project> <name> --container-port <n>` declares one: the
+`bandolier port add <project> <name> --container-port <n>` declares one: the
 caller states the container-side port, and the allocator finds a free host
 port starting there — same rule as `app_port`, no catalogue band to start
 from instead. Persisted as `extra_ports.<name>.{container_port,host_port}`,
-assigned once and stable for life like any other port in §5. `cproj port
-remove <project> <name>` detaches it and releases the host port; `cproj port
+assigned once and stable for life like any other port in §5. `bandolier port
+remove <project> <name>` detaches it and releases the host port; `bandolier port
 list <project>` reports what is declared, manifest-only, no daemon consulted.
 Add/remove require the project stopped, exactly as service add/remove do (§6).
 
@@ -219,51 +219,51 @@ for a service — the app renders it, it does not compose it.
 All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Projects
-- `cproj new <name> --archetype <a> [--services a,b]`
+- `bandolier new <name> --archetype <a> [--services a,b]`
   Creates dir, manifest, compose, `.gitignore`, `.dockerignore`, `CLAUDE.md`.
   Assigns ports for any initial services. Errors: `SSD_NOT_MOUNTED`,
   `PROJECT_EXISTS`.
-- `cproj list` — array of projects with archetype + running state.
-- `cproj status [<name>]` — full status object(s) (see §7). No arg = all.
-- `cproj up <name> [--no-shell]`
+- `bandolier list` — array of projects with archetype + running state.
+- `bandolier status [<name>]` — full status object(s) (see §7). No arg = all.
+- `bandolier up <name> [--no-shell]`
   Brings the project up (app dev container + attached services on one network).
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
   suppresses the app's shell-open (the CLI itself doesn't spawn terminals — it
   reports the exec command; see §6 shell).
-- `cproj down <name> [--no-handoff]` — stop + remove this project's containers.
+- `bandolier down <name> [--no-handoff]` — stop + remove this project's containers.
   Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
-- `cproj delete <name>` — remove containers, then the project dir. Prompts unless
+- `bandolier delete <name>` — remove containers, then the project dir. Prompts unless
   `--force`. Releases the project's ports. Named volumes: see `--keep-data`
   (default) vs `--purge` (also removes this project's volumes).
 
 ### Services
-- `cproj service add <project> <svc>` — attach; assign host port; regenerate
+- `bandolier service add <project> <svc>` — attach; assign host port; regenerate
   compose. Errors `PROJECT_RUNNING`, `SERVICE_ATTACHED`, `SERVICE_UNKNOWN`.
-- `cproj service remove <project> <svc>` — detach; regenerate compose; **keep the
+- `bandolier service remove <project> <svc>` — detach; regenerate compose; **keep the
   volume** (it becomes an orphan). Release the host port. Errors
   `PROJECT_RUNNING`, `SERVICE_NOT_ATTACHED`.
-- `cproj service list <project>` — attached services + resolved host ports.
+- `bandolier service list <project>` — attached services + resolved host ports.
 
 ### Ports
-- `cproj port add <project> <name> --container-port <n>` — declare an extra
+- `bandolier port add <project> <name> --container-port <n>` — declare an extra
   port (§5.1); assign its host port; regenerate compose. Errors
   `PROJECT_RUNNING`, `EXTRA_PORT_ATTACHED`.
-- `cproj port remove <project> <name>` — remove it; regenerate compose;
+- `bandolier port remove <project> <name>` — remove it; regenerate compose;
   release the host port. Errors `PROJECT_RUNNING`, `EXTRA_PORT_NOT_ATTACHED`.
-- `cproj port list <project>` — declared extra ports + resolved host ports.
+- `bandolier port list <project>` — declared extra ports + resolved host ports.
 
 ### Deps
-- `cproj deps add <project> <package...>` — declare one or more apt package
+- `bandolier deps add <project> <package...>` — declare one or more apt package
   names; the derived image (§9) is built at the next `up`. Errors
   `PROJECT_RUNNING`, `PACKAGE_ATTACHED`, `INVALID_ARGUMENT`.
-- `cproj deps remove <project> <package...>` — undeclare them; the next `up`
+- `bandolier deps remove <project> <package...>` — undeclare them; the next `up`
   reverts to the plain base image (or a smaller derived one) if it was the
   last package. Errors `PROJECT_RUNNING`, `PACKAGE_NOT_ATTACHED`.
-- `cproj deps list <project>` — declared packages + the image the dev
+- `bandolier deps list <project>` — declared packages + the image the dev
   container builds/runs from. Manifest-only, no daemon consulted.
 
 ### Shell
-- `cproj shell <name> [--print] [--root]`
+- `bandolier shell <name> [--print] [--root]`
   For a running project, resolves the dev container and returns the exec
   invocation. With `--json`, returns `{ "container": "...", "exec": ["docker",
   "exec","-it","<c>","bash"] }`. The **app** spawns the terminal; the CLI names
@@ -276,20 +276,20 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `extra_packages`, not this shell.
 
 ### Volumes / disk
-- `cproj volumes orphaned` — array of `{ name, size_bytes, size_human,
+- `bandolier volumes orphaned` — array of `{ name, size_bytes, size_human,
   last_project }` for volumes not referenced by any current compose file.
-- `cproj volumes rm <name>` — remove one orphaned volume (confirm unless
+- `bandolier volumes rm <name>` — remove one orphaned volume (confirm unless
   `--force`). Errors `VOLUME_IN_USE` if still referenced.
 
 ### Lifecycle / SSD
-- `cproj down-all` — stop + remove all cproj containers.
-- `cproj eject` — first checks that `ssd_volume` is actually a removable
+- `bandolier down-all` — stop + remove all bandolier containers.
+- `bandolier eject` — first checks that `ssd_volume` is actually a removable
   volume (`diskutil info -plist`). It may not be: `ssd_root` is a fully
   supported, first-class mode when it's an ordinary directory on the internal
   disk (§8), and `diskutil eject`-ing `/` or another non-removable mount is
   not a smaller version of ejecting, it's the wrong command. Not removable
   fails `EJECT_NOT_APPLICABLE` immediately — no project is stopped on the way
-  to that refusal — naming `cproj down-all` as the thing to run instead.
+  to that refusal — naming `bandolier down-all` as the thing to run instead.
   Otherwise: `down-all`, then check host holders (Xcode, Simulator, shells
   cd'd into the SSD via `lsof`), then `diskutil eject`. If held, fail
   `EJECT_BLOCKED` with `{ holders: [...] }` and do not force.
@@ -323,12 +323,12 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   refusal, but with no engine left to stop, so it never advises `--stop-docker`
   again. If the runtime has let go and the unmount still fails, that refusal is
   somebody else's and is reported as it came.
-- `cproj doctor` — environment check: Docker running, SSD mounted, base images
+- `bandolier doctor` — environment check: Docker running, SSD mounted, base images
   present, catalogue valid. Returns structured findings. (Useful first call for
   the app on launch.)
 
 ### Images
-- `cproj build [--archetype <a>] [--claude-code-version <v>]` — build base
+- `bandolier build [--archetype <a>] [--claude-code-version <v>]` — build base
   image(s) with host UID/GID build args. No arg builds all archetypes' bases.
   Claude Code defaults to `latest`, resolved and checksum-verified against the
   publisher's manifest at build time; `--claude-code-version <X.Y.Z>` pins an
@@ -344,16 +344,16 @@ Added in Phase 6 under §1 ("if the app needs something, a CLI command grows to
 provide it"), not part of the original surface. Additive: no existing schema
 changed to accommodate them.
 
-- `cproj catalogue` — every service type the catalogue defines, with its image,
+- `bandolier catalogue` — every service type the catalogue defines, with its image,
   container port and host-port band, plus the `services.yml` that answered and
   which step of §4.1's chain it came from. The app's Services submenu and
   New-project window render this rather than keeping a copy of the catalogue.
   Reports the BAND START only; an assigned port comes from a manifest.
   Errors: `CONFIG_INVALID`.
-- `cproj config get` — the effective configuration (§8): defaults, then the
+- `bandolier config get` — the effective configuration (§8): defaults, then the
   file, then the environment, plus the file path and which env vars overrode a
   value. Errors: `CONFIG_INVALID`.
-- `cproj config set <key> <value>` — set one §8 key; an empty value clears it.
+- `bandolier config set <key> <value>` — set one §8 key; an empty value clears it.
   Paths are expanded on the way in, keys are written in a stable order, and the
   effective config after the write is reported. Never validates that a path
   exists — the SSD is routinely absent, and refusing to record where it will be
@@ -381,7 +381,7 @@ changed to accommodate them.
           "connection_hint": "postgresql://localhost:5433"
         }
       ],
-      "dev_container": "cproj-myapp",   // null if stopped
+      "dev_container": "bandolier-myapp",   // null if stopped
       "app_port": 3000,                 // dev-server host port (§9); null if none
       "app_url": "http://localhost:3000", // null alongside it
       "extra_ports": [                  // named ports beyond app_port (§5.1)
@@ -401,18 +401,18 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 ## 8. Configuration
 
-- Config file `~/.config/cproj/config.yml` (internal disk — must be readable when
+- Config file `~/.config/bandolier/config.yml` (internal disk — must be readable when
   SSD is absent, so `doctor`/`status` can report "SSD not mounted").
   Keys: `ssd_root`, `ssd_volume`, `catalogue_path`, `terminal` (for the app's
   shell-open preference, surfaced here for a single source).
-- CLI reads env overrides `CPROJ_SSD_ROOT`, `CPROJ_SSD_VOLUME`.
-- The app never edits this file itself: it reads it with `cproj config get` and
-  writes it with `cproj config set`, so precedence, path expansion and the
+- CLI reads env overrides `BANDOLIER_SSD_ROOT`, `BANDOLIER_SSD_VOLUME`.
+- The app never edits this file itself: it reads it with `bandolier config get` and
+  writes it with `bandolier config set`, so precedence, path expansion and the
   "`ssd_root` defaults inside `ssd_volume`" rule have one implementation.
 - `ssd_root` may be any local directory — an external SSD is not required. The
   project lifecycle (`new`/`up`/`down`/services/volumes) never assumes a
   removable volume; only `eject` does, and it is simply unavailable
-  (`EJECT_NOT_APPLICABLE`) when `ssd_volume` isn't one. Use `cproj down-all` to
+  (`EJECT_NOT_APPLICABLE`) when `ssd_volume` isn't one. Use `bandolier down-all` to
   stop everything in that mode.
 
 ## 9. Compose generation rules
@@ -422,7 +422,7 @@ Schema stability is the contract. Additive changes only once the app ships.
 - One user-defined network per project; services + dev container attached.
 - **Image selection rule** (Phase 13): the dev container's `image:` is
   `<base_image>:latest` when `extra_packages` is empty, or the content-addressed
-  derived image `cproj-deps-<base_image>:<hash>` otherwise — `hash` a short
+  derived image `bandolier-deps-<base_image>:<hash>` otherwise — `hash` a short
   sha256 of the base image plus the sorted package list, so two projects
   declaring the same base image and packages resolve to the same tag and share
   one build (`deps.ts`). `up` builds it (§6, Deps) before `docker compose up`,
@@ -434,12 +434,12 @@ Schema stability is the contract. Additive changes only once the app ships.
 - Dev container, cont.: plus the base image's shared toolchain cache volume
   (§4.3) when it declares one, mounted at the image's own path. It is declared
   `external: true` so Compose neither creates nor claims a volume every project
-  on that image shares — `up` creates it, labelled `cproj.role: cache`. Both
+  on that image shares — `up` creates it, labelled `bandolier.role: cache`. Both
   keys are absent for an image with no cache, for the same reason `platform:`
   is: an existing project's generated file must not change.
-- Dev container, cont.: plus its `$HOME`, a named volume `cproj-<project>-home`
-  mounted at the images' shared `CONTAINER_HOME`, labelled `cproj.project` and
-  `cproj.role: home`. `down` removes the container, so a home in its writable
+- Dev container, cont.: plus its `$HOME`, a named volume `bandolier-<project>-home`
+  mounted at the images' shared `CONTAINER_HOME`, labelled `bandolier.project` and
+  `bandolier.role: home`. `down` removes the container, so a home in its writable
   layer would lose the shell history, the dotfiles and the agent's login on
   every stop. It is PER PROJECT, not shared like the toolchain cache: it holds
   the user's own state, and Claude Code files its sessions by working directory
@@ -475,7 +475,7 @@ Schema stability is the contract. Additive changes only once the app ships.
 ## 10. Seeded files (by `new`)
 
 - `.gitignore` — `.build/ .swiftpm/ DerivedData/ node_modules/`
-  (archetype-tuned), plus `.cproj/`, which holds the handoff note (§12):
+  (archetype-tuned), plus `.bandolier/`, which holds the handoff note (§12):
   regenerated on every stop, so churn rather than history. Track it deliberately
   if you want the notes in the repo.
 - `.dockerignore` — excludes `node_modules`, build output, `.git`,
@@ -499,7 +499,7 @@ Schema stability is the contract. Additive changes only once the app ships.
 A project resumed after three weeks is a project whose state has been forgotten.
 `down` is the one moment when everything needed to describe that state is still
 true and still reachable — so the note is written there, into
-`<project>/.cproj/handoff.md`, and nowhere else.
+`<project>/.bandolier/handoff.md`, and nowhere else.
 
 - **Two sources, failing independently.** The repository, via `git` on the host:
   branch, recent commits, what is still uncommitted. And the agent's own
@@ -519,7 +519,7 @@ true and still reachable — so the note is written there, into
 - **Appended, not overwritten.** Each stop adds a new entry, newest at the
   bottom; none is ever rewritten or dropped — a quiet "just said hello" session
   reporting no work honestly must not destroy a substantive entry above it, and
-  `.cproj/` is gitignored by default (§10), so there is usually no git history
+  `.bandolier/` is gitignored by default (§10), so there is usually no git history
   underneath to fall back on.
 - `--no-handoff` skips it. `delete` always passes it — there is no point
   summarising a project a second before its directory is removed.

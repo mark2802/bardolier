@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
-import { ERROR_CODES, CprojError, isErrorCode } from '../cli/src/errors.ts'
+import { ERROR_CODES, BandolierError, isErrorCode } from '../cli/src/errors.ts'
 import { SCHEMA_NAMES, loadSchema, validate } from '../cli/src/schema.ts'
 import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
 import { CONFIG_KEYS } from '../cli/src/config.ts'
@@ -69,7 +69,7 @@ describe('status contract (cli-spec.md §7)', () => {
     const project = fixture.projects[0]
     assert.ok(project)
     assert.equal(project.name, 'myapp')
-    assert.equal(project.dev_container, 'cproj-myapp')
+    assert.equal(project.dev_container, 'bandolier-myapp')
     const service = project.services[0]
     assert.ok(service)
     assert.equal(service.host_port, 5433)
@@ -149,7 +149,7 @@ describe('project manifest contract (cli-spec.md §4.2)', () => {
     const bare: ProjectManifest = {
       name: 'bare',
       archetype: 'library',
-      base_image: 'claude-web',
+      base_image: 'bandolier-web',
       created: '2026-08-19T10:00:00Z',
     }
     assert.ok(validate('project', bare).valid)
@@ -448,7 +448,7 @@ describe('catalogue + config commands (app-spec.md §6, §8, §12)', () => {
     assert.deepEqual([...effective.required].sort(), [...CONFIG_KEYS].sort())
 
     const valid = {
-      path: '/home/me/.config/cproj/config.yml',
+      path: '/home/me/.config/bandolier/config.yml',
       exists: false,
       config: { ssd_root: '/Volumes/ssd/claude-projects', ssd_volume: '/Volumes/ssd', catalogue_path: null, terminal: 'Terminal' },
       overrides: [],
@@ -495,7 +495,7 @@ describe('error codes (cli-spec.md §2)', () => {
   })
 
   test('a failure serialises to the §2 envelope', () => {
-    const error = new CprojError('EJECT_BLOCKED', 'The SSD is in use.', { holders: ['Xcode'] })
+    const error = new BandolierError('EJECT_BLOCKED', 'The SSD is in use.', { holders: ['Xcode'] })
     const payload = error.toPayload()
     assert.deepEqual(payload, {
       error: { code: 'EJECT_BLOCKED', message: 'The SSD is in use.', details: { holders: ['Xcode'] } },
@@ -504,7 +504,7 @@ describe('error codes (cli-spec.md §2)', () => {
   })
 
   test('an envelope without details is valid', () => {
-    const payload = new CprojError('PROJECT_NOT_FOUND', 'No such project.').toPayload()
+    const payload = new BandolierError('PROJECT_NOT_FOUND', 'No such project.').toPayload()
     assert.ok(validate('error', payload).valid)
   })
 })
@@ -572,7 +572,7 @@ describe('command surface (cli-spec.md §6)', () => {
     assert.deepEqual(names.sort(), [...SPEC_COMMANDS, ...APP_COMMANDS].sort())
   })
 
-  test('`cproj --help` lists all of them', () => {
+  test('`bandolier --help` lists all of them', () => {
     const help = renderRootHelp(ROOT).join('\n')
     for (const command of leaves) {
       assert.ok(help.includes(command.usage), `--help is missing \`${command.usage}\``)
@@ -594,7 +594,7 @@ describe('command surface (cli-spec.md §6)', () => {
       if (IMPLEMENTED.has(name)) continue
       await assert.rejects(
         async () => command.run({ args: [], flags: {}, json: false }),
-        (error: unknown) => error instanceof CprojError && error.code === 'NOT_IMPLEMENTED',
+        (error: unknown) => error instanceof BandolierError && error.code === 'NOT_IMPLEMENTED',
         `\`${name}\` did not throw NOT_IMPLEMENTED`,
       )
     }
@@ -626,17 +626,17 @@ describe('shell contract (cli-spec.md §6, Shell)', () => {
   test('the typed model satisfies shell.schema.json', () => {
     const shell: ShellOutput = {
       project: 'myapp',
-      container: 'cproj-myapp',
-      exec: ['docker', 'exec', '-it', 'cproj-myapp', 'bash'],
+      container: 'bandolier-myapp',
+      exec: ['docker', 'exec', '-it', 'bandolier-myapp', 'bash'],
       workdir: '/work',
     }
     assert.ok(validate('shell', shell).valid)
   })
 
   test('`exec` is argv, never a command string — the app runs it without a shell', () => {
-    const asString = { project: 'myapp', container: 'cproj-myapp', exec: 'docker exec -it cproj-myapp bash', workdir: '/work' }
+    const asString = { project: 'myapp', container: 'bandolier-myapp', exec: 'docker exec -it bandolier-myapp bash', workdir: '/work' }
     assert.equal(validate('shell', asString).valid, false)
-    const empty = { project: 'myapp', container: 'cproj-myapp', exec: [], workdir: '/work' }
+    const empty = { project: 'myapp', container: 'bandolier-myapp', exec: [], workdir: '/work' }
     assert.equal(validate('shell', empty).valid, false)
   })
 })
@@ -694,7 +694,7 @@ describe('down-all and eject contracts (cli-spec.md §6, Lifecycle / SSD)', () =
         { name: 'beta', was_running: false },
       ],
       stopped: ['alpha'],
-      stray_containers: ['cproj-ghost'],
+      stray_containers: ['bandolier-ghost'],
       docker_available: true,
     }
     assert.ok(validate('down-all', downAll).valid)
@@ -720,7 +720,7 @@ describe('down-all and eject contracts (cli-spec.md §6, Lifecycle / SSD)', () =
 
   test('the EJECT_BLOCKED envelope carries holders the app can render (§13)', () => {
     const holders: EjectHolder[] = [{ pid: 431, command: 'Xcode', user: 'mark', paths: ['/Volumes/ssd/claude-projects'] }]
-    const payload = new CprojError('EJECT_BLOCKED', 'The SSD is held.', { holders }).toPayload()
+    const payload = new BandolierError('EJECT_BLOCKED', 'The SSD is held.', { holders }).toPayload()
     assert.ok(validate('error', payload).valid)
     assert.deepEqual(payload.error.details?.holders, holders)
     // The same shape the success payload declares, so the app decodes one type.

@@ -5,9 +5,9 @@
  *   - THE MAP IS COMPLETE: every §4.3 archetype resolves to a Dockerfile that
  *     exists, so `unavailable` means "not built yet", never "never will be".
  *   - THE BUILD-ARG CONTRACT: each Dockerfile takes HOST_UID/HOST_GID and drops
- *     to that user at /work — the whole reason `cproj build` exists. Skipping it
+ *     to that user at /work — the whole reason `bandolier build` exists. Skipping it
  *     hands the Mac root-owned files, and only a real build would notice.
- *   - THE PIN AGREES WITH ITSELF: `claude-and` is x86_64-only because aapt2 is,
+ *   - THE PIN AGREES WITH ITSELF: `bandolier-and` is x86_64-only because aapt2 is,
  *     and `build` and the generated compose file must both say so. One
  *     constant, two readers.
  *   - THE BOUNDARY IS IN THE IMAGE: no `xcodebuild` in the ios base, no `adb`
@@ -29,7 +29,7 @@ import { runUp } from '../cli/src/commands/up.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
 import { runVolumeRemove } from '../cli/src/commands/volumes.ts'
 import { scanVolumes } from '../cli/src/volumes.ts'
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from '../cli/src/model/archetype.ts'
 import { seededFiles } from '../cli/src/scaffold.ts'
 import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
@@ -69,8 +69,8 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
       assert.ok(BASE_IMAGES.includes(image), `${archetype} maps to an image that does not exist`)
     }
     // ios and android are the two the map has been waiting on.
-    assert.equal(ARCHETYPE_BASE_IMAGE.ios, 'claude-ios')
-    assert.equal(ARCHETYPE_BASE_IMAGE.android, 'claude-and')
+    assert.equal(ARCHETYPE_BASE_IMAGE.ios, 'bandolier-ios')
+    assert.equal(ARCHETYPE_BASE_IMAGE.android, 'bandolier-and')
   })
 
   test('`build` with no argument reports nothing unavailable', async () => {
@@ -82,9 +82,9 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
     assert.deepEqual(
       result.images.map((image) => [image.image, image.status]),
       [
-        ['claude-web', 'built'],
-        ['claude-ios', 'built'],
-        ['claude-and', 'built'],
+        ['bandolier-web', 'built'],
+        ['bandolier-ios', 'built'],
+        ['bandolier-and', 'built'],
       ],
     )
     // Every build carries the host identity — the point of the command —
@@ -97,8 +97,8 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
 
   test('`build --archetype ios` and `--archetype android` reach their own Dockerfiles', async () => {
     for (const [archetype, image] of [
-      ['ios', 'claude-ios'],
-      ['android', 'claude-and'],
+      ['ios', 'bandolier-ios'],
+      ['android', 'bandolier-and'],
     ] as const) {
       const box = sandbox()
       const docker = stubDocker()
@@ -119,7 +119,7 @@ describe('the base images keep the ownership contract (HOST_UID/HOST_GID)', () =
   for (const image of BASE_IMAGES) {
     test(`${image} takes the host identity and works at /work as that user`, () => {
       const text = dockerfile(image)
-      // These four are what `cproj build` and `compose.ts` assume between them.
+      // These four are what `bandolier build` and `compose.ts` assume between them.
       assert.match(text, /ARG HOST_UID/, 'no HOST_UID build arg: files would come back root-owned')
       assert.match(text, /ARG HOST_GID/)
       assert.match(text, /USER \$\{HOST_UID\}:\$\{HOST_GID\}/, 'the image still runs as root')
@@ -134,14 +134,14 @@ describe('the base images keep the ownership contract (HOST_UID/HOST_GID)', () =
 
 // ── The one architecture pin, read by two writers ─────────────────────────────
 
-describe('claude-and is pinned to linux/amd64, consistently (images.ts)', () => {
+describe('bandolier-and is pinned to linux/amd64, consistently (images.ts)', () => {
   test('only the android base is pinned, and it is pinned to x86_64', () => {
-    assert.deepEqual(IMAGE_PLATFORM, { 'claude-and': 'linux/amd64' })
+    assert.deepEqual(IMAGE_PLATFORM, { 'bandolier-and': 'linux/amd64' })
     const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.platform]))
     assert.deepEqual(byImage, {
-      'claude-web': null,
-      'claude-ios': null,
-      'claude-and': 'linux/amd64',
+      'bandolier-web': null,
+      'bandolier-ios': null,
+      'bandolier-and': 'linux/amd64',
     })
   })
 
@@ -156,15 +156,15 @@ describe('claude-and is pinned to linux/amd64, consistently (images.ts)', () => 
     // And it says so in the output, only where it is true.
     const reported = Object.fromEntries(result.images.map((image) => [image.image, image.platform ?? null]))
     assert.deepEqual(reported, {
-      'claude-web': null,
-      'claude-ios': null,
-      'claude-and': 'linux/amd64',
+      'bandolier-web': null,
+      'bandolier-ios': null,
+      'bandolier-and': 'linux/amd64',
     })
   })
 
   test('the generated compose file starts the dev container on the same platform', () => {
     const services = catalogue()
-    const android = renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'claude-and' }), catalogue: services })
+    const android = renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'bandolier-and' }), catalogue: services })
     assert.match(android, /platform: linux\/amd64/)
 
     // …and adds nothing for an unpinned image, so no existing project's
@@ -173,14 +173,14 @@ describe('claude-and is pinned to linux/amd64, consistently (images.ts)', () => 
     assert.ok(!web.includes('platform:'), 'an unpinned base image must not emit a platform key')
 
     // Same manifest, same bytes — the pin is not a new source of drift.
-    assert.equal(android, renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'claude-and' }), catalogue: services }))
+    assert.equal(android, renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'bandolier-and' }), catalogue: services }))
   })
 
   test('`new android` writes a compose file the daemon can actually start', async () => {
     const box = sandbox()
     await runNew(makeContext(box), { name: 'droid', archetype: 'android', services: undefined })
     const compose = readFileSync(join(box.root, 'droid', 'docker-compose.yml'), 'utf8')
-    assert.match(compose, /image: claude-and:latest/)
+    assert.match(compose, /image: bandolier-and:latest/)
     assert.match(compose, /platform: linux\/amd64/)
   })
 })
@@ -220,7 +220,7 @@ describe('`build --claude-code-version` (default `latest`, pin with an exact rel
     const box = sandbox()
     await assert.rejects(
       () => runBuild(makeContext(box, stubDocker()), undefined, 'v2.1.247'),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 })
@@ -228,8 +228,8 @@ describe('`build --claude-code-version` (default `latest`, pin with an exact rel
 // ── The boundary, as a fact about the image ───────────────────────────────────
 
 describe('the mobile images encode the host/container boundary (CLAUDE.md)', () => {
-  test('claude-ios carries the Swift toolchain and swiftlint, and no host-only build', () => {
-    const text = dockerfile('claude-ios')
+  test('bandolier-ios carries the Swift toolchain and swiftlint, and no host-only build', () => {
+    const text = dockerfile('bandolier-ios')
     assert.match(text, /^FROM swift:/m, 'the ios base must be the open-source Swift toolchain')
     assert.match(text, /swiftlint/, 'swiftlint is half of what the ios archetype can do in here (§4.3)')
     // Nothing in here may look like a way to build the app: those steps are the
@@ -238,8 +238,8 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
     assert.ok(!/simulator|xcrun simctl/i.test(text.replace(/^#.*$/gm, '')), 'no simulator belongs in a Linux image')
   })
 
-  test('claude-and carries the SDK and Gradle, and no adb', () => {
-    const text = dockerfile('claude-and')
+  test('bandolier-and carries the SDK and Gradle, and no adb', () => {
+    const text = dockerfile('bandolier-and')
     assert.match(text, /^FROM eclipse-temurin:/m, 'the android base needs a JDK')
     assert.match(text, /sdkmanager/, 'the Android SDK is installed with sdkmanager')
     assert.match(text, /gradle-\$\{GRADLE_VERSION\}/, 'a Gradle on PATH for projects without a wrapper')
@@ -254,10 +254,10 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
   test('every base image pins its toolchain version, so the same file builds the same image', () => {
     // A floating `latest` would make two builds of one Dockerfile differ —
     // the same determinism rule the compose file is held to (§9).
-    assert.match(dockerfile('claude-web'), /ARG NODE_VERSION=\d/)
-    assert.match(dockerfile('claude-ios'), /ARG SWIFT_VERSION=\d/)
-    assert.match(dockerfile('claude-ios'), /ARG SWIFTLINT_VERSION=\d/)
-    const android = dockerfile('claude-and')
+    assert.match(dockerfile('bandolier-web'), /ARG NODE_VERSION=\d/)
+    assert.match(dockerfile('bandolier-ios'), /ARG SWIFT_VERSION=\d/)
+    assert.match(dockerfile('bandolier-ios'), /ARG SWIFTLINT_VERSION=\d/)
+    const android = dockerfile('bandolier-and')
     for (const arg of ['JAVA_VERSION', 'ANDROID_CMDLINE_TOOLS', 'ANDROID_PLATFORM', 'ANDROID_BUILD_TOOLS', 'GRADLE_VERSION']) {
       assert.match(android, new RegExp(`ARG ${arg}=`), `${arg} is not pinned`)
     }
@@ -278,35 +278,35 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
 // ── The Gradle cache: shared, and on the internal disk ────────────────────────
 
 describe('toolchain caches are shared, not per project (images.ts)', () => {
-  const CACHE = 'cproj-gradle-cache'
+  const CACHE = 'bandolier-gradle-cache'
   const MOUNT = '/cache/gradle'
-  const UV_CACHE = 'cproj-uv-cache'
+  const UV_CACHE = 'bandolier-uv-cache'
   const UV_MOUNT = '/cache/uv'
 
   /** A manifest for an android project, which shares Gradle's cache. */
   function droid(name = 'droid') {
-    return manifest(name, { archetype: 'android', base_image: 'claude-and' })
+    return manifest(name, { archetype: 'android', base_image: 'bandolier-and' })
   }
 
   /** A manifest for the one archetype with no cache at all. */
   function swiftbits(name = 'swiftbits') {
-    return manifest(name, { archetype: 'ios', base_image: 'claude-ios' })
+    return manifest(name, { archetype: 'ios', base_image: 'bandolier-ios' })
   }
 
   test('two images declare a cache, and each Dockerfile puts its toolchain in it', () => {
     assert.deepEqual(IMAGE_CACHE, {
-      'claude-web': { volume: UV_CACHE, mount: UV_MOUNT },
-      'claude-and': { volume: CACHE, mount: MOUNT },
+      'bandolier-web': { volume: UV_CACHE, mount: UV_MOUNT },
+      'bandolier-and': { volume: CACHE, mount: MOUNT },
     })
     const byImage = Object.fromEntries(baseImages().map((d) => [d.image, d.cache?.volume ?? null]))
-    assert.deepEqual(byImage, { 'claude-web': UV_CACHE, 'claude-ios': null, 'claude-and': CACHE })
+    assert.deepEqual(byImage, { 'bandolier-web': UV_CACHE, 'bandolier-ios': null, 'bandolier-and': CACHE })
 
     // The coupling that a wrong answer makes silent: a toolchain writing
     // somewhere the volume is not mounted still WORKS — it just re-downloads
     // every run, into a container layer, which is the thing this exists to stop.
     for (const [image, envVar, mount] of [
-      ['claude-and', 'GRADLE_USER_HOME', MOUNT],
-      ['claude-web', 'UV_CACHE_DIR', UV_MOUNT],
+      ['bandolier-and', 'GRADLE_USER_HOME', MOUNT],
+      ['bandolier-web', 'UV_CACHE_DIR', UV_MOUNT],
     ] as const) {
       const text = dockerfile(image)
       assert.match(text, new RegExp(`ENV ${envVar}=${mount}\\b`))
@@ -326,7 +326,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     // FIRST project's compose labels, and every other project on that image
     // then warns about it on every `up`.
     assert.match(android, new RegExp(`${CACHE}:\\n\\s+name: ${CACHE}\\n\\s+external: true`))
-    assert.ok(!android.includes('cproj.project: droid\n    cproj.service'), 'the cache is no project’s volume')
+    assert.ok(!android.includes('bandolier.project: droid\n    bandolier.service'), 'the cache is no project’s volume')
     assert.ok(!android.includes(UV_CACHE), 'android shares no volume with the web image')
 
     const web = renderCompose({ manifest: manifest('site'), catalogue: services })
@@ -348,7 +348,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
 
   test('`up` creates each cache volume before Compose asks for it, and only for its own image', async () => {
     const box = sandbox()
-    const docker = stubDocker({ startsAs: ['cproj-droid'] })
+    const docker = stubDocker({ startsAs: ['bandolier-droid'] })
     const ctx = makeContext(box, docker)
     await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
     await runUp(ctx, { name: 'droid', noShell: true })
@@ -359,16 +359,16 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     assert.equal(created?.kind === 'ensureVolume' ? created.name : null, CACHE)
     // Labelled as the cache, and NOT as any project's: that label is what makes
     // the orphan scan treat it as shared rather than as `droid`'s to reclaim.
-    assert.deepEqual(created?.kind === 'ensureVolume' ? created.labels : null, { 'cproj.role': 'cache' })
+    assert.deepEqual(created?.kind === 'ensureVolume' ? created.labels : null, { 'bandolier.role': 'cache' })
 
-    const web = stubDocker({ startsAs: ['cproj-site'] })
+    const web = stubDocker({ startsAs: ['bandolier-site'] })
     const webCtx = makeContext(sandbox(), web)
     await runNew(webCtx, { name: 'site', archetype: 'web', services: undefined })
     await runUp(webCtx, { name: 'site', noShell: true })
     const webCreated = web.calls.find((call) => call.kind === 'ensureVolume')
     assert.equal(webCreated?.kind === 'ensureVolume' ? webCreated.name : null, UV_CACHE)
 
-    const ios = stubDocker({ startsAs: ['cproj-swiftbits'] })
+    const ios = stubDocker({ startsAs: ['bandolier-swiftbits'] })
     const iosCtx = makeContext(sandbox(), ios)
     await runNew(iosCtx, { name: 'swiftbits', archetype: 'ios', services: undefined })
     await runUp(iosCtx, { name: 'swiftbits', noShell: true })
@@ -377,7 +377,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
 
   test('it is claimed while any android project exists, and reclaimable once none does', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'cproj.role': 'cache' }, size_bytes: 20971520 }] })
+    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'bandolier.role': 'cache' }, size_bytes: 20971520 }] })
     const ctx = makeContext(box, docker)
     await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
     await runNew(ctx, { name: 'site', archetype: 'web', services: undefined })
@@ -398,7 +398,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
 
   test('`volumes rm` refuses it with the reason that fits a shared volume', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'cproj.role': 'cache' }, size_bytes: 1024 }] })
+    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'bandolier.role': 'cache' }, size_bytes: 1024 }] })
     const ctx = makeContext(box, docker)
     await runNew(ctx, { name: 'droid', archetype: 'android', services: undefined })
 
@@ -407,7 +407,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     await assert.rejects(
       () => runVolumeRemove(ctx, { name: CACHE, force: true, json: true }),
       (error: unknown) =>
-        error instanceof CprojError &&
+        error instanceof BandolierError &&
         error.code === 'VOLUME_IN_USE' &&
         /shared toolchain cache/.test(error.message) &&
         !/service remove/.test(error.message),
@@ -419,9 +419,9 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     const box = sandbox()
     const docker = stubDocker({
       volumes: [
-        { name: CACHE, labels: { 'cproj.role': 'cache' } },
-        { name: 'cproj-droid-home', labels: { 'cproj.project': 'droid', 'cproj.role': 'home' } },
-        { name: 'droid_pgdata', labels: { 'cproj.project': 'droid', 'cproj.service': 'postgres' } },
+        { name: CACHE, labels: { 'bandolier.role': 'cache' } },
+        { name: 'bandolier-droid-home', labels: { 'bandolier.project': 'droid', 'bandolier.role': 'home' } },
+        { name: 'droid_pgdata', labels: { 'bandolier.project': 'droid', 'bandolier.service': 'postgres' } },
       ],
     })
     const ctx = makeContext(box, docker)
@@ -431,7 +431,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     const removed = docker.calls.filter((call) => call.kind === 'removeVolume').map((call) => call.name)
     assert.deepEqual(
       removed,
-      ['cproj-droid-home', 'droid_pgdata'],
+      ['bandolier-droid-home', 'droid_pgdata'],
       'purge destroys what the project owns — its home included — not what it shares',
     )
   })

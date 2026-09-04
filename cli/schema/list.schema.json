@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/list.schema.json",
-  "title": "cproj list output",
+  "$id": "https://bandolier.local/schema/list.schema.json",
+  "title": "bandolier list output",
   "description": "Projects with archetype and running state. cli-spec.md §6 (Projects). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/volumes-orphaned.schema.json",
-  "title": "cproj volumes orphaned output",
+  "$id": "https://bandolier.local/schema/volumes-orphaned.schema.json",
+  "title": "bandolier volumes orphaned output",
   "description": "Named volumes no current project manifest claims, with sizes. cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
@@ -30,7 +30,7 @@
         "size_human": { "type": "string", "minLength": 1 },
         "last_project": {
           "type": ["string", "null"],
-          "description": "Owning project, from the volume's cproj.project label, or null when it can't be attributed."
+          "description": "Owning project, from the volume's bandolier.project label, or null when it can't be attributed."
         }
       }
     }

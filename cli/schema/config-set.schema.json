@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/config-set.schema.json",
-  "title": "cproj config set output",
+  "$id": "https://bandolier.local/schema/config-set.schema.json",
+  "title": "bandolier config set output",
   "description": "What a write to the config file (cli-spec.md §8) did. Preferences (app-spec.md §12) writes the SSD path and the terminal here so those settings have one source rather than a copy in the app's defaults.",
   "type": "object",
   "additionalProperties": false,
@@ -24,7 +24,7 @@
     "config": { "$ref": "#/$defs/effective_config" },
     "overrides": {
       "type": "array",
-      "description": "Environment variables that overrode a value, e.g. CPROJ_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
+      "description": "Environment variables that overrode a value, e.g. BANDOLIER_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
       "items": { "type": "string", "minLength": 1 }
     }
   },

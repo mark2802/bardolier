@@ -8,7 +8,7 @@
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { createSsdDevice } from '../cli/src/device.ts'
 import { runEject } from '../cli/src/commands/ssd.ts'
@@ -71,19 +71,19 @@ describe('eject on a non-removable root (cli-spec.md §6)', () => {
   function ejectContext(box: Sandbox, running: readonly string[], removable: boolean): { ctx: Context; docker: ReturnType<typeof stubDocker> } {
     const docker = stubDocker({ running: [...running] })
     const device = stubDevice([], { removable })
-    const ctx = makeContext(box, docker, { device, env: { CPROJ_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, docker, { device, env: { BANDOLIER_SSD_VOLUME: box.root } })
     return { ctx, docker }
   }
 
   test('a non-removable ssd_volume fails EJECT_NOT_APPLICABLE, and stops nothing on the way', async () => {
     const box = sandbox()
-    const { ctx, docker } = ejectContext(box, ['cproj-alpha'], false)
+    const { ctx, docker } = ejectContext(box, ['bandolier-alpha'], false)
     await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
 
     await assert.rejects(
       () => runEject(ctx),
       (error: unknown) => {
-        assert.ok(error instanceof CprojError)
+        assert.ok(error instanceof BandolierError)
         assert.equal(error.code, 'EJECT_NOT_APPLICABLE')
         assert.match(error.message, /down-all/)
         assert.ok(validate('error', error.toPayload()).valid)

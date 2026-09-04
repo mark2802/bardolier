@@ -1,17 +1,18 @@
 {
-  "name": "cproj",
+  "name": "bandolier",
   "version": "0.0.0",
   "private": true,
   "description": "Container Project Manager engine — the CLI is the API",
   "type": "module",
   "bin": {
-    "cproj": "./bin/cproj.js"
+    "bandolier": "./bin/bandolier.js",
+    "bdlr": "./bin/bandolier.js"
   },
   "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
-    "cproj": "node ./bin/cproj.js",
+    "bandolier": "node ./bin/bandolier.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test ../test",
     "done-check": "bash ../test/phase2-done-check.sh"

@@ -13,7 +13,7 @@
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { formatBytes, scanVolumes } from '../cli/src/volumes.ts'
 import { parseDockerSize } from '../cli/src/docker.ts'
@@ -51,7 +51,7 @@ afterEach(() => {
 
 /** The labels the generated compose file puts on a service's volume (§9). */
 function labels(project: string, service: string) {
-  return { 'cproj.project': project, 'cproj.service': service }
+  return { 'bandolier.project': project, 'bandolier.service': service }
 }
 
 /** A project on disk, created the way a user would. */
@@ -64,15 +64,15 @@ async function project(ctx: Context, name: string, services?: string): Promise<v
 describe('shell (cli-spec.md §6, Shell)', () => {
   test('resolves the dev container and returns the exec argv', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha')
     assert.deepEqual(output, {
       project: 'alpha',
-      container: 'cproj-alpha',
-      exec: ['docker', 'exec', '-it', 'cproj-alpha', 'bash'],
+      container: 'bandolier-alpha',
+      exec: ['docker', 'exec', '-it', 'bandolier-alpha', 'bash'],
       workdir: '/work',
     })
     assert.ok(validate('shell', output).valid)
@@ -80,12 +80,12 @@ describe('shell (cli-spec.md §6, Shell)', () => {
 
   test('--root swaps to `docker exec -u root`, same container, same checks (phase 14)', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha', { root: true })
-    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-it', 'cproj-alpha', 'bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-it', 'bandolier-alpha', 'bash'])
     assert.ok(validate('shell', output).valid)
   })
 
@@ -97,13 +97,13 @@ describe('shell (cli-spec.md §6, Shell)', () => {
 
     await assert.rejects(
       () => runShell(ctx, 'alpha', { root: true }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_STOPPED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_STOPPED',
     )
   })
 
   test('spawns nothing — the daemon is only ever asked what is running', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha')
 
@@ -119,19 +119,19 @@ describe('shell (cli-spec.md §6, Shell)', () => {
 
     await assert.rejects(
       () => runShell(ctx, 'alpha'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_STOPPED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_STOPPED',
     )
     assert.deepEqual(docker.calls, [], 'a refused shell started something')
   })
 
   test('a project whose services are up but whose dev container is not is still PROJECT_STOPPED', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker({ running: ['cproj-alpha-postgres'] }))
+    const ctx = makeContext(box, stubDocker({ running: ['bandolier-alpha-postgres'] }))
     await project(ctx, 'alpha', 'postgres')
 
     await assert.rejects(
       () => runShell(ctx, 'alpha'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_STOPPED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_STOPPED',
     )
   })
 
@@ -143,7 +143,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
 
     await assert.rejects(
       () => runShell(offline, 'alpha'),
-      (error: unknown) => error instanceof CprojError && error.code === 'DOCKER_UNAVAILABLE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'DOCKER_UNAVAILABLE',
     )
   })
 
@@ -151,7 +151,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     const ctx = makeContext(sandbox(), stubDocker({ running: [] }))
     await assert.rejects(
       () => runShell(ctx, 'ghost'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -193,7 +193,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
     await project(ctx, 'alpha', 'postgres')
 
     const deleted = await runDelete(ctx, { name: 'alpha', force: true, keepData: false, purge: false, json: true })
-    assert.deepEqual(deleted.kept_volumes, ['alpha_pgdata', 'cproj-alpha-home'])
+    assert.deepEqual(deleted.kept_volumes, ['alpha_pgdata', 'bandolier-alpha-home'])
 
     const output = await collectOrphanedVolumes(ctx)
     assert.deepEqual(output.orphaned.map((v) => v.name), ['alpha_pgdata'])
@@ -219,7 +219,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
     box.writeProject('alpha', {
       name: 'alpha',
       archetype: 'web',
-      base_image: 'claude-web',
+      base_image: 'bandolier-web',
       services: { kafka: { host_port: 9092 } },
       created: '2026-08-19T10:00:00.000Z',
     })
@@ -241,11 +241,11 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
   test('with the SSD unmounted it refuses rather than calling everything an orphan', async () => {
     const box = sandbox()
     const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres') }] })
-    const ctx = makeContext(box, docker, { env: { CPROJ_SSD_ROOT: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { env: { BANDOLIER_SSD_ROOT: `${box.root}-gone` } })
 
     await assert.rejects(
       () => collectOrphanedVolumes(ctx),
-      (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
     )
   })
 
@@ -257,7 +257,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
 
     await assert.rejects(
       () => collectOrphanedVolumes(ctx),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
@@ -354,7 +354,7 @@ describe('volumes rm (cli-spec.md §6)', () => {
     await assert.rejects(
       () => runVolumeRemove(ctx, { name: 'alpha_pgdata', force: true, json: true }),
       (error: unknown) =>
-        error instanceof CprojError && error.code === 'VOLUME_IN_USE' && error.details?.project === 'alpha',
+        error instanceof BandolierError && error.code === 'VOLUME_IN_USE' && error.details?.project === 'alpha',
     )
     assert.deepEqual(docker.calls, [])
   })
@@ -363,7 +363,7 @@ describe('volumes rm (cli-spec.md §6)', () => {
     const { ctx } = await orphanFixture()
     await assert.rejects(
       () => runVolumeRemove(ctx, { name: 'nope', force: true, json: true }),
-      (error: unknown) => error instanceof CprojError && error.code === 'VOLUME_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'VOLUME_NOT_FOUND',
     )
   })
 
@@ -378,7 +378,7 @@ describe('volumes rm (cli-spec.md §6)', () => {
 
     await assert.rejects(
       () => runVolumeRemove(ctx, { name: 'old_pgdata', force: true, json: true }),
-      (error: unknown) => error instanceof CprojError && error.code === 'VOLUME_IN_USE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'VOLUME_IN_USE',
     )
   })
 
@@ -386,7 +386,7 @@ describe('volumes rm (cli-spec.md §6)', () => {
     const { ctx, docker } = await orphanFixture()
     await assert.rejects(
       () => runVolumeRemove(ctx, { name: 'old_pgdata', force: false, json: true }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
     assert.deepEqual(docker.calls, [])
   })
@@ -404,7 +404,7 @@ describe('volumes rm (cli-spec.md §6)', () => {
 describe('down-all (cli-spec.md §6)', () => {
   test('stops what is running and leaves what is not alone', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha', 'cproj-alpha-postgres'] })
+    const docker = stubDocker({ running: ['bandolier-alpha', 'bandolier-alpha-postgres'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha', 'postgres')
     await project(ctx, 'beta')
@@ -426,7 +426,7 @@ describe('down-all (cli-spec.md §6)', () => {
   test('never removes volumes — down-all keeps data like down does', async () => {
     const box = sandbox()
     const docker = stubDocker({
-      running: ['cproj-alpha', 'cproj-alpha-postgres'],
+      running: ['bandolier-alpha', 'bandolier-alpha-postgres'],
       volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 1 }],
     })
     const ctx = makeContext(box, docker)
@@ -437,15 +437,15 @@ describe('down-all (cli-spec.md §6)', () => {
     assert.deepEqual(await docker.volumeNames(), ['alpha_pgdata'])
   })
 
-  test('sweeps a cproj container no manifest claims', async () => {
+  test('sweeps a bandolier container no manifest claims', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-ghost', 'unrelated-container'] })
+    const docker = stubDocker({ running: ['bandolier-ghost', 'unrelated-container'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha')
 
     const output = await runDownAll(ctx)
-    assert.deepEqual(output.stray_containers, ['cproj-ghost'])
-    assert.deepEqual(docker.calls, [{ kind: 'removeContainer', name: 'cproj-ghost' }])
+    assert.deepEqual(output.stray_containers, ['bandolier-ghost'])
+    assert.deepEqual(docker.calls, [{ kind: 'removeContainer', name: 'bandolier-ghost' }])
   })
 
   test('an unreachable daemon is a no-op success — nothing can be running', async () => {
@@ -465,12 +465,12 @@ describe('down-all (cli-spec.md §6)', () => {
 describe('eject (cli-spec.md §6)', () => {
   /** A sandbox whose SSD_VOLUME is the temp dir standing in for the mount. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: StubDevice): Context {
-    return makeContext(box, docker, { device, env: { CPROJ_SSD_VOLUME: box.root } })
+    return makeContext(box, docker, { device, env: { BANDOLIER_SSD_VOLUME: box.root } })
   }
 
   test('stops everything, finds nothing holding it, and ejects', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const device = stubDevice()
     const ctx = ejectContext(box, docker, device)
     await project(ctx, 'alpha')
@@ -493,7 +493,7 @@ describe('eject (cli-spec.md §6)', () => {
     await assert.rejects(
       () => runEject(ctx),
       (error: unknown) => {
-        assert.ok(error instanceof CprojError)
+        assert.ok(error instanceof BandolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')
         const holders = error.details?.holders as { command: string; pid: number }[]
         assert.deepEqual(holders.map((h) => h.command), ['Xcode'])
@@ -511,7 +511,7 @@ describe('eject (cli-spec.md §6)', () => {
     const ctx = ejectContext(box, stubDocker({ running: [] }), device)
     await project(ctx, 'alpha')
 
-    await assert.rejects(() => runEject(ctx), (error: unknown) => error instanceof CprojError)
+    await assert.rejects(() => runEject(ctx), (error: unknown) => error instanceof BandolierError)
     device.setHolders([])
     const output = await runEject(ctx)
     assert.equal(output.ejected, true)
@@ -520,7 +520,7 @@ describe('eject (cli-spec.md §6)', () => {
 
   test('containers come down BEFORE holders are checked — they are holders too', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const order: string[] = []
     const device: StubDevice = {
       ejected: [],
@@ -550,7 +550,7 @@ describe('eject (cli-spec.md §6)', () => {
         await docker.composeDown(target)
       },
     }
-    const ctx = makeContext(box, recording, { device, env: { CPROJ_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, recording, { device, env: { BANDOLIER_SSD_VOLUME: box.root } })
     await project(ctx, 'alpha')
 
     await runEject(ctx)
@@ -559,13 +559,13 @@ describe('eject (cli-spec.md §6)', () => {
 
   test('an absent volume is SSD_NOT_MOUNTED and stops nothing', async () => {
     const box = sandbox()
-    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const docker = stubDocker({ running: ['bandolier-alpha'] })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, env: { CPROJ_SSD_VOLUME: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { device, env: { BANDOLIER_SSD_VOLUME: `${box.root}-gone` } })
 
     await assert.rejects(
       () => runEject(ctx),
-      (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
     )
     assert.deepEqual(docker.calls, [])
     assert.deepEqual(device.ejected, [])
@@ -601,7 +601,7 @@ describe('the lsof/diskutil seam', () => {
     const device = createSsdDevice(async () => ({ code: 127, stdout: '', stderr: 'lsof: command not found' }))
     await assert.rejects(
       () => device.holders('/Volumes/ssd'),
-      (error: unknown) => error instanceof CprojError && error.code === 'EJECT_BLOCKED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'EJECT_BLOCKED',
     )
   })
 
@@ -619,7 +619,7 @@ describe('the lsof/diskutil seam', () => {
     })
     await assert.rejects(
       () => device.eject('/Volumes/ssd'),
-      (error: unknown) => error instanceof CprojError && error.code === 'EJECT_BLOCKED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'EJECT_BLOCKED',
     )
     assert.deepEqual(calls, [['diskutil', 'eject', '/Volumes/ssd']])
   })
@@ -631,18 +631,18 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
   test('one story, end to end', async () => {
     const box = sandbox()
     const docker = stubDocker({
-      startsAs: ['cproj-alpha', 'cproj-alpha-postgres'],
+      startsAs: ['bandolier-alpha', 'bandolier-alpha-postgres'],
       volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }],
     })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true), env: { CPROJ_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BANDOLIER_SSD_VOLUME: box.root } })
 
     await project(ctx, 'alpha', 'postgres')
     const up = await runUp(ctx, { name: 'alpha', noShell: false })
     assert.equal(up.state, 'running')
 
     const shell = await runShell(ctx, 'alpha')
-    assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'cproj-alpha', 'bash'])
+    assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'bandolier-alpha', 'bash'])
 
     const status = await collectStatus(ctx, 'alpha')
     assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)
@@ -665,7 +665,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
     device.setHolders([holder({ command: 'zsh' })])
     await assert.rejects(
       () => runEject(ctx),
-      (error: unknown) => error instanceof CprojError && error.code === 'EJECT_BLOCKED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'EJECT_BLOCKED',
     )
     device.setHolders([])
     assert.equal((await runEject(ctx)).ejected, true)
@@ -754,7 +754,7 @@ describe('a refusal always names something (§6)', () => {
     await assert.rejects(
       () => device.eject('/Volumes/ssd'),
       (error: unknown) => {
-        assert.ok(error instanceof CprojError)
+        assert.ok(error instanceof BandolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')
         const holders = error.details?.holders as { pid: number; command: string }[]
         assert.deepEqual(holders.map((h) => h.pid), [556])
@@ -773,7 +773,7 @@ describe('a refusal always names something (§6)', () => {
     }))
     await assert.rejects(
       () => device.eject('/Volumes/ssd'),
-      (error: unknown) => error instanceof CprojError && /Xcode \[pid 431\] — close it and try again/.test(error.message),
+      (error: unknown) => error instanceof BandolierError && /Xcode \[pid 431\] — close it and try again/.test(error.message),
     )
   })
 })

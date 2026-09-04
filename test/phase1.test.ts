@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { DEFAULT_SSD_VOLUME, DEFAULT_TERMINAL, defaultConfigPath, loadConfig } from '../cli/src/config.ts'
 import { createDocker, type DockerRunner } from '../cli/src/docker.ts'
@@ -71,11 +71,11 @@ describe('config (cli-spec.md §8)', () => {
     const loaded = loadConfig({
       path: box.configPath,
       home: box.home,
-      env: { CPROJ_SSD_ROOT: '/elsewhere/projects', CPROJ_SSD_VOLUME: '/elsewhere' },
+      env: { BANDOLIER_SSD_ROOT: '/elsewhere/projects', BANDOLIER_SSD_VOLUME: '/elsewhere' },
     })
     assert.equal(loaded.config.ssd_root, '/elsewhere/projects')
     assert.equal(loaded.config.ssd_volume, '/elsewhere')
-    assert.deepEqual([...loaded.overrides], ['CPROJ_SSD_ROOT', 'CPROJ_SSD_VOLUME'])
+    assert.deepEqual([...loaded.overrides], ['BANDOLIER_SSD_ROOT', 'BANDOLIER_SSD_VOLUME'])
   })
 
   test('the root defaults inside the configured volume, so the two cannot diverge', () => {
@@ -104,7 +104,7 @@ describe('config (cli-spec.md §8)', () => {
     box.writeConfig({ ssd_rooot: '/typo' })
     assert.throws(
       () => loadConfig({ path: box.configPath, home: box.home, env: {} }),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
@@ -113,20 +113,20 @@ describe('config (cli-spec.md §8)', () => {
     const path = box.writeFile('bad.yml', 'ssd_root: [unclosed\n')
     assert.throws(
       () => loadConfig({ path, home: box.home, env: {} }),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
   test('the config file lives on the internal disk, not the SSD', () => {
     const path = defaultConfigPath({}, '/Users/someone')
-    assert.equal(path, '/Users/someone/.config/cproj/config.yml')
+    assert.equal(path, '/Users/someone/.config/bandolier/config.yml')
   })
 })
 
 describe('service catalogue resolution (cli-spec.md §4.1)', () => {
   test('falls back to the bundled default when the SSD has none', () => {
     const box = sandbox()
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { CPROJ_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BANDOLIER_SSD_ROOT: box.root } })
     const resolved = resolveCatalogue(config)
     assert.equal(resolved.origin, 'bundled')
     assert.deepEqual(Object.keys(resolved.catalogue.services).sort(), ['mongo', 'postgres', 'redis'])
@@ -138,7 +138,7 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
       join('ssd', 'claude-projects', 'services.yml'),
       'services:\n  minio:\n    display: MinIO\n    image: minio/minio\n    container_port: 9000\n    host_port_base: 9000\n    volume: "{project}_minio"\n    mount: /data\n',
     )
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { CPROJ_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BANDOLIER_SSD_ROOT: box.root } })
     const resolved = resolveCatalogue(config)
     assert.equal(resolved.origin, 'ssd')
     assert.deepEqual(Object.keys(resolved.catalogue.services), ['minio'])
@@ -147,20 +147,20 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
   test('a configured catalogue_path that does not exist is an error, not a silent fallback', () => {
     const box = sandbox()
     box.writeConfig({ catalogue_path: join(box.home, 'missing.yml') })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { CPROJ_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BANDOLIER_SSD_ROOT: box.root } })
     assert.throws(
       () => resolveCatalogue(config),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
   test('a catalogue that breaks the schema is CONFIG_INVALID', () => {
     const box = sandbox()
     box.writeFile(join('ssd', 'claude-projects', 'services.yml'), 'services:\n  redis:\n    display: Redis\n')
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { CPROJ_SSD_ROOT: box.root } })
+    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BANDOLIER_SSD_ROOT: box.root } })
     assert.throws(
       () => resolveCatalogue(config),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
@@ -191,7 +191,7 @@ describe('project discovery (cli-spec.md §3)', () => {
     const { config } = loadConfig({
       path: box.configPath,
       home: box.home,
-      env: { CPROJ_SSD_ROOT: join(box.root, 'not-here') },
+      env: { BANDOLIER_SSD_ROOT: join(box.root, 'not-here') },
     })
     const discovery = discoverProjects(config)
     assert.equal(discovery.mounted, false)
@@ -252,13 +252,13 @@ describe('docker probe', () => {
   test('parses `docker ps` json lines, names and labels', async () => {
     const runner: DockerRunner = async (args) => {
       if (args[0] === 'ps') {
-        return { code: 0, stdout: psLine('cproj-a', 'com.docker.compose.project=cproj-a'), stderr: '' }
+        return { code: 0, stdout: psLine('bandolier-a', 'com.docker.compose.project=bandolier-a'), stderr: '' }
       }
       return { code: 0, stdout: '', stderr: '' }
     }
     const containers = await createDocker(runner).runningContainers()
-    assert.deepEqual([...(containers[0]?.names ?? [])], ['cproj-a'])
-    assert.equal(containers[0]?.labels['com.docker.compose.project'], 'cproj-a')
+    assert.deepEqual([...(containers[0]?.names ?? [])], ['bandolier-a'])
+    assert.equal(containers[0]?.labels['com.docker.compose.project'], 'bandolier-a')
   })
 
   test('reports unavailable rather than throwing when the daemon is down', async () => {
@@ -270,7 +270,7 @@ describe('docker probe', () => {
     const runner: DockerRunner = async () => ({ code: 125, stdout: '', stderr: 'boom' })
     await assert.rejects(
       () => createDocker(runner).runningContainers(),
-      (error: unknown) => error instanceof CprojError && error.code === 'DOCKER_UNAVAILABLE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'DOCKER_UNAVAILABLE',
     )
   })
 
@@ -278,7 +278,7 @@ describe('docker probe', () => {
     let calls = 0
     const runner: DockerRunner = async () => {
       calls += 1
-      return { code: 0, stdout: psLine('cproj-a'), stderr: '' }
+      return { code: 0, stdout: psLine('bandolier-a'), stderr: '' }
     }
     const docker = createDocker(runner)
     await docker.runningContainers()
@@ -287,7 +287,7 @@ describe('docker probe', () => {
   })
 
   test('survives an unparseable line without losing the rest', async () => {
-    const runner: DockerRunner = async () => ({ code: 0, stdout: `not json\n${psLine('cproj-b')}`, stderr: '' })
+    const runner: DockerRunner = async () => ({ code: 0, stdout: `not json\n${psLine('bandolier-b')}`, stderr: '' })
     const containers = await createDocker(runner).runningContainers()
     assert.equal(containers.length, 1)
   })
@@ -305,7 +305,7 @@ describe('status (cli-spec.md §7)', () => {
 
   test('succeeds with the SSD unmounted — reporting is not failing', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     const status = await collectStatus(ctx)
     assert.equal(status.ssd.mounted, false)
     assert.equal(status.ssd.root, join(box.root, 'unplugged'))
@@ -344,7 +344,7 @@ describe('status (cli-spec.md §7)', () => {
     const docker = stubDocker({ running: [devContainerName('myapp'), serviceContainerName('myapp', 'postgres')] })
     const status = await collectStatus(makeContext(box, docker))
     assert.equal(status.projects[0]?.state, 'running')
-    assert.equal(status.projects[0]?.dev_container, 'cproj-myapp')
+    assert.equal(status.projects[0]?.dev_container, 'bandolier-myapp')
     assert.equal(status.projects[0]?.services[0]?.state, 'running')
   })
 
@@ -397,7 +397,7 @@ describe('status (cli-spec.md §7)', () => {
     const box = sandbox()
     await assert.rejects(
       () => collectStatus(makeContext(box), 'ghost'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 
@@ -406,7 +406,7 @@ describe('status (cli-spec.md §7)', () => {
     box.writeProject('bad', { ...manifest('bad'), archetype: 'nonsense' })
     await assert.rejects(
       () => collectStatus(makeContext(box), 'bad'),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
   })
 
@@ -438,10 +438,10 @@ describe('list (cli-spec.md §6)', () => {
 
   test('raises SSD_NOT_MOUNTED where status deliberately does not', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => collectList(ctx),
-      (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
     )
     // ...and the same context still answers status.
     assert.equal((await collectStatus(ctx)).ssd.mounted, false)
@@ -459,14 +459,14 @@ describe('doctor (cli-spec.md §6)', () => {
   test('a healthy environment is all-ok', async () => {
     const box = sandbox()
     box.writeProject('myapp', manifest('myapp', { services: { postgres: { host_port: 5433 } } }))
-    const docker = stubDocker({ images: ['claude-web', 'claude-ios', 'claude-and'] })
+    const docker = stubDocker({ images: ['bandolier-web', 'bandolier-ios', 'bandolier-and'] })
     const report = await collectDoctor(makeContext(box, docker))
     assert.equal(report.ok, true, JSON.stringify(report.findings.filter((f) => !f.ok), null, 2))
   })
 
   test('reports the SSD absent, with a remedy', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     const report = await collectDoctor(ctx)
     const ssd = finding(report, 'ssd')
     assert.equal(ssd.ok, false)
@@ -491,11 +491,11 @@ describe('doctor (cli-spec.md §6)', () => {
 
   test('names the missing base images', async () => {
     const box = sandbox()
-    const report = await collectDoctor(makeContext(box, stubDocker({ images: ['claude-web'] })))
+    const report = await collectDoctor(makeContext(box, stubDocker({ images: ['bandolier-web'] })))
     const images = finding(report, 'base_images')
     assert.equal(images.ok, false)
-    assert.match(images.detail, /claude-ios/)
-    assert.doesNotMatch(images.detail, /claude-web/)
+    assert.match(images.detail, /bandolier-ios/)
+    assert.doesNotMatch(images.detail, /bandolier-web/)
   })
 
   test('a broken catalogue is a finding, not a crash', async () => {

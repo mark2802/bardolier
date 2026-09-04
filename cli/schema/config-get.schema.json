@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/config-get.schema.json",
-  "title": "cproj config get output",
+  "$id": "https://bandolier.local/schema/config-get.schema.json",
+  "title": "bandolier config get output",
   "description": "The EFFECTIVE configuration (cli-spec.md §8) — defaults, then the file, then the environment — plus where it came from. What Preferences (app-spec.md §12) shows before it writes.",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
     "config": { "$ref": "#/$defs/effective_config" },
     "overrides": {
       "type": "array",
-      "description": "Environment variables that overrode a value, e.g. CPROJ_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
+      "description": "Environment variables that overrode a value, e.g. BANDOLIER_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
       "items": { "type": "string", "minLength": 1 }
     }
   },

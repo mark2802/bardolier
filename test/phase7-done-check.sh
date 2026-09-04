@@ -18,7 +18,7 @@ cd "$REPO"
 
 APP="app/claude-yard/claude-yard"
 PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
-CPROJ="node cli/bin/cproj.js"
+BANDOLIER="node cli/bin/bandolier.js"
 pass=0
 fail=0
 manual=0
@@ -37,9 +37,9 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export CPROJ_CONFIG="$TMP/config.yml"
-export CPROJ_SSD_VOLUME="$VOLUME"
-export CPROJ_SSD_ROOT="$MOUNTED"
+export BANDOLIER_CONFIG="$TMP/config.yml"
+export BANDOLIER_SSD_VOLUME="$VOLUME"
+export BANDOLIER_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -59,9 +59,9 @@ schema_assert() { # schema_assert <schema-name> <json>
 # ── 1. Shell-open: the CLI resolves, the app runs (app-spec.md §7) ────────────
 head "1. Shell-open resolves to argv the app can run (§7)"
 
-$CPROJ new alpha --archetype web >/dev/null || bad "new exited non-zero"
+$BANDOLIER new alpha --archetype web >/dev/null || bad "new exited non-zero"
 
-if OUT="$($CPROJ shell alpha --json 2>&1)"; then
+if OUT="$($BANDOLIER shell alpha --json 2>&1)"; then
   bad "shell answered for a stopped project"
 else
   if json_assert "$OUT" "d.error.code === 'PROJECT_STOPPED'"; then
@@ -92,14 +92,14 @@ if node --input-type=module -e "
   import assert from 'node:assert/strict'
   import { runEject } from './cli/src/commands/ssd.ts'
   import { createContext } from './cli/src/context.ts'
-  import { CprojError } from './cli/src/errors.ts'
+  import { BandolierError } from './cli/src/errors.ts'
 
-  const volume = process.env.CPROJ_SSD_VOLUME
+  const volume = process.env.BANDOLIER_SSD_VOLUME
   let holders = [{ pid: 431, command: 'Xcode', user: 'mark', paths: [volume + '/alpha'] }]
   const ejected = []
   const ctx = createContext({
-    path: process.env.CPROJ_CONFIG,
-    env: { CPROJ_SSD_VOLUME: volume, CPROJ_SSD_ROOT: process.env.CPROJ_SSD_ROOT },
+    path: process.env.BANDOLIER_CONFIG,
+    env: { BANDOLIER_SSD_VOLUME: volume, BANDOLIER_SSD_ROOT: process.env.BANDOLIER_SSD_ROOT },
     docker: {
       available: async () => false,
       runningContainers: async () => [],
@@ -116,7 +116,7 @@ if node --input-type=module -e "
   })
 
   await assert.rejects(() => runEject(ctx), (error) => {
-    assert.ok(error instanceof CprojError)
+    assert.ok(error instanceof BandolierError)
     assert.equal(error.code, 'EJECT_BLOCKED')
     assert.deepEqual(error.details.holders.map((h) => h.command), ['Xcode'])
     return true
@@ -141,20 +141,20 @@ else
   ok "there is no way to force an unmount, in the CLI or above it"
 fi
 
-STATUS="$($CPROJ status --json)"
+STATUS="$($BANDOLIER status --json)"
 if schema_assert status "$STATUS"; then ok "status --json still matches status.schema.json"; else bad "status --json"; fi
 
 # The ejected icon state (§11) is derived from status, so status has to keep
 # answering with the disk gone. It must never fail.
-export CPROJ_SSD_VOLUME="$TMP/gone"
-export CPROJ_SSD_ROOT="$TMP/gone/claude-projects"
-if GONE="$($CPROJ status --json)" && json_assert "$GONE" "d.ssd.mounted === false && Array.isArray(d.projects)"; then
+export BANDOLIER_SSD_VOLUME="$TMP/gone"
+export BANDOLIER_SSD_ROOT="$TMP/gone/claude-projects"
+if GONE="$($BANDOLIER status --json)" && json_assert "$GONE" "d.ssd.mounted === false && Array.isArray(d.projects)"; then
   ok "with the disk gone status still answers — what the ejected icon reads (§11)"
 else
   bad "status failed once the SSD was unmounted"
 fi
-export CPROJ_SSD_VOLUME="$VOLUME"
-export CPROJ_SSD_ROOT="$MOUNTED"
+export BANDOLIER_SSD_VOLUME="$VOLUME"
+export BANDOLIER_SSD_ROOT="$MOUNTED"
 
 # ── 3. Sources (§7, §10, §13) ─────────────────────────────────────────────────
 head "3. Sources"
@@ -179,7 +179,7 @@ fi
 head "4. Build settings (app-spec.md §1, §7)"
 
 if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
-  ok "App Sandbox is off — the app can shell out to cproj"
+  ok "App Sandbox is off — the app can shell out to bandolier"
 else
   todo "App Sandbox is still ON. Xcode → target → Signing & Capabilities → remove App Sandbox."
 fi
@@ -261,7 +261,7 @@ head "7. Earlier phases"
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${CPROJ_REGRESSION:-}" ]; then
+if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-6: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"
@@ -283,8 +283,8 @@ cat <<'MANUAL'
 The half a terminal cannot check — the soak, with a real disk and a real Xcode:
 
   0. Fix anything marked ⚠ above, then ⌘B and run.
-  1. FIRST RUN. Quit the app, `mv $(which cproj) /tmp/cproj-away`, relaunch. The
-     menu says it can't find cproj, lists where it looked, and offers a path
+  1. FIRST RUN. Quit the app, `mv $(which bandolier) /tmp/bandolier-away`, relaunch. The
+     menu says it can't find bandolier, lists where it looked, and offers a path
      field and Look again. Nothing else is offered, because nothing else works.
      Move it back, click Look again: the menu fills in without a relaunch.
   2. SHELL. Start a project (the item reads "Start & open shell"). A terminal
@@ -310,7 +310,7 @@ The half a terminal cannot check — the soak, with a real disk and a real Xcode
   7. BACK. Plug it in. Reopen the menu: the icon and the status line go back to
      mounted, and the eject row reads "Close all & eject" again.
   8. Cross-check any point of it from the terminal:
-       cproj status --json
+       bandolier status --json
      Same projects, same ports, same states. That is the done-check.
 MANUAL
 printf '\033[32mDone-check passed the automated half.\033[0m\n'

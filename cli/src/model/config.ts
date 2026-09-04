@@ -1,5 +1,5 @@
 /**
- * Payloads for `cproj config get | set` — `cli-spec.md` §8.
+ * Payloads for `bandolier config get | set` — `cli-spec.md` §8.
  *
  * §8 defines the config FILE; these are the shapes the app reads and writes it
  * through. Preferences (`app-spec.md` §12) must not edit `config.yml` itself:

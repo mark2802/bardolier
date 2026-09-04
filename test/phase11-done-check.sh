@@ -3,7 +3,7 @@
 # on a temp SSD, then prove `uv` works in the dev container and its cache
 # (wheels + managed Python installs) is a shared volume, not a per-project one.
 #
-# Needs a Docker daemon and the network; always rebuilds claude-web (fast — a
+# Needs a Docker daemon and the network; always rebuilds bandolier-web (fast — a
 # Node image, unlike the emulated Android one phase8 avoids rebuilding).
 #
 #   bash test/phase11-done-check.sh
@@ -13,7 +13,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-CPROJ="node cli/bin/cproj.js"
+BANDOLIER="node cli/bin/bandolier.js"
 pass=0
 fail=0
 
@@ -27,13 +27,13 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export CPROJ_CONFIG="$TMP/config.yml"
-export CPROJ_SSD_VOLUME="$VOLUME"
-export CPROJ_SSD_ROOT="$MOUNTED"
+export BANDOLIER_CONFIG="$TMP/config.yml"
+export BANDOLIER_SSD_VOLUME="$VOLUME"
+export BANDOLIER_SSD_ROOT="$MOUNTED"
 
 cleanup() {
-  $CPROJ down-all --force >/dev/null 2>&1 || true
-  docker volume rm -f cproj-pybits-home cproj-pybits2-home >/dev/null 2>&1 || true
+  $BANDOLIER down-all --force >/dev/null 2>&1 || true
+  docker volume rm -f bandolier-pybits-home bandolier-pybits2-home >/dev/null 2>&1 || true
   # The shared cache is the point of this phase — leave it for the next run
   # unless explicitly asked to prove it survives from nothing.
   rm -rf "$TMP"
@@ -53,27 +53,27 @@ if ! docker info >/dev/null 2>&1; then
 fi
 ok "the Docker daemon responded"
 
-# ── 2. Build claude-web fresh, so this Dockerfile is the one running ─────────
-section "2. claude-web, rebuilt with uv"
+# ── 2. Build bandolier-web fresh, so this Dockerfile is the one running ─────────
+section "2. bandolier-web, rebuilt with uv"
 
-printf '    building claude-web (fast — a Node image)\n'
-if $CPROJ build --archetype web >"$TMP/build.log" 2>&1; then
-  ok "claude-web:latest built from cli/images/claude-web/Dockerfile"
+printf '    building bandolier-web (fast — a Node image)\n'
+if $BANDOLIER build --archetype web >"$TMP/build.log" 2>&1; then
+  ok "bandolier-web:latest built from cli/images/bandolier-web/Dockerfile"
 else
-  bad "\`cproj build --archetype web\` failed:"
+  bad "\`bandolier build --archetype web\` failed:"
   tail -8 "$TMP/build.log" | sed 's/^/      /'
 fi
 
 # ── 3. A web project, up, with uv inside ──────────────────────────────────────
 section "3. A Python API alongside the React frontend, in one dev container"
 
-$CPROJ new pybits --archetype web >/dev/null || bad "\`cproj new --archetype web\` failed"
+$BANDOLIER new pybits --archetype web >/dev/null || bad "\`bandolier new --archetype web\` failed"
 DIR="$MOUNTED/pybits"
 
-if grep -q "cproj-uv-cache:/cache/uv" "$DIR/docker-compose.yml" && grep -q "external: true" "$DIR/docker-compose.yml"; then
+if grep -q "bandolier-uv-cache:/cache/uv" "$DIR/docker-compose.yml" && grep -q "external: true" "$DIR/docker-compose.yml"; then
   ok "the compose file mounts the shared uv cache as an external volume (§4.3, §9)"
 else
-  bad "the web project's compose file does not mount cproj-uv-cache as an external volume"
+  bad "the web project's compose file does not mount bandolier-uv-cache as an external volume"
 fi
 
 if grep -qi "proxy" "$DIR/CLAUDE.md"; then
@@ -82,25 +82,25 @@ else
   bad "the seeded CLAUDE.md is missing the proxy-not-a-second-port note"
 fi
 
-if $CPROJ up pybits --no-shell >/dev/null 2>&1; then
-  ok "cproj up pybits"
+if $BANDOLIER up pybits --no-shell >/dev/null 2>&1; then
+  ok "bandolier up pybits"
 else
-  bad "cproj up pybits failed"
+  bad "bandolier up pybits failed"
 fi
 
-if docker volume inspect cproj-uv-cache >/dev/null 2>&1; then
-  ok "cproj up created the shared uv cache volume"
-  ROLE="$(docker volume inspect cproj-uv-cache --format '{{index .Labels "cproj.role"}}' 2>/dev/null)"
+if docker volume inspect bandolier-uv-cache >/dev/null 2>&1; then
+  ok "bandolier up created the shared uv cache volume"
+  ROLE="$(docker volume inspect bandolier-uv-cache --format '{{index .Labels "bandolier.role"}}' 2>/dev/null)"
   if [ "$ROLE" = "cache" ]; then
-    ok "labelled cproj.role=cache, so the orphan scan knows it belongs to no project"
+    ok "labelled bandolier.role=cache, so the orphan scan knows it belongs to no project"
   else
     bad "the cache volume is labelled '$ROLE' — the volume scan would misattribute it"
   fi
 else
-  bad "cproj up did not create cproj-uv-cache"
+  bad "bandolier up did not create bandolier-uv-cache"
 fi
 
-CONTAINER="$($CPROJ status pybits --json 2>/dev/null | node -e "
+CONTAINER="$($BANDOLIER status pybits --json 2>/dev/null | node -e "
   let s = ''
   process.stdin.on('data', (c) => (s += c)).on('end', () => {
     const d = JSON.parse(s)
@@ -148,9 +148,9 @@ if [ -n "$CONTAINER" ]; then
     fi
 
     # The offline proof: a second, unrelated project reuses the warm cache.
-    $CPROJ new pybits2 --archetype web >/dev/null || bad "second \`cproj new\` failed"
-    $CPROJ up pybits2 --no-shell >/dev/null 2>&1 || bad "cproj up pybits2 failed"
-    CONTAINER2="$($CPROJ status pybits2 --json 2>/dev/null | node -e "
+    $BANDOLIER new pybits2 --archetype web >/dev/null || bad "second \`bandolier new\` failed"
+    $BANDOLIER up pybits2 --no-shell >/dev/null 2>&1 || bad "bandolier up pybits2 failed"
+    CONTAINER2="$($BANDOLIER status pybits2 --json 2>/dev/null | node -e "
       let s = ''
       process.stdin.on('data', (c) => (s += c)).on('end', () => {
         const d = JSON.parse(s)
@@ -163,12 +163,12 @@ if [ -n "$CONTAINER" ]; then
     else
       bad "the second project could not install six --offline — the cache did not carry over"
     fi
-    $CPROJ down pybits2 >/dev/null 2>&1 || true
-    $CPROJ delete pybits2 --force >/dev/null 2>&1 || true
+    $BANDOLIER down pybits2 >/dev/null 2>&1 || true
+    $BANDOLIER delete pybits2 --force >/dev/null 2>&1 || true
   fi
 fi
 
-$CPROJ down pybits >/dev/null 2>&1 || true
+$BANDOLIER down pybits >/dev/null 2>&1 || true
 
 printf '\n\033[1mPhase 11: %d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

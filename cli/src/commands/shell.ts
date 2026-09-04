@@ -1,5 +1,5 @@
 /**
- * `cproj shell <name> [--print]` — `cli-spec.md` §6 (Shell).
+ * `bandolier shell <name> [--print]` — `cli-spec.md` §6 (Shell).
  *
  * This command spawns NOTHING. It resolves the dev container and returns the
  * `docker exec` invocation for someone else to run: the app opens the user's
@@ -16,7 +16,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import { WORKDIR } from '../compose.ts'
 import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
@@ -31,7 +31,7 @@ export async function runShell(
   const container = devContainerName(project.name)
 
   if (!(await ctx.docker.available())) {
-    throw new CprojError(
+    throw new BandolierError(
       'DOCKER_UNAVAILABLE',
       `Cannot resolve a shell for \`${project.name}\`: the Docker daemon is not reachable.`,
     )
@@ -39,9 +39,9 @@ export async function runShell(
 
   const running = runningNames(await ctx.docker.runningContainers())
   if (!running.has(container)) {
-    throw new CprojError(
+    throw new BandolierError(
       'PROJECT_STOPPED',
-      `\`${project.name}\` is not running, so there is no container to open a shell in. Run \`cproj up ${project.name}\` first.`,
+      `\`${project.name}\` is not running, so there is no container to open a shell in. Run \`bandolier up ${project.name}\` first.`,
       { project: project.name, container },
     )
   }
@@ -67,7 +67,7 @@ export function renderShell(output: ShellOutput): string[] {
     `  ${output.exec.join(' ')}`,
     '',
     `The shell lands in ${output.workdir} — the project directory, bind-mounted from the SSD.`,
-    'cproj does not open terminals; run the command above, or let the menu-bar app do it.',
+    'bandolier does not open terminals; run the command above, or let the menu-bar app do it.',
   ]
 }
 

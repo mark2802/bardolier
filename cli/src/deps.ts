@@ -5,11 +5,11 @@
  * add/remove/list` (`commands/deps.ts`), `compose.ts` and `up.ts`.
  *
  * A derived image is CONTENT-ADDRESSED, not per-project:
- * `cproj-deps-<baseImage>:<hash>`, hash a short sha256 of the base image plus
+ * `bandolier-deps-<baseImage>:<hash>`, hash a short sha256 of the base image plus
  * the sorted package list — so two projects declaring the same packages on
  * the same base image share one image and one build, the same reasoning as
  * `IMAGE_CACHE` (`images.ts`). The Dockerfile is written to
- * `~/.config/cproj/deps-images/<hash>/Dockerfile` — the internal disk,
+ * `~/.config/bandolier/deps-images/<hash>/Dockerfile` — the internal disk,
  * alongside `config.yml`, never the SSD (disk frugality) — and regenerated
  * deterministically on every `up`, exactly like `docker-compose.yml`; never
  * hand-edited.
@@ -35,17 +35,17 @@ function derivedHash(baseImage: BaseImage, packages: readonly string[]): string 
 }
 
 /**
- * `cproj-deps-<baseImage>:<hash>` — content-addressed, so two projects with
+ * `bandolier-deps-<baseImage>:<hash>` — content-addressed, so two projects with
  * the same base image and the same package set resolve to the same tag.
  */
 export function derivedImageTag(baseImage: BaseImage, packages: readonly string[]): string {
-  return `cproj-deps-${baseImage}:${derivedHash(baseImage, packages)}`
+  return `bandolier-deps-${baseImage}:${derivedHash(baseImage, packages)}`
 }
 
 /**
  * The generated Dockerfile text. No `ARG`s: the caller already has concrete
  * uid/gid from `ctx.host`, unlike the base images (built once for whoever
- * runs `cproj build`). Root is confined to this one `RUN`, image-build time
+ * runs `bandolier build`). Root is confined to this one `RUN`, image-build time
  * only — back to the identity the base image already switched to afterward.
  */
 export function derivedDockerfile(baseImage: BaseImage, packages: readonly string[], uid: number, gid: number): string {

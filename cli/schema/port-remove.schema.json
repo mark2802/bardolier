@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/port-remove.schema.json",
-  "title": "cproj port remove output",
-  "description": "What `cproj port remove` released. cli-spec.md §6 (Ports), §5.1.",
+  "$id": "https://bandolier.local/schema/port-remove.schema.json",
+  "title": "bandolier port remove output",
+  "description": "What `bandolier port remove` released. cli-spec.md §6 (Ports), §5.1.",
   "type": "object",
   "additionalProperties": false,
   "required": [

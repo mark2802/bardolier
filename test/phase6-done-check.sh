@@ -19,7 +19,7 @@ cd "$REPO"
 
 APP="app/claude-yard/claude-yard"
 PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
-CPROJ="node cli/bin/cproj.js"
+BANDOLIER="node cli/bin/bandolier.js"
 pass=0
 fail=0
 manual=0
@@ -38,7 +38,7 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export CPROJ_CONFIG="$TMP/config.yml"
+export BANDOLIER_CONFIG="$TMP/config.yml"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -58,7 +58,7 @@ schema_assert() { # schema_assert <schema-name> <json>
 # ── 1. The commands Phase 6 grew (cli-spec.md §1, §4.1, §8) ───────────────────
 head "1. The CLI surface the menu needs"
 
-CATALOGUE="$($CPROJ catalogue --json)"
+CATALOGUE="$($BANDOLIER catalogue --json)"
 if schema_assert catalogue "$CATALOGUE"; then ok "catalogue --json matches catalogue.schema.json"; else bad "catalogue --json"; fi
 if json_assert "$CATALOGUE" "d.services.length > 0 && d.services.every(s => s.key && s.display && s.image && s.host_port_base)"; then
   ok "it lists every catalogue service with its image and band"
@@ -76,7 +76,7 @@ else
   bad "catalogue did not report its origin"
 fi
 
-GET="$($CPROJ config get --json)"
+GET="$($BANDOLIER config get --json)"
 if schema_assert config-get "$GET"; then ok "config get --json matches config-get.schema.json"; else bad "config get --json"; fi
 if json_assert "$GET" "d.exists === false && d.config.terminal === 'Terminal'"; then
   ok "an absent config file is an answer, not a failure (first run)"
@@ -84,7 +84,7 @@ else
   bad "config get mishandled a missing file"
 fi
 
-SET="$($CPROJ config set ssd_volume "$VOLUME" --json)"
+SET="$($BANDOLIER config set ssd_volume "$VOLUME" --json)"
 if schema_assert config-set "$SET"; then ok "config set --json matches config-set.schema.json"; else bad "config set --json"; fi
 if VOLUME="$VOLUME" json_assert "$SET" "d.created === true && d.changed.includes('ssd_volume') && d.config.ssd_volume === process.env.VOLUME"; then
   ok "it wrote the key and reported the config after"
@@ -99,15 +99,15 @@ else
   bad "ssd_root did not default inside the new ssd_volume"
 fi
 
-$CPROJ config set terminal iTerm --json >/dev/null
-AGAIN="$($CPROJ config set terminal iTerm --json)"
+$BANDOLIER config set terminal iTerm --json >/dev/null
+AGAIN="$($BANDOLIER config set terminal iTerm --json)"
 if json_assert "$AGAIN" "d.changed.length === 0 && d.created === false"; then
   ok "writing the same value again is a no-op"
 else
   bad "a repeat write reported a change"
 fi
 
-if OUT="$($CPROJ config set nonsense x --json 2>&1)"; then
+if OUT="$($BANDOLIER config set nonsense x --json 2>&1)"; then
   bad "config set accepted an unknown key"
 else
   if json_assert "$OUT" "d.error.code === 'INVALID_ARGUMENT'"; then
@@ -120,8 +120,8 @@ fi
 # ── 2. status.dir — "Open folder in Finder" without composing a path (§5) ─────
 head "2. status carries each project's directory"
 
-$CPROJ new alpha --archetype web --services postgres >/dev/null || bad "new exited non-zero"
-STATUS="$($CPROJ status --json)"
+$BANDOLIER new alpha --archetype web --services postgres >/dev/null || bad "new exited non-zero"
+STATUS="$($BANDOLIER status --json)"
 if schema_assert status "$STATUS"; then ok "status --json still matches status.schema.json"; else bad "status --json"; fi
 if MOUNTED="$MOUNTED" json_assert "$STATUS" "d.projects[0].dir === process.env.MOUNTED + '/alpha'"; then
   ok "the project reports its own dir, so the app never composes one"
@@ -173,7 +173,7 @@ fi
 head "4. Build settings (app-spec.md §1, §7)"
 
 if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
-  ok "App Sandbox is off — the app can shell out to cproj"
+  ok "App Sandbox is off — the app can shell out to bandolier"
 else
   todo "App Sandbox is still ON. Xcode → target → Signing & Capabilities → remove App Sandbox."
 fi
@@ -264,7 +264,7 @@ head "7. Earlier phases"
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${CPROJ_REGRESSION:-}" ]; then
+if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-5: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"
@@ -295,7 +295,7 @@ The half a terminal cannot check — the lifecycle FROM THE MENU BAR:
   3. Expand it → Services… → every catalogue service is listed, postgres ticked
      with `host :<port> → :5432`. Click the copy icon; paste it somewhere.
   4. Back → Start. A terminal window opens inside the dev container (that is
-     `cproj shell`'s argv, run by the app). The dot goes green.
+     `bandolier shell`'s argv, run by the app). The dot goes green.
   5. While it is running, open Services… again: it says "Stop the project to
      change its services", and the rows are inert. That refusal is the CLI's,
      relayed — do not let the app work around it.
@@ -305,7 +305,7 @@ The half a terminal cannot check — the lifecycle FROM THE MENU BAR:
   8. Delete… the project, confirm (leave the volumes box unticked). It is gone
      from the menu.
   9. Compare against the terminal at any point:
-       cproj status --json
+       bandolier status --json
      Same projects, same ports, same states. That is the done-check.
  10. Close all & eject is Phase 7's flow; clicking it here should either eject
      cleanly or report its holders — neither may force.

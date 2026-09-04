@@ -1,5 +1,5 @@
 /**
- * `cproj doctor` — `cli-spec.md` §6 (Lifecycle / SSD). The app's first call on
+ * `bandolier doctor` — `cli-spec.md` §6 (Lifecycle / SSD). The app's first call on
  * launch, so it must answer under every degraded condition: no config file, no
  * SSD, no Docker, a broken catalogue.
  *
@@ -10,7 +10,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { toCprojError } from '../errors.ts'
+import { toBandolierError } from '../errors.ts'
 import { BASE_IMAGES } from '../model/archetype.ts'
 import type { DoctorFinding, DoctorReport } from '../model/doctor.ts'
 import { discoverProjects, probeSsd } from '../projects.ts'
@@ -43,7 +43,7 @@ async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
       id: 'ssd',
       title: 'SSD mounted',
       ok: true,
-      detail: `${ssd.root} is readable, on the internal disk rather than a removable volume — \`cproj eject\` does not apply; use \`cproj down-all\` to stop everything instead.`,
+      detail: `${ssd.root} is readable, on the internal disk rather than a removable volume — \`bandolier eject\` does not apply; use \`bandolier down-all\` to stop everything instead.`,
     }
   }
   return {
@@ -55,7 +55,7 @@ async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
       : `Nothing mounted at ${ssd.volume}; ${ssd.root} is unreachable.`,
     remedy: ssd.volumePresent
       ? `Create ${ssd.root}, or point ssd_root at the right directory in ${ctx.loaded.path}.`
-      : 'Plug in the SSD, or set ssd_volume / CPROJ_SSD_VOLUME to where it mounts.',
+      : 'Plug in the SSD, or set ssd_volume / BANDOLIER_SSD_VOLUME to where it mounts.',
   }
 }
 
@@ -68,7 +68,7 @@ async function dockerFinding(ctx: Context): Promise<DoctorFinding> {
         title: 'Docker daemon',
         ok: false,
         detail: 'The Docker daemon did not respond (not running, or `docker` is not on PATH).',
-        remedy: 'Start Docker Desktop, then re-run `cproj doctor`.',
+        remedy: 'Start Docker Desktop, then re-run `bandolier doctor`.',
       }
 }
 
@@ -79,7 +79,7 @@ async function baseImagesFinding(ctx: Context, dockerOk: boolean): Promise<Docto
       title: 'Base images',
       ok: false,
       detail: 'Could not check: the Docker daemon is unavailable.',
-      remedy: 'Start Docker, then re-run `cproj doctor`.',
+      remedy: 'Start Docker, then re-run `bandolier doctor`.',
     }
   }
 
@@ -95,14 +95,14 @@ async function baseImagesFinding(ctx: Context, dockerOk: boolean): Promise<Docto
       title: 'Base images',
       ok: false,
       detail: `Missing: ${missing.join(', ')}.`,
-      remedy: 'Run `cproj build` to build the missing base images.',
+      remedy: 'Run `bandolier build` to build the missing base images.',
     }
   } catch (cause) {
     return {
       id: 'base_images',
       title: 'Base images',
       ok: false,
-      detail: `Could not list images: ${toCprojError(cause).message}`,
+      detail: `Could not list images: ${toBandolierError(cause).message}`,
     }
   }
 }
@@ -126,7 +126,7 @@ function catalogueFinding(ctx: Context): { finding: DoctorFinding; catalogue: Se
         id: 'catalogue',
         title: 'Service catalogue',
         ok: false,
-        detail: toCprojError(cause).message,
+        detail: toBandolierError(cause).message,
         remedy: 'Fix the catalogue YAML, or unset catalogue_path to fall back to the bundled default.',
       },
       catalogue: null,
@@ -142,7 +142,7 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
       title: 'Project manifests',
       ok: false,
       detail: `Could not check: ${discovery.root} is unreachable.`,
-      remedy: 'Plug in the SSD, then re-run `cproj doctor`.',
+      remedy: 'Plug in the SSD, then re-run `bandolier doctor`.',
     }
   }
 
@@ -173,7 +173,7 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
     title: 'Project manifests',
     ok: false,
     detail: problems.join('; '),
-    remedy: 'Fix the offending project.yml — cproj skips projects it cannot read.',
+    remedy: 'Fix the offending project.yml — bandolier skips projects it cannot read.',
   }
 }
 

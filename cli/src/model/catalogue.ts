@@ -38,7 +38,7 @@ export type ServiceCatalogue = {
 }
 
 /**
- * `cproj catalogue` output — what the app offers when attaching a service
+ * `bandolier catalogue` output — what the app offers when attaching a service
  * (`app-spec.md` §6) or creating a project (§8).
  *
  * A projection of the file above, not a second definition: `key` is the record

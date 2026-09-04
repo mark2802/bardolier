@@ -5,7 +5,7 @@ experimentation (installing a package to see what it needs before formalising
 it as `extra_packages`, poking at something broken) — without `sudo` in any
 base image and without a new project type. `docker exec -u root` already works
 against any container regardless of the image's own `USER`; this phase is
-`cproj` naming that invocation and the app surfacing it.
+`bandolier` naming that invocation and the app surfacing it.
 
 **Deliverables:**
 - `cli/src/commands/shell.ts`: `runShell(ctx, name, { root })`. When `root` is
@@ -20,7 +20,7 @@ against any container regardless of the image's own `USER`; this phase is
   nothing installed while root survives a `down` any more than any other
   runtime change, per `docs/phases/13-extra-packages.md`'s reasoning. Anything
   meant to persist belongs in `extra_packages`, not this shell.
-- App — `CprojClient.shell(project:root:)` appends `--root` when asked, same
+- App — `BandolierClient.shell(project:root:)` appends `--root` when asked, same
   pattern as every other flag it appends itself (`CLAUDE.md`: no caller may
   append `--json`; this is the same seam for `--root`).
 - App — `Shell/OptionKeyObserver.swift` (new): a small `ObservableObject`
@@ -47,8 +47,8 @@ against any container regardless of the image's own `USER`; this phase is
 
 **Non-goals:** no confirmation dialog before opening a root shell — it isn't
 destructive by itself, only what's typed in it can be; no persisted record
-that a root shell was ever opened; no equivalent for `cproj shell --print`'s
-human-mode framing beyond documenting the flag; no change to `CprojTerminal`,
+that a root shell was ever opened; no equivalent for `bandolier shell --print`'s
+human-mode framing beyond documenting the flag; no change to `BandolierTerminal`,
 which still just runs the returned argv verbatim.
 
 **Done-check:** CLI-only (the app side is Xcode-verified by hand, per the

@@ -26,7 +26,7 @@
  * The file is APPENDED, never overwritten. A trivial "just said hello" session,
  * asked to summarise itself, honestly reports that nothing happened — and a
  * note that replaced the substantive entry above it with that would destroy
- * real history for no reason: `.cproj/` is gitignored by default (`scaffold.ts`),
+ * real history for no reason: `.bandolier/` is gitignored by default (`scaffold.ts`),
  * so there is usually no git history underneath to fall back on. Each `down`
  * adds one entry; none is ever rewritten or dropped.
  */
@@ -39,7 +39,7 @@ import { devContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 
 /** Where the note lives, relative to the project directory. */
-export const HANDOFF_DIR = '.cproj'
+export const HANDOFF_DIR = '.bandolier'
 export const HANDOFF_FILENAME = 'handoff.md'
 
 /**
@@ -142,7 +142,7 @@ function header(project: string): string {
   return [
     `# Handoff — ${project}`,
     '',
-    'Written by `cproj down`. Each stop appends an entry below — none is ever',
+    'Written by `bandolier down`. Each stop appends an entry below — none is ever',
     'rewritten or removed; the newest is at the bottom.',
     '',
   ].join('\n')

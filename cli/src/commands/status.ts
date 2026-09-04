@@ -1,5 +1,5 @@
 /**
- * `cproj status [<name>]` — the app's primary contract (`cli-spec.md` §7).
+ * `bandolier status [<name>]` — the app's primary contract (`cli-spec.md` §7).
  *
  * READ-ONLY (§2). It reads manifests and asks Docker what is running; it never
  * writes, creates, or starts anything.
@@ -13,7 +13,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import { devContainerName, serviceContainerName } from '../naming.ts'
 import { discoverProjects, probeSsd, type DiscoveredProject } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
@@ -77,9 +77,9 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
     if (!match) {
       const broken = discovery.invalid.find((p) => p.name === projectName)
       if (broken) {
-        throw new CprojError('CONFIG_INVALID', `Project \`${projectName}\` has an unusable manifest: ${broken.reason}`)
+        throw new BandolierError('CONFIG_INVALID', `Project \`${projectName}\` has an unusable manifest: ${broken.reason}`)
       }
-      throw new CprojError('PROJECT_NOT_FOUND', `No project named \`${projectName}\` under ${ctx.config.ssd_root}.`)
+      throw new BandolierError('PROJECT_NOT_FOUND', `No project named \`${projectName}\` under ${ctx.config.ssd_root}.`)
     }
     selected = [match]
   }
@@ -105,9 +105,9 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
  *
  * `status` must not fail (it is the app's poll-on-open call), and the scan has
  * real failure modes — an unmounted SSD, an unreadable manifest, a daemon that
- * went away mid-call. Any of those means "cproj cannot tell what is orphaned",
+ * went away mid-call. Any of those means "bandolier cannot tell what is orphaned",
  * which is reported as an empty list, exactly as it reports no projects when
- * the SSD is absent. `cproj volumes orphaned` is where the reason is raised.
+ * the SSD is absent. `bandolier volumes orphaned` is where the reason is raised.
  */
 async function orphanedVolumes(ctx: Context, mounted: boolean, dockerAvailable: boolean) {
   if (!mounted || !dockerAvailable) return []

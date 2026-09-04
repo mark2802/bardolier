@@ -245,7 +245,7 @@ describe('the app knows the tokens the CLI can emit', () => {
     for (const key of declared) {
       assert.ok(
         (CONFIG_KEYS as readonly string[]).includes(key as string),
-        `CprojModels.swift declares ConfigKey \`${key}\`, which \`cproj config set\` would reject`,
+        `CprojModels.swift declares ConfigKey \`${key}\`, which \`bandolier config set\` would reject`,
       )
     }
   })
@@ -254,7 +254,7 @@ describe('the app knows the tokens the CLI can emit', () => {
 describe('the app re-derives nothing the CLI reports', () => {
   /**
    * Swift that renders LIVE data. `DebugStatusView.swift` is excluded on
-   * purpose: its literals are a canned `cproj status` payload for `#Preview`,
+   * purpose: its literals are a canned `bandolier status` payload for `#Preview`,
    * i.e. CLI output pasted in, which is the opposite of the app composing a
    * value of its own.
    */
@@ -289,7 +289,7 @@ describe('the app re-derives nothing the CLI reports', () => {
 
   test('the app writes the config file only through the CLI (app-spec.md §12)', () => {
     for (const [file, source] of sources) {
-      assert.doesNotMatch(source, /config\.yml/, `${file} names the config file; only \`cproj config set\` may write it`)
+      assert.doesNotMatch(source, /config\.yml/, `${file} names the config file; only \`bandolier config set\` may write it`)
     }
   })
 })
@@ -369,7 +369,7 @@ describe('the app calls the CLI the way the CLI expects', () => {
   })
 })
 
-describe('the app spawns nothing but cproj', () => {
+describe('the app spawns nothing but bandolier', () => {
   /** Every Swift source in the app target, path → contents. */
   const sources = new Map<string, string>(
     readdirSync(repo('app/claude-yard/claude-yard'), { recursive: true, encoding: 'utf8' })
@@ -388,7 +388,7 @@ describe('the app spawns nothing but cproj', () => {
     }
   })
 
-  test('the client launches only the resolved cproj executable', () => {
+  test('the client launches only the resolved bandolier executable', () => {
     const client = sources.get('Cproj/CprojClient.swift')
     assert.ok(client, 'CprojClient.swift is missing')
     // One assignment, and it is the located binary — not a shell, not `docker`.

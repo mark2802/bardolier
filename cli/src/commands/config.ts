@@ -1,5 +1,5 @@
 /**
- * `cproj config get | set` — `cli-spec.md` §8.
+ * `bandolier config get | set` — `cli-spec.md` §8.
  *
  * Not in §6's original list, and here for the reason §1 gives: the app holds no
  * logic of its own, so Preferences (`app-spec.md` §12) changes the SSD path and
@@ -9,7 +9,7 @@
  * that and get the rest subtly wrong.
  *
  * `get` reports the EFFECTIVE config — what the CLI will actually use — plus
- * the environment overrides, because a value forced by `$CPROJ_SSD_ROOT` is one
+ * the environment overrides, because a value forced by `$BANDOLIER_SSD_ROOT` is one
  * the file cannot change, and a preferences pane that silently wrote it anyway
  * would be lying to the user.
  *
@@ -19,7 +19,7 @@
 
 import type { Context } from '../context.ts'
 import { CONFIG_KEYS, isConfigKey, loadConfig, writeConfig, type ConfigKey } from '../config.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import type { ConfigGetOutput, ConfigSetOutput, EffectiveConfig } from '../model/config.ts'
 
 function effective(ctx: Context): EffectiveConfig {
@@ -49,7 +49,7 @@ export function renderConfigGet(output: ConfigGetOutput): string[] {
   if (output.overrides.length > 0) {
     lines.push('')
     lines.push(`Overridden by the environment: ${output.overrides.join(', ')}.`)
-    lines.push('Those win over the file, so `cproj config set` cannot change them here.')
+    lines.push('Those win over the file, so `bandolier config set` cannot change them here.')
   }
   return lines
 }
@@ -62,10 +62,10 @@ export type ConfigSetRequest = {
 export function runConfigSet(ctx: Context, request: ConfigSetRequest): ConfigSetOutput {
   const { key, value } = request
   if (key === undefined || value === undefined) {
-    throw new CprojError('INVALID_ARGUMENT', 'Usage: cproj config set <key> <value>   (an empty value clears the key)')
+    throw new BandolierError('INVALID_ARGUMENT', 'Usage: bandolier config set <key> <value>   (an empty value clears the key)')
   }
   if (!isConfigKey(key)) {
-    throw new CprojError(
+    throw new BandolierError(
       'INVALID_ARGUMENT',
       `\`${key}\` is not a config key. Settable keys: ${CONFIG_KEYS.join(', ')}.`,
     )
@@ -105,7 +105,7 @@ export function renderConfigSet(output: ConfigSetOutput): string[] {
   for (const key of CONFIG_KEYS) {
     lines.push(`  ${key.padEnd(15)}${output.config[key] ?? '(unset)'}`)
   }
-  const blocked = output.changed.filter((key) => output.overrides.includes(`CPROJ_${key.toUpperCase()}`))
+  const blocked = output.changed.filter((key) => output.overrides.includes(`BANDOLIER_${key.toUpperCase()}`))
   if (blocked.length > 0) {
     lines.push('')
     lines.push(`Written, but the environment still wins for: ${blocked.join(', ')}.`)

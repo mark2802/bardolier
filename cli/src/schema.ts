@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js'
 import addFormats from 'ajv-formats'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 
 export const SCHEMA_NAMES = [
   'project',
@@ -80,7 +80,7 @@ export function validate(name: SchemaName, value: unknown): ValidationResult {
 export function assertValid<T>(name: SchemaName, value: unknown, source: string): T {
   const { valid, errors } = validate(name, value)
   if (!valid) {
-    throw new CprojError('CONFIG_INVALID', `${source} does not match the ${name} schema:\n  ${errors.join('\n  ')}`)
+    throw new BandolierError('CONFIG_INVALID', `${source} does not match the ${name} schema:\n  ${errors.join('\n  ')}`)
   }
   return value as T
 }

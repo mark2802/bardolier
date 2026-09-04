@@ -1,5 +1,5 @@
 /**
- * `cproj build [--archetype <a>] [--claude-code-version <v>]` — `cli-spec.md` §6 (Images).
+ * `bandolier build [--archetype <a>] [--claude-code-version <v>]` — `cli-spec.md` §6 (Images).
  *
  * Builds base images with the HOST UID/GID as build args. That is the whole
  * reason this command exists rather than a plain `docker build`: the dev
@@ -21,7 +21,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetype.ts'
 import type { BuildOutput, BuiltImage } from '../model/build.ts'
 import { baseImages } from '../images.ts'
@@ -35,10 +35,10 @@ export async function runBuild(
   claudeCodeVersion?: string,
 ): Promise<BuildOutput> {
   if (archetype !== undefined && !isArchetype(archetype)) {
-    throw new CprojError('INVALID_ARGUMENT', `Unknown archetype \`${archetype}\`. Expected one of: ${ARCHETYPES.join(', ')}.`)
+    throw new BandolierError('INVALID_ARGUMENT', `Unknown archetype \`${archetype}\`. Expected one of: ${ARCHETYPES.join(', ')}.`)
   }
   if (claudeCodeVersion !== undefined && !CLAUDE_CODE_VERSION_PATTERN.test(claudeCodeVersion)) {
-    throw new CprojError(
+    throw new BandolierError(
       'INVALID_ARGUMENT',
       `Invalid --claude-code-version \`${claudeCodeVersion}\`. Expected \`latest\` or \`X.Y.Z\`.`,
     )
@@ -50,14 +50,14 @@ export async function runBuild(
   if (wanted !== null && selected[0]?.dockerfile === null) {
     // Asked for by name and there is no Dockerfile behind it: say so rather
     // than reporting a successful build of nothing.
-    throw new CprojError(
+    throw new BandolierError(
       'NOT_IMPLEMENTED',
       `The \`${wanted}\` base image has no Dockerfile at ${selected[0]?.context ?? 'its image directory'}.`,
     )
   }
 
   if (!(await ctx.docker.available())) {
-    throw new CprojError('DOCKER_UNAVAILABLE', 'The Docker daemon did not respond; cannot build base images.')
+    throw new BandolierError('DOCKER_UNAVAILABLE', 'The Docker daemon did not respond; cannot build base images.')
   }
 
   const { uid, gid } = ctx.host

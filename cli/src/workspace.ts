@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { stringify as stringifyYaml } from 'yaml'
 import type { Context } from './context.ts'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 import type { DockerContainer } from './docker.ts'
 import { COMPOSE_FILENAME, renderCompose } from './compose.ts'
 import { devContainerName, serviceContainerName } from './naming.ts'
@@ -28,9 +28,9 @@ import type { ServiceCatalogue } from './model/catalogue.ts'
 import type { ProjectState } from './model/status.ts'
 
 const MANIFEST_HEADER = [
-  '# cproj project manifest — the source of truth for this project.',
+  '# bandolier project manifest — the source of truth for this project.',
   '#',
-  '# Edit this file, then run `cproj up` to regenerate docker-compose.yml from it.',
+  '# Edit this file, then run `bandolier up` to regenerate docker-compose.yml from it.',
   '# Host ports are assigned once and stay put (cli-spec.md §5); changing one here',
   '# will break saved connection strings, so prefer service remove/add.',
   '',
@@ -126,19 +126,19 @@ export function regenerateCompose(
  * a project directory on the internal disk.
  */
 export function requireProject(ctx: Context, name: string | undefined): DiscoveredProject {
-  if (!name) throw new CprojError('INVALID_ARGUMENT', 'A project name is required.')
+  if (!name) throw new BandolierError('INVALID_ARGUMENT', 'A project name is required.')
   const discovery = discoverProjects(ctx.config)
   if (!discovery.mounted) {
-    throw new CprojError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
+    throw new BandolierError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
   }
   const found = discovery.projects.find((p) => p.name === name)
   if (found) return found
 
   const broken = discovery.invalid.find((p) => p.name === name)
   if (broken) {
-    throw new CprojError('CONFIG_INVALID', `Project \`${name}\` has an unusable manifest: ${broken.reason}`)
+    throw new BandolierError('CONFIG_INVALID', `Project \`${name}\` has an unusable manifest: ${broken.reason}`)
   }
-  throw new CprojError('PROJECT_NOT_FOUND', `No project named \`${name}\` under ${ctx.config.ssd_root}.`)
+  throw new BandolierError('PROJECT_NOT_FOUND', `No project named \`${name}\` under ${ctx.config.ssd_root}.`)
 }
 
 /** Every name every running container answers to. */

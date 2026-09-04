@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/delete.schema.json",
-  "title": "cproj delete output",
-  "description": "What `cproj delete` removed. cli-spec.md §6 (Projects), §5 (port release).",
+  "$id": "https://bandolier.local/schema/delete.schema.json",
+  "title": "bandolier delete output",
+  "description": "What `bandolier delete` removed. cli-spec.md §6 (Projects), §5 (port release).",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "deleted", "dir", "released_ports", "removed_volumes", "kept_volumes"],

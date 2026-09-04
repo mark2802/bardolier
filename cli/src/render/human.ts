@@ -5,7 +5,7 @@
  * data payload, which each formats on its own terms.
  */
 
-import type { CprojError } from '../errors.ts'
+import type { BandolierError } from '../errors.ts'
 import type { CommandNode, FlagSpec } from '../commands/registry.ts'
 import { COMMAND_GROUPS, flagLabel, walk } from '../commands/registry.ts'
 
@@ -13,8 +13,8 @@ export function renderHuman(lines: string[]): void {
   if (lines.length > 0) process.stdout.write(`${lines.join('\n')}\n`)
 }
 
-export function renderHumanError(error: CprojError): void {
-  process.stderr.write(`cproj: ${error.message}  [${error.code}]\n`)
+export function renderHumanError(error: BandolierError): void {
+  process.stderr.write(`bandolier: ${error.message}  [${error.code}]\n`)
   if (error.details) {
     for (const [key, value] of Object.entries(error.details)) {
       process.stderr.write(`  ${key}: ${JSON.stringify(value)}\n`)
@@ -24,27 +24,27 @@ export function renderHumanError(error: CprojError): void {
 
 const GLOBAL_FLAGS = [
   ['--json', 'Emit a single JSON value on stdout (the app-facing contract).'],
-  ['--help, -h', 'Show help for cproj or for a command.'],
-  ['--version, -v', 'Print the cproj version.'],
+  ['--help, -h', 'Show help for bandolier or for a command.'],
+  ['--version, -v', 'Print the bandolier version.'],
 ] as const
 
 function pad(left: string, width: number): string {
   return left.padEnd(width, ' ')
 }
 
-/** Top-level `cproj --help`: every command, grouped as in cli-spec.md §6. */
+/** Top-level `bandolier --help`: every command, grouped as in cli-spec.md §6. */
 export function renderRootHelp(root: CommandNode): string[] {
   const commands = walk(root)
   const width = Math.max(...commands.map((c) => c.usage.length), ...GLOBAL_FLAGS.map((f) => f[0].length)) + 2
 
   const lines: string[] = [
-    'cproj — Container Project Manager',
+    'bandolier — Container Project Manager',
     '',
     'Manages containerised dev projects whose data lives on an external SSD.',
     'Every command accepts --json and prints a single JSON value on stdout.',
     '',
     'Usage:',
-    '  cproj <command> [args] [--json]',
+    '  bandolier <command> [args] [--json]',
     '',
   ]
 
@@ -67,7 +67,7 @@ export function renderRootHelp(root: CommandNode): string[] {
   return lines
 }
 
-/** `cproj <command> --help`. */
+/** `bandolier <command> --help`. */
 export function renderCommandHelp(command: {
   usage: string
   summary: string
@@ -77,7 +77,7 @@ export function renderCommandHelp(command: {
   const labels = [...command.flags.map(flagLabel), '--json']
   const width = Math.max(...labels.map((l) => l.length)) + 2
 
-  const lines = [`Usage: cproj ${command.usage}`, '', command.summary, '', 'Flags:']
+  const lines = [`Usage: bandolier ${command.usage}`, '', command.summary, '', 'Flags:']
   for (const flag of command.flags) {
     lines.push(`  ${pad(flagLabel(flag), width)}${flag.description}`)
   }

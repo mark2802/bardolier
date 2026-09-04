@@ -1,14 +1,14 @@
 # CLAUDE.md — Container Project Manager
 
-A CLI (`cproj`) plus a macOS menu-bar app that manage containerised dev projects
+A CLI (`bandolier`) plus a macOS menu-bar app that manage containerised dev projects
 whose data lives on an external SSD.
 
 - `docs/cli-spec.md` — the engine. **Authoritative for all behaviour.**
 - `docs/app-spec.md` — the menu-bar app; a thin client over the CLI.
 - `docs/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
   Phases 0-9 are done; their plan is history in `docs/archive/`.
-- `docs/migration-guide.md` — bringing an existing (non-cproj) project onto
-  cproj; `docs/migration-guide-gaps.md` tracks capabilities it needs that
+- `docs/migration-guide.md` — bringing an existing (non-bandolier) project onto
+  bandolier; `docs/migration-guide-gaps.md` tracks capabilities it needs that
   don't exist yet.
 
 Read only the spec **section** a task needs (`sed -n` a range), not the whole file.
@@ -21,7 +21,7 @@ Recent work has cost far more tokens than the changes warranted. Rules:
   re-read a file you just wrote — the edit would have errored.
 - **Test the smallest scope that can catch the bug**: `npm test`, or the one
   phase check you touched. `test/regression.sh` is for declaring a phase done —
-  prefer `--through N`; `PHASE8_QUICK=1` and `CPROJ_SKIP_DOCKER=1` skip legs a
+  prefer `--through N`; `PHASE8_QUICK=1` and `BANDOLIER_SKIP_DOCKER=1` skip legs a
   change cannot affect. Never re-run a check that just passed.
 - **Quiet the noise.** `npm run test:quiet` over `npm test` (30 lines vs 600);
   done-checks print failures and a summary by default (`VERBOSE=1` for every
@@ -76,7 +76,7 @@ works on the macOS host for anything macOS-native.
 
 ## Toolchain
 
-**TypeScript on Node, no build step.** Node ≥ 22.18 strips types, so `cproj`
+**TypeScript on Node, no build step.** Node ≥ 22.18 strips types, so `bandolier`
 runs from `cli/src/*.ts` — no bundler, no `dist/`. The cost: **type syntax must
 be erasable** — no `enum`, no `namespace`, no constructor parameter properties;
 use `as const` arrays plus `(typeof X)[number]` (see `cli/src/errors.ts`).
@@ -87,8 +87,8 @@ resolves dependencies. Dependencies are deliberately few: `yaml`, `ajv` +
 
 ```
 npm install                      # once, from the repo root
-npm run cproj -- --help
-node cli/bin/cproj.js status --json
+npm run bandolier -- --help
+node cli/bin/bandolier.js status --json
 npm run test:quiet               # contract tests (dot reporter — use this)
 npm test                         # same, one line per test
 npm run typecheck
@@ -97,7 +97,7 @@ bash test/regression.sh [--through N]   # every check, once, in order
 ```
 
 **The ladder is walked once.** `regression.sh` owns the walk: each phase's
-sections run once, in order, with `CPROJ_REGRESSION` set; a phase check seeing
+sections run once, in order, with `BANDOLIER_REGRESSION` set; a phase check seeing
 that flag skips its own "earlier phases" section instead of recursing. 0–7 is
 ~60s; Phase 8 builds images and runs Gradle, so `--through 7` skips that.
 
@@ -119,8 +119,8 @@ UID/GID, clock, `wait`. It never touches `process.env`, spawns processes, binds
 sockets, prompts, or hard-codes the SSD path. That is what lets mutations be
 tested with a temp dir and stubs (`test/helpers.ts`). **Anything with an
 observable side effect belongs on the Context**, including passing time. Config
-comes from `~/.config/cproj/config.yml` with `CPROJ_SSD_ROOT` /
-`CPROJ_SSD_VOLUME` overrides and `CPROJ_CONFIG` to relocate the file — which is
+comes from `~/.config/bandolier/config.yml` with `BANDOLIER_SSD_ROOT` /
+`BANDOLIER_SSD_VOLUME` overrides and `BANDOLIER_CONFIG` to relocate the file — which is
 how done-checks stay hermetic.
 
 ## Behaviour that is easy to get wrong
@@ -142,7 +142,7 @@ so `status` and `service list` cannot disagree.
 
 **An orphan is derived, never recorded.** `cli/src/volumes.ts` asks the
 manifests what is still claimed (resolved volume name, plus the
-`cproj.project`/`cproj.service` labels compose writes); everything else this
+`bandolier.project`/`bandolier.service` labels compose writes); everything else this
 tool made is reclaimable. Because being wrong destroys data, the scan refuses
 (`SSD_NOT_MOUNTED`, `CONFIG_INVALID`) when it cannot read manifests; `status`
 catches that and reports an empty list, because `status` must never fail.
@@ -174,9 +174,9 @@ more. A spent budget is `EJECT_BLOCKED` with
 flag just used and the app withdraws the button. If lsof says the runtime let go
 and the unmount still fails, relay diskutil's words untouched. Never force.
 
-**Base images** live in `cli/images/<image>/Dockerfile`, built by `cproj build`
+**Base images** live in `cli/images/<image>/Dockerfile`, built by `bandolier build`
 with `HOST_UID`/`HOST_GID` so bind-mounted `/work` files come back owned by the
-Mac user. `claude-web` (Node), `claude-ios` (Swift + swiftlint), `claude-and`
+Mac user. `bandolier-web` (Node), `bandolier-ios` (Swift + swiftlint), `bandolier-and`
 (JDK, Android SDK, Gradle). No Dockerfile → `unavailable`, not an error.
 
 **The boundary is built into the images.** The ios base has no `xcodebuild`,
@@ -184,26 +184,26 @@ Mac user. `claude-web` (Node), `claude-ios` (Swift + swiftlint), `claude-and`
 `swift build`/`test`/`swiftlint`, Gradle builds and unit tests.
 
 **One image is pinned to an architecture, in one place.** aapt2 is x86_64-only,
-so `claude-and` builds and runs `linux/amd64` (emulated on Apple Silicon).
+so `bandolier-and` builds and runs `linux/amd64` (emulated on Apple Silicon).
 `IMAGE_PLATFORM` in `cli/src/images.ts` is the single constant — `build` turns
 it into `--platform`, `compose.ts` into the dev service's `platform:`. Every
 other image builds native and emits **no** `platform:` key.
 
 **The Gradle cache is shared and is not project data.** `GRADLE_USER_HOME` is
-`/cache/gradle`, a named volume (`cproj-gradle-cache`, `IMAGE_CACHE`) mounted
+`/cache/gradle`, a named volume (`bandolier-gradle-cache`, `IMAGE_CACHE`) mounted
 into every android dev container — hundreds of identical, re-downloadable
 megabytes belong once, on the internal disk. Three readers must match the
 constant: the Dockerfile `ENV`, the mount `compose.ts` writes, and `up`, which
 creates the volume. Compose marks it `external: true` so no project stamps its
-labels on it. `volumes.ts` knows it by `cproj.role: cache`: claimed while any
+labels on it. `volumes.ts` knows it by `bandolier.role: cache`: claimed while any
 manifest names that base image, never taken by `delete --purge`.
-`claude-web` carries the same for `uv`'s wheels (`cproj-uv-cache`,
+`bandolier-web` carries the same for `uv`'s wheels (`bandolier-uv-cache`,
 `/cache/uv`) — a Python API and its React frontend run in one dev container,
 no second port published; the dev server proxies to it (Phase 11).
 
 **The agent ships in the base image.** All three install Claude Code,
 checksum-verified, into `/usr/local/bin`. It is the one toolchain version in
-these images that is NOT pinned by default — `cproj build` resolves
+these images that is NOT pinned by default — `bandolier build` resolves
 `latest` at build time (`--claude-code-version <X.Y.Z>` pins an exact release
 when reproducibility matters more); every other component stays a fixed ARG.
 Not a catalogue service (the catalogue is for sibling containers with an
@@ -211,7 +211,7 @@ image, port and volume), and not under `$HOME`, which is a mounted volume
 that would copy 236MB per project.
 
 **`$HOME` is a volume, because `down` destroys the container.**
-`CONTAINER_HOME` = `/state/home`, with `cproj-<project>-home` mounted there —
+`CONTAINER_HOME` = `/state/home`, with `bandolier-<project>-home` mounted there —
 otherwise every stop loses shell history, dotfiles, and the `claude` login
 (`$HOME/.claude`). It is **per project**: Claude Code files sessions by working
 directory and every container works in `/work`, so one shared home would make
@@ -235,7 +235,7 @@ the first exception to "a published port is a debugging tap" — a browser on
 the Mac cannot join the Docker network. `status` reports `app_url`, as it
 reports `connection_hint`.
 
-**Extra ports are the same exception, opted into by name.** `cproj port
+**Extra ports are the same exception, opted into by name.** `bandolier port
 add <project> <name> --container-port <n>` (§5.1, `cli/src/extraports.ts`)
 declares a port independent of archetype — no catalogue, no image, no volume,
 just a name and two port numbers persisted under `extra_ports` and published
@@ -248,9 +248,9 @@ publish nothing at all. Allocated like `app_port` — search starts at
 apply. `port add`/`remove` require the project stopped, same as `service`.
 
 **`deps add` is the same "declare, don't bake in or install live" shape, for OS
-packages.** `cproj deps add <project> <package...>` (§6 Deps, `cli/src/deps.ts`)
+packages.** `bandolier deps add <project> <package...>` (§6 Deps, `cli/src/deps.ts`)
 persists apt package names under `extra_packages`; `up` builds a
-content-addressed derived image — `cproj-deps-<base_image>:<hash>` — from a
+content-addressed derived image — `bandolier-deps-<base_image>:<hash>` — from a
 generated Dockerfile that goes `USER root` for one `apt-get install` and back
 to the base image's own uid:gid, and Compose's `image:` switches to it. Never
 baked into the shared base image (every project would pay for packages it
@@ -263,7 +263,7 @@ same reasoning as `IMAGE_CACHE`. `deps add`/`remove` require the project
 stopped, same as `service`/`port`.
 
 **`down` writes down where you were.** `cli/src/handoff.ts` writes
-`.cproj/handoff.md` on every stop: repository state from `Git`, plus the agent's
+`.bandolier/handoff.md` on every stop: repository state from `Git`, plus the agent's
 own account via `claude --print --continue` **inside the still-running dev
 container** — after `compose down` there is nobody to ask. Everything is
 best-effort: missing container, agent, session or credentials, a timeout, or a
@@ -271,15 +271,16 @@ read-only disk degrades the note and never fails the stop. A non-zero exit or
 empty output is reported as such, not pasted under the heading. `delete` skips
 it.
 
-**Two commands exist because the app asked.** `cproj catalogue` and
-`cproj config get|set` are Phase 6 additions under §1's rule that the CLI grows
+**Two commands exist because the app asked.** `bandolier catalogue` and
+`bandolier config get|set` are Phase 6 additions under §1's rule that the CLI grows
 to serve the app — the alternative was a copy of `services.yml` in Swift and a
 second config writer that knew only some of §8's precedence rules. `status`
 gained `dir` the same way, so the app never composes a path from `ssd.root`.
 
 ## The app
 
-**It reads the contract; it never re-derives it.** `app/claude-yard/claude-yard/Cproj/`:
+**It reads the contract; it never re-derives it.** `app/claude-yard/claude-yard/Cproj/`
+(renamed in phase 16, along with everything below in this section):
 `CprojClient` builds argv, appends `--json` itself (no caller may), and turns a
 non-zero exit into `CprojFailure.cli` with the §2 code. `CprojModels.swift`
 mirrors `cli/schema/*.json`, one struct per schema object; closed string enums

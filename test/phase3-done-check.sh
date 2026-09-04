@@ -5,13 +5,13 @@
 # the port for the next add. SSD is a temp dir (§8); the Docker half is real.
 #
 #   bash test/phase3-done-check.sh
-#   CPROJ_SKIP_DOCKER=1 …    offline assertions only
+#   BANDOLIER_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-CPROJ="node cli/bin/cproj.js"
+BANDOLIER="node cli/bin/bandolier.js"
 pass=0
 fail=0
 
@@ -23,11 +23,11 @@ head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 TMP="$(mktemp -d)"
 cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-postgres >/dev/null 2>&1 || true
+    docker rm -f bandolier-alpha bandolier-alpha-postgres bandolier-beta bandolier-beta-postgres >/dev/null 2>&1 || true
     docker volume rm alpha_pgdata beta_pgdata >/dev/null 2>&1 || true
-  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
+  docker volume rm -f bandolier-alpha-home bandolier-beta-home >/dev/null 2>&1 || true
     # Every project now owns a $HOME volume (cli-spec.md §9).
-    docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
+    docker volume rm -f bandolier-alpha-home bandolier-beta-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -36,9 +36,9 @@ trap cleanup EXIT
 MOUNTED="$TMP/ssd/claude-projects"
 mkdir -p "$MOUNTED"
 
-export CPROJ_CONFIG="$TMP/config.yml"
-export CPROJ_SSD_VOLUME="$TMP/ssd"
-export CPROJ_SSD_ROOT="$MOUNTED"
+export BANDOLIER_CONFIG="$TMP/config.yml"
+export BANDOLIER_SSD_VOLUME="$TMP/ssd"
+export BANDOLIER_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -92,13 +92,13 @@ tcp_connect() { # tcp_connect <port> — retries for up to ~30s
 # ── 1. Two projects, two ports (§5.1, §5.4) ───────────────────────────────────
 head "1. \`service add\` assigns distinct ports in the band (§5)"
 
-$CPROJ new alpha --archetype web >/dev/null
-$CPROJ new beta --archetype web >/dev/null
+$BANDOLIER new alpha --archetype web >/dev/null
+$BANDOLIER new beta --archetype web >/dev/null
 
-ADD_A="$($CPROJ service add alpha postgres --json)" || bad "service add exited non-zero"
+ADD_A="$($BANDOLIER service add alpha postgres --json)" || bad "service add exited non-zero"
 schema_assert service-add "$ADD_A" && ok "service add --json validates against service-add.schema.json" || bad "service add output does not match its schema"
 
-ADD_B="$($CPROJ service add beta postgres --json)" || bad "the second service add exited non-zero"
+ADD_B="$($BANDOLIER service add beta postgres --json)" || bad "the second service add exited non-zero"
 
 PORT_A="$(json_value "$ADD_A" 'd.added.host_port')"
 PORT_B="$(json_value "$ADD_B" 'd.added.host_port')"
@@ -118,14 +118,14 @@ grep -q 'alpha_pgdata:/var/lib/postgresql/data' "$MOUNTED/alpha/docker-compose.y
 grep -q 'POSTGRES_DB: alpha' "$MOUNTED/alpha/docker-compose.yml" \
   && ok "{project} is interpolated into the service env (§9)" || bad "service env was not interpolated"
 
-LIST="$($CPROJ service list alpha --json)"
+LIST="$($BANDOLIER service list alpha --json)"
 schema_assert service-list "$LIST" && ok "service list --json validates against service-list.schema.json" || bad "service list output does not match its schema"
 json_assert "$LIST" "d.services.length === 1 && d.services[0].key === 'postgres' && d.services[0].host_port === $PORT_A && d.services[0].container_port === 5432" \
   && ok "service list resolves the attached service and its port" || bad "service list is wrong"
 json_assert "$LIST" "d.services[0].connection_hint.includes(':$PORT_A')" \
   && ok "the connection hint names the host port — the debugging tap (§5.3)" || bad "the connection hint is wrong"
 
-STATUS="$($CPROJ status alpha --json)"
+STATUS="$($BANDOLIER status alpha --json)"
 schema_assert status "$STATUS" && ok "status still matches the §7 schema with a service attached" || bad "status broke its schema"
 json_assert "$STATUS" "d.projects[0].services[0].host_port === $PORT_A" \
   && ok "status reports the assigned port" || bad "status does not report the port"
@@ -133,7 +133,7 @@ json_assert "$STATUS" "d.projects[0].services[0].host_port === $PORT_A" \
 # ── 2. new --services allocates at creation ───────────────────────────────────
 head "2. \`new --services\` allocates at creation (§6)"
 
-NEW="$($CPROJ new gamma --archetype library --services redis,postgres --json)"
+NEW="$($BANDOLIER new gamma --archetype library --services redis,postgres --json)"
 schema_assert new "$NEW" && ok "new --json still validates with services attached" || bad "new output does not match its schema"
 json_assert "$NEW" "d.services.map(s => s.key).join(',') === 'postgres,redis'" \
   && ok "services are attached in a stable, sorted order (determinism)" || bad "new --services did not attach both, sorted"
@@ -142,7 +142,7 @@ json_assert "$NEW" "d.services.every(s => s.host_port > 0) && new Set(d.services
 json_assert "$NEW" "d.services.find(s => s.key === 'redis').host_port >= 6379" \
   && ok "redis landed in the redis band, not the postgres one (§5.4)" || bad "redis was allocated outside its band"
 
-UNKNOWN="$($CPROJ new delta --archetype web --services toaster --json 2>/dev/null || true)"
+UNKNOWN="$($BANDOLIER new delta --archetype web --services toaster --json 2>/dev/null || true)"
 json_assert "$UNKNOWN" 'd.error && d.error.code === "SERVICE_UNKNOWN"' \
   && ok "an unknown service key is SERVICE_UNKNOWN" || bad "an unknown service key was accepted"
 [ ! -e "$MOUNTED/delta" ] && ok "the rejected new created nothing" || bad "a half-made project was left behind"
@@ -150,19 +150,19 @@ json_assert "$UNKNOWN" 'd.error && d.error.code === "SERVICE_UNKNOWN"' \
 # ── 3. Error paths (§6) ───────────────────────────────────────────────────────
 head "3. The §6 error paths"
 
-DUP="$($CPROJ service add alpha postgres --json 2>/dev/null || true)"
+DUP="$($BANDOLIER service add alpha postgres --json 2>/dev/null || true)"
 json_assert "$DUP" 'd.error && d.error.code === "SERVICE_ATTACHED"' \
   && ok "attaching twice is SERVICE_ATTACHED" || bad "a duplicate attach was accepted"
 
-BADSVC="$($CPROJ service add alpha toaster --json 2>/dev/null || true)"
+BADSVC="$($BANDOLIER service add alpha toaster --json 2>/dev/null || true)"
 json_assert "$BADSVC" 'd.error && d.error.code === "SERVICE_UNKNOWN"' \
   && ok "an unknown catalogue key is SERVICE_UNKNOWN" || bad "an unknown key was accepted"
 
-NOTATT="$($CPROJ service remove alpha mongo --json 2>/dev/null || true)"
+NOTATT="$($BANDOLIER service remove alpha mongo --json 2>/dev/null || true)"
 json_assert "$NOTATT" 'd.error && d.error.code === "SERVICE_NOT_ATTACHED"' \
   && ok "detaching what is not attached is SERVICE_NOT_ATTACHED" || bad "a bogus detach was accepted"
 
-GHOST="$($CPROJ service list ghost --json 2>/dev/null || true)"
+GHOST="$($BANDOLIER service list ghost --json 2>/dev/null || true)"
 json_assert "$GHOST" 'd.error && d.error.code === "PROJECT_NOT_FOUND"' \
   && ok "an unknown project is PROJECT_NOT_FOUND" || bad "service list resolved a project that does not exist"
 
@@ -192,8 +192,8 @@ node --input-type=module -e "
 head "5. Both projects up, both ports reachable from the host"
 
 DOCKER_OK=0
-if [ "${CPROJ_SKIP_DOCKER:-0}" = "1" ]; then
-  skip "CPROJ_SKIP_DOCKER=1 — skipping the Docker half"
+if [ "${BANDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
+  skip "BANDOLIER_SKIP_DOCKER=1 — skipping the Docker half"
 elif ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   skip "no Docker daemon — skipping the Docker half (the offline checks above still ran)"
 else
@@ -201,18 +201,18 @@ else
 fi
 
 if [ "$DOCKER_OK" = "1" ]; then
-  docker rm -f cproj-alpha cproj-alpha-postgres cproj-beta cproj-beta-postgres >/dev/null 2>&1 || true
+  docker rm -f bandolier-alpha bandolier-alpha-postgres bandolier-beta bandolier-beta-postgres >/dev/null 2>&1 || true
   docker volume rm alpha_pgdata beta_pgdata >/dev/null 2>&1 || true
-  docker volume rm -f cproj-alpha-home cproj-beta-home >/dev/null 2>&1 || true
+  docker volume rm -f bandolier-alpha-home bandolier-beta-home >/dev/null 2>&1 || true
 
-  if ! docker image inspect claude-web:latest >/dev/null 2>&1; then
-    printf '    building claude-web (first run only, this takes a few minutes)…\n'
-    $CPROJ build --archetype web >/dev/null 2>&1 || bad "cproj build failed"
+  if ! docker image inspect bandolier-web:latest >/dev/null 2>&1; then
+    printf '    building bandolier-web (first run only, this takes a few minutes)…\n'
+    $BANDOLIER build --archetype web >/dev/null 2>&1 || bad "bandolier build failed"
   fi
 
   printf '    starting alpha and beta (pulls postgres:17 on a cold cache)…\n'
-  UP_A="$($CPROJ up alpha --json)" || bad "up alpha exited non-zero"
-  UP_B="$($CPROJ up beta --json)" || bad "up beta exited non-zero"
+  UP_A="$($BANDOLIER up alpha --json)" || bad "up alpha exited non-zero"
+  UP_B="$($BANDOLIER up beta --json)" || bad "up beta exited non-zero"
 
   json_assert "$UP_A" "d.state === 'running' && d.services[0].host_port === $PORT_A" \
     && ok "alpha is running and published $PORT_A" || bad "alpha did not come up with its service"
@@ -222,22 +222,22 @@ if [ "$DOCKER_OK" = "1" ]; then
   tcp_connect "$PORT_A" && ok "a host client can connect to alpha's postgres on $PORT_A" || bad "nothing is listening on $PORT_A"
   tcp_connect "$PORT_B" && ok "a host client can connect to beta's postgres on $PORT_B" || bad "nothing is listening on $PORT_B"
 
-  json_assert "$($CPROJ status --json)" \
+  json_assert "$($BANDOLIER status --json)" \
     "d.projects.filter(p => p.services.some(s => s.state === 'running')).length === 2" \
     && ok "status shows both services running on their own ports" || bad "status does not see both services running"
 
-  RUNNING_ADD="$($CPROJ service add alpha redis --json 2>/dev/null || true)"
+  RUNNING_ADD="$($BANDOLIER service add alpha redis --json 2>/dev/null || true)"
   json_assert "$RUNNING_ADD" 'd.error && d.error.code === "PROJECT_RUNNING"' \
     && ok "service add on a running project is PROJECT_RUNNING" || bad "a running project accepted a service add"
-  RUNNING_RM="$($CPROJ service remove alpha postgres --json 2>/dev/null || true)"
+  RUNNING_RM="$($BANDOLIER service remove alpha postgres --json 2>/dev/null || true)"
   json_assert "$RUNNING_RM" 'd.error && d.error.code === "PROJECT_RUNNING"' \
     && ok "service remove on a running project is PROJECT_RUNNING" || bad "a running project accepted a service remove"
   [ "$(manifest_port alpha postgres)" = "$PORT_A" ] \
     && ok "the refused changes left the manifest untouched" || bad "a refused change mutated the manifest"
 
   # Restart one: the port must survive (§5.2).
-  $CPROJ down alpha >/dev/null || bad "down alpha exited non-zero"
-  RESTART="$($CPROJ up alpha --json)" || bad "restarting alpha exited non-zero"
+  $BANDOLIER down alpha >/dev/null || bad "down alpha exited non-zero"
+  RESTART="$($BANDOLIER up alpha --json)" || bad "restarting alpha exited non-zero"
   json_assert "$RESTART" "d.services[0].host_port === $PORT_A" \
     && ok "alpha's port is unchanged across a restart (§5.2)" || bad "the port moved on restart"
   [ "$(manifest_port alpha postgres)" = "$PORT_A" ] \
@@ -247,8 +247,8 @@ if [ "$DOCKER_OK" = "1" ]; then
   # ── remove: volume orphaned, port released ──────────────────────────────────
   head "6. \`service remove\` orphans the volume and releases the port"
 
-  $CPROJ down alpha >/dev/null
-  REMOVED="$($CPROJ service remove alpha postgres --json)" || bad "service remove exited non-zero"
+  $BANDOLIER down alpha >/dev/null
+  REMOVED="$($BANDOLIER service remove alpha postgres --json)" || bad "service remove exited non-zero"
   schema_assert service-remove "$REMOVED" && ok "service remove --json validates against service-remove.schema.json" || bad "service remove output does not match its schema"
   json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.volume === 'alpha_pgdata' && d.services.length === 0" \
     && ok "it reports the released port and the kept volume" || bad "service remove reported the wrong outcome"
@@ -259,12 +259,12 @@ if [ "$DOCKER_OK" = "1" ]; then
     && ok "the manifest no longer claims the port" || bad "the manifest still records the removed service"
   grep -q 'postgres' "$MOUNTED/alpha/docker-compose.yml" \
     && bad "the compose file still describes the detached service" || ok "compose was regenerated without the service (§9)"
-  json_assert "$($CPROJ service list alpha --json)" 'd.services.length === 0' \
+  json_assert "$($BANDOLIER service list alpha --json)" 'd.services.length === 0' \
     && ok "service list is empty for alpha" || bad "service list still shows the detached service"
-  json_assert "$($CPROJ status beta --json)" "d.projects[0].services[0].host_port === $PORT_B" \
+  json_assert "$($BANDOLIER status beta --json)" "d.projects[0].services[0].host_port === $PORT_B" \
     && ok "beta is untouched and keeps $PORT_B" || bad "removing alpha's service disturbed beta"
 
-  $CPROJ down beta >/dev/null
+  $BANDOLIER down beta >/dev/null
 fi
 
 # ── 7. The freed port is reused ───────────────────────────────────────────────
@@ -272,23 +272,23 @@ head "7. The freed port is reused by the next add"
 
 if [ "$DOCKER_OK" != "1" ]; then
   # Offline equivalent of section 6: detach so there is a freed port to reuse.
-  REMOVED="$($CPROJ service remove alpha postgres --json)" || bad "service remove exited non-zero"
+  REMOVED="$($BANDOLIER service remove alpha postgres --json)" || bad "service remove exited non-zero"
   schema_assert service-remove "$REMOVED" && ok "service remove --json validates against service-remove.schema.json" || bad "service remove output does not match its schema"
   json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.volume === 'alpha_pgdata'" \
     && ok "it reports the released port and the kept volume" || bad "service remove reported the wrong outcome"
 fi
 
-$CPROJ new epsilon --archetype web >/dev/null
-REUSE="$($CPROJ service add epsilon postgres --json)"
+$BANDOLIER new epsilon --archetype web >/dev/null
+REUSE="$($BANDOLIER service add epsilon postgres --json)"
 json_assert "$REUSE" "d.added.host_port === $PORT_A" \
   && ok "the next add reuses the freed port $PORT_A (§5)" || bad "the freed port was not reused (got $(json_value "$REUSE" 'd.added.host_port'), expected $PORT_A)"
-json_assert "$($CPROJ service list beta --json)" "d.services[0].host_port === $PORT_B" \
+json_assert "$($BANDOLIER service list beta --json)" "d.services[0].host_port === $PORT_B" \
   && ok "and beta's port was never a candidate — it is still assigned" || bad "an assigned port was handed out twice"
 
 # ── 8. Renderers stay separate (§2) ───────────────────────────────────────────
 head "8. Renderers stay separate (§2)"
 
-HUMAN="$($CPROJ service list beta)"
+HUMAN="$($BANDOLIER service list beta)"
 if node -e "JSON.parse(process.argv[1])" "$HUMAN" 2>/dev/null; then
   bad "human service list output is JSON — the renderers are not separate"
 else
@@ -304,7 +304,7 @@ if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${CPROJ_REGRESSION:-}" ]; then
+if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-2: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"

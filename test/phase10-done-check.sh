@@ -3,7 +3,7 @@
 # didn't care where `ssd_root` lives; this proves it still doesn't, and that
 # `doctor`/`eject` now answer honestly once `ssd_volume` isn't removable.
 #
-# REAL: `cproj doctor`/`cproj eject` run for real, `diskutil` included — safe,
+# REAL: `bandolier doctor`/`bandolier eject` run for real, `diskutil` included — safe,
 # because `removable()` is read-only and a false answer is exactly what makes
 # `eject` refuse before it would ever reach a container or `diskutil eject`.
 # STOOD IN: `ssd_root` AND `ssd_volume` are the SAME plain temp dir — there is
@@ -17,7 +17,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-CPROJ="node cli/bin/cproj.js"
+BANDOLIER="node cli/bin/bandolier.js"
 pass=0
 fail=0
 
@@ -29,8 +29,8 @@ head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 TMP="$(cd "$(mktemp -d)" && pwd -P)"
 cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f cproj-local cproj-local-postgres >/dev/null 2>&1 || true
-    docker volume rm -f local_pgdata cproj-local-home >/dev/null 2>&1 || true
+    docker rm -f bandolier-local bandolier-local-postgres >/dev/null 2>&1 || true
+    docker volume rm -f local_pgdata bandolier-local-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -39,9 +39,9 @@ trap cleanup EXIT
 ROOT="$TMP/local-root"
 mkdir -p "$ROOT"
 
-export CPROJ_CONFIG="$TMP/config.yml"
-export CPROJ_SSD_ROOT="$ROOT"
-export CPROJ_SSD_VOLUME="$ROOT"
+export BANDOLIER_CONFIG="$TMP/config.yml"
+export BANDOLIER_SSD_ROOT="$ROOT"
+export BANDOLIER_SSD_VOLUME="$ROOT"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -53,31 +53,31 @@ json_assert() { # json_assert <json> <js body over `d`>
 # ── 1. The lifecycle behaves exactly as it does on the SSD ────────────────────
 head "1. new → service add → up → status → down → delete, on a plain directory"
 
-$CPROJ new local --archetype web --services postgres >/dev/null && ok "new, with a service attached" || bad "new exited non-zero"
+$BANDOLIER new local --archetype web --services postgres >/dev/null && ok "new, with a service attached" || bad "new exited non-zero"
 
 DOCKER_OK=0
-if [ "${CPROJ_SKIP_DOCKER:-0}" = "1" ]; then
-  skip "CPROJ_SKIP_DOCKER=1 — skipping the Docker half (doctor/eject checks below still run)"
+if [ "${BANDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
+  skip "BANDOLIER_SKIP_DOCKER=1 — skipping the Docker half (doctor/eject checks below still run)"
 elif ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   skip "no Docker daemon — skipping the Docker half (doctor/eject checks below still run)"
 else
   DOCKER_OK=1
-  $CPROJ up local --no-shell >/dev/null && ok "up" || bad "up exited non-zero"
-  STATUS="$($CPROJ status --json)"
+  $BANDOLIER up local --no-shell >/dev/null && ok "up" || bad "up exited non-zero"
+  STATUS="$($BANDOLIER status --json)"
   if json_assert "$STATUS" "d.projects[0]?.state === 'running' && d.projects[0]?.services[0]?.host_port > 0"; then
     ok "status: running, with a host port — no different from a real SSD"
   else
     bad "status did not report the project running with a port: $STATUS"
   fi
-  $CPROJ down local >/dev/null && ok "down" || bad "down exited non-zero"
+  $BANDOLIER down local >/dev/null && ok "down" || bad "down exited non-zero"
 fi
 
-$CPROJ delete local --force --purge >/dev/null && ok "delete" || bad "delete exited non-zero"
+$BANDOLIER delete local --force --purge >/dev/null && ok "delete" || bad "delete exited non-zero"
 
 # ── 2. doctor: a local root is fine, not a degraded SSD ───────────────────────
 head "2. doctor (no \"plug in\" remedy for a directory that was never going to have one)"
 
-DOCTOR="$($CPROJ doctor --json)"
+DOCTOR="$($BANDOLIER doctor --json)"
 if json_assert "$DOCTOR" "d.findings.find((f) => f.id === 'ssd')?.ok === true"; then
   ok "the ssd finding is ok:true"
 else
@@ -92,10 +92,10 @@ fi
 # ── 3. eject: refused immediately, nothing touched ────────────────────────────
 head "3. eject on a non-removable root (§6)"
 
-if OUT="$($CPROJ eject --json 2>&1)"; then
+if OUT="$($BANDOLIER eject --json 2>&1)"; then
   bad "eject succeeded against a plain directory: $OUT"
 elif json_assert "$OUT" "d.error?.code === 'EJECT_NOT_APPLICABLE'"; then
-  ok "EJECT_NOT_APPLICABLE, naming \`cproj down-all\` instead of \"plug in the SSD\""
+  ok "EJECT_NOT_APPLICABLE, naming \`bandolier down-all\` instead of \"plug in the SSD\""
 else
   bad "eject failed with the wrong code: $OUT"
 fi

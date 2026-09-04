@@ -25,7 +25,7 @@
 
 import type { Config } from './config.ts'
 import type { Context } from './context.ts'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 import { discoverProjects } from './projects.ts'
 import type { CatalogueService } from './model/catalogue.ts'
 
@@ -154,7 +154,7 @@ async function allocateOne(
   }
 
   const last = Math.min(base + MAX_BAND_SCAN - 1, MAX_PORT)
-  throw new CprojError(
+  throw new BandolierError(
     'PORT_UNAVAILABLE',
     `No free host port for \`${key}\` in \`${project}\`: ${base}–${last} are all assigned to another project or already bound on this Mac.`,
     { service: key, project, host_port_base: base, scanned: last - base + 1 },

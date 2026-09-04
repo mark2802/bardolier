@@ -17,7 +17,7 @@
           "connection_hint": "postgresql://localhost:5433"
         }
       ],
-      "dev_container": "cproj-myapp"
+      "dev_container": "bandolier-myapp"
     }
   ],
   "orphaned_volumes": [

@@ -5,7 +5,7 @@
  * the app human output to parse.
  */
 
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 import type { CommandNode } from './commands/registry.ts'
 
 export type ParsedFlags = Record<string, string | boolean>
@@ -33,7 +33,7 @@ const GLOBAL: Record<string, 'json' | 'help' | 'version'> = {
 
 /**
  * Parse the tokens left after the command path is resolved. `command` is null
- * for a bare `cproj`, where only global flags are accepted.
+ * for a bare `bandolier`, where only global flags are accepted.
  */
 export function parse(tokens: readonly string[], command: CommandNode | null): Parsed {
   const args: string[] = []
@@ -63,7 +63,7 @@ export function parse(tokens: readonly string[], command: CommandNode | null): P
     const global = GLOBAL[name]
     if (global) {
       if (inlineValue !== null) {
-        throw new CprojError('INVALID_ARGUMENT', `\`${name}\` does not take a value.`)
+        throw new BandolierError('INVALID_ARGUMENT', `\`${name}\` does not take a value.`)
       }
       if (global === 'json') json = true
       else if (global === 'help') help = true
@@ -73,14 +73,14 @@ export function parse(tokens: readonly string[], command: CommandNode | null): P
 
     const spec = known.get(name)
     if (!spec) {
-      const where = command ? `\`cproj ${command.path.join(' ')}\`` : 'cproj'
-      throw new CprojError('INVALID_ARGUMENT', `Unknown flag \`${name}\` for ${where}. Try --help.`)
+      const where = command ? `\`bandolier ${command.path.join(' ')}\`` : 'bandolier'
+      throw new BandolierError('INVALID_ARGUMENT', `Unknown flag \`${name}\` for ${where}. Try --help.`)
     }
 
     const key = flagKey(spec.name)
     if (!spec.arg) {
       if (inlineValue !== null) {
-        throw new CprojError('INVALID_ARGUMENT', `\`${spec.name}\` does not take a value.`)
+        throw new BandolierError('INVALID_ARGUMENT', `\`${spec.name}\` does not take a value.`)
       }
       flags[key] = true
       continue
@@ -90,7 +90,7 @@ export function parse(tokens: readonly string[], command: CommandNode | null): P
     if (value === null) {
       const next = tokens[i + 1]
       if (next === undefined || next.startsWith('-')) {
-        throw new CprojError('INVALID_ARGUMENT', `\`${spec.name}\` requires a value (${spec.arg}).`)
+        throw new BandolierError('INVALID_ARGUMENT', `\`${spec.name}\` requires a value (${spec.arg}).`)
       }
       value = next
       i += 1

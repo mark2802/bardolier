@@ -6,7 +6,7 @@
  * stderr. Failures print the §2 error envelope here and exit non-zero.
  */
 
-import type { CprojError, ErrorPayload } from '../errors.ts'
+import type { BandolierError, ErrorPayload } from '../errors.ts'
 
 function write(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
@@ -16,7 +16,7 @@ export function renderJson(value: unknown): void {
   write(value)
 }
 
-export function renderJsonError(error: CprojError): void {
+export function renderJsonError(error: BandolierError): void {
   const payload: ErrorPayload = error.toPayload()
   write(payload)
 }

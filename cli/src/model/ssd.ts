@@ -1,5 +1,5 @@
 /**
- * Payloads for `cproj down-all` and `cproj eject` — `cli-spec.md` §6
+ * Payloads for `bandolier down-all` and `bandolier eject` — `cli-spec.md` §6
  * (Lifecycle / SSD).
  *
  * `eject` is the one command whose FAILURE the app renders in detail: on
@@ -35,7 +35,7 @@ export type DownAllOutput = {
   /** Names of the projects actually stopped by this call, sorted. */
   stopped: string[]
   /**
-   * `cproj-*` containers removed that no manifest claims — left behind by a
+   * `bandolier-*` containers removed that no manifest claims — left behind by a
    * deleted project, or by a compose file that has since changed.
    */
   stray_containers: string[]

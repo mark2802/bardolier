@@ -1,14 +1,14 @@
 {
-  "name": "claude-yard",
+  "name": "bandolier",
   "version": "0.0.0",
   "private": true,
-  "description": "Container Project Manager — cproj CLI + macOS menu-bar app",
+  "description": "Container Project Manager — bandolier CLI + macOS menu-bar app",
   "type": "module",
   "workspaces": [
     "cli"
   ],
   "scripts": {
-    "cproj": "node cli/bin/cproj.js",
+    "bandolier": "node cli/bin/bandolier.js",
     "test": "node --test 'test/**/*.test.ts'",
     "test:quiet": "node --test --test-reporter=dot 'test/**/*.test.ts'",
     "typecheck": "npm run typecheck --workspace cli",

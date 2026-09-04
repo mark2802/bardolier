@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/doctor.schema.json",
-  "title": "cproj doctor output",
+  "$id": "https://bandolier.local/schema/doctor.schema.json",
+  "title": "bandolier doctor output",
   "description": "Structured environment findings. cli-spec.md §6 (Lifecycle / SSD). The app calls this on launch, so once the app ships (Phase 5+) changes are ADDITIVE ONLY. doctor exits 0 even when findings fail — see cli/src/model/doctor.ts.",
   "type": "object",
   "additionalProperties": false,

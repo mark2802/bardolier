@@ -1,5 +1,5 @@
 /**
- * `cproj list` — `cli-spec.md` §6: projects with archetype + running state.
+ * `bandolier list` — `cli-spec.md` §6: projects with archetype + running state.
  *
  * Unlike `status`, this one DOES raise SSD_NOT_MOUNTED, as §6 declares. The
  * difference is intentional: `list` answers "what have I got?", a question with
@@ -9,14 +9,14 @@
  */
 
 import type { Context } from '../context.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import { collectStatus } from './status.ts'
 import type { ListOutput } from '../model/list.ts'
 
 export async function collectList(ctx: Context): Promise<ListOutput> {
   const status = await collectStatus(ctx)
   if (!status.ssd.mounted) {
-    throw new CprojError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
+    throw new BandolierError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
   }
   return {
     projects: status.projects.map((project) => ({

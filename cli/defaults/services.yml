@@ -1,7 +1,7 @@
 # Default service catalogue — cli-spec.md §4.1.
 #
 # This is the BUNDLED FALLBACK. Resolution order:
-#   1. `catalogue_path` from ~/.config/cproj/config.yml
+#   1. `catalogue_path` from ~/.config/bandolier/config.yml
 #   2. $SSD_ROOT/services.yml
 #   3. this file
 #

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/service-add.schema.json",
-  "title": "cproj service add output",
-  "description": "What `cproj service add` attached, and on which host port. cli-spec.md §6 (Services), §5. Additive changes only once the app ships (Phase 5+).",
+  "$id": "https://bandolier.local/schema/service-add.schema.json",
+  "title": "bandolier service add output",
+  "description": "What `bandolier service add` attached, and on which host port. cli-spec.md §6 (Services), §5. Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "added", "services", "compose_path", "compose_regenerated"],

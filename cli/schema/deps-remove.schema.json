@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/deps-remove.schema.json",
-  "title": "cproj deps remove output",
-  "description": "What `cproj deps remove` released, and the image it resolves to. cli-spec.md §6 (Deps), §4.2.",
+  "$id": "https://bandolier.local/schema/deps-remove.schema.json",
+  "title": "bandolier deps remove output",
+  "description": "What `bandolier deps remove` released, and the image it resolves to. cli-spec.md §6 (Deps), §4.2.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "removed", "extra_packages", "image"],

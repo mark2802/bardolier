@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cproj.local/schema/service-remove.schema.json",
-  "title": "cproj service remove output",
-  "description": "What `cproj service remove` detached. The data volume is KEPT and becomes a listed orphan. cli-spec.md §6 (Services), §5.",
+  "$id": "https://bandolier.local/schema/service-remove.schema.json",
+  "title": "bandolier service remove output",
+  "description": "What `bandolier service remove` detached. The data volume is KEPT and becomes a listed orphan. cli-spec.md §6 (Services), §5.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "removed", "services", "compose_path", "compose_regenerated"],

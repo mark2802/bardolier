@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 import type { Config } from './config.ts'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 import { assertValid } from './schema.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 
@@ -41,7 +41,7 @@ function read(path: string): string | null {
     const code = (cause as NodeJS.ErrnoException).code
     // ENOTDIR/ENOENT cover "SSD unplugged" as well as "file absent".
     if (code === 'ENOENT' || code === 'ENOTDIR') return null
-    throw new CprojError('CONFIG_INVALID', `Cannot read ${path}: ${(cause as Error).message}`)
+    throw new BandolierError('CONFIG_INVALID', `Cannot read ${path}: ${(cause as Error).message}`)
   }
 }
 
@@ -50,7 +50,7 @@ function parseCatalogue(text: string, path: string): ServiceCatalogue {
   try {
     parsed = parseYaml(text)
   } catch (cause) {
-    throw new CprojError('CONFIG_INVALID', `${path} is not valid YAML: ${(cause as Error).message}`)
+    throw new BandolierError('CONFIG_INVALID', `${path} is not valid YAML: ${(cause as Error).message}`)
   }
   return assertValid<ServiceCatalogue>('services', parsed ?? {}, path)
 }
@@ -59,7 +59,7 @@ export function resolveCatalogue(config: Config): ResolvedCatalogue {
   if (config.catalogue_path) {
     const text = read(config.catalogue_path)
     if (text === null) {
-      throw new CprojError('CONFIG_INVALID', `catalogue_path points at ${config.catalogue_path}, which does not exist.`)
+      throw new BandolierError('CONFIG_INVALID', `catalogue_path points at ${config.catalogue_path}, which does not exist.`)
     }
     return { catalogue: parseCatalogue(text, config.catalogue_path), path: config.catalogue_path, origin: 'config' }
   }
@@ -71,7 +71,7 @@ export function resolveCatalogue(config: Config): ResolvedCatalogue {
   const bundled = bundledCataloguePath()
   const bundledText = read(bundled)
   if (bundledText === null) {
-    throw new CprojError('INTERNAL_ERROR', `The bundled catalogue is missing from the install: ${bundled}`)
+    throw new BandolierError('INTERNAL_ERROR', `The bundled catalogue is missing from the install: ${bundled}`)
   }
   return { catalogue: parseCatalogue(bundledText, bundled), path: bundled, origin: 'bundled' }
 }

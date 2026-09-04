@@ -1,5 +1,5 @@
 /**
- * `cproj new <name> --archetype <a>` — `cli-spec.md` §6 (Projects), §10.
+ * `bandolier new <name> --archetype <a>` — `cli-spec.md` §6 (Projects), §10.
  *
  * Creates, in this order: the directory, the manifest, the seeded files, the
  * compose file. The manifest goes down before anything derived from it, so a
@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from '../context.ts'
-import { CprojError } from '../errors.ts'
+import { BandolierError } from '../errors.ts'
 import { ARCHETYPES, ARCHETYPE_APP_PORT, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetype.ts'
 import type { Archetype } from '../model/archetype.ts'
 import type { ProjectManifest } from '../model/project.ts'
@@ -39,9 +39,9 @@ export type NewRequest = {
 }
 
 function requireName(name: string | undefined): string {
-  if (!name) throw new CprojError('INVALID_ARGUMENT', 'Usage: cproj new <name> --archetype <a>')
+  if (!name) throw new BandolierError('INVALID_ARGUMENT', 'Usage: bandolier new <name> --archetype <a>')
   if (!NAME_PATTERN.test(name)) {
-    throw new CprojError(
+    throw new BandolierError(
       'INVALID_ARGUMENT',
       `\`${name}\` is not a usable project name: use lower-case letters, digits, dot, dash or underscore, starting with a letter or digit.`,
     )
@@ -51,10 +51,10 @@ function requireName(name: string | undefined): string {
 
 function requireArchetype(value: string | undefined): Archetype {
   if (!value) {
-    throw new CprojError('INVALID_ARGUMENT', `--archetype is required (one of: ${ARCHETYPES.join(', ')}).`)
+    throw new BandolierError('INVALID_ARGUMENT', `--archetype is required (one of: ${ARCHETYPES.join(', ')}).`)
   }
   if (!isArchetype(value)) {
-    throw new CprojError('INVALID_ARGUMENT', `Unknown archetype \`${value}\`. Expected one of: ${ARCHETYPES.join(', ')}.`)
+    throw new BandolierError('INVALID_ARGUMENT', `Unknown archetype \`${value}\`. Expected one of: ${ARCHETYPES.join(', ')}.`)
   }
   return value
 }
@@ -65,7 +65,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
 
   const ssd = probeSsd(ctx.config)
   if (!ssd.mounted) {
-    throw new CprojError(
+    throw new BandolierError(
       'SSD_NOT_MOUNTED',
       `The SSD is not mounted at ${ctx.config.ssd_root}; refusing to create a project on the internal disk.`,
     )
@@ -73,7 +73,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
 
   const dir = join(ctx.config.ssd_root, name)
   if (existsSync(dir)) {
-    throw new CprojError('PROJECT_EXISTS', `\`${name}\` already exists at ${dir}.`)
+    throw new BandolierError('PROJECT_EXISTS', `\`${name}\` already exists at ${dir}.`)
   }
 
   // Everything that can fail happens before the directory exists: an unknown
@@ -104,7 +104,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     const services: Record<string, { host_port: number }> = {}
     for (const { key, definition } of definitions) {
       const hostPort = allocated.get(key)
-      if (hostPort === undefined) throw new CprojError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
+      if (hostPort === undefined) throw new BandolierError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
       services[key] = { host_port: hostPort }
       attached.push(describeService(name, key, definition, hostPort))
     }
@@ -115,7 +115,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   // invisible to `status` the moment it hit the disk.
   const { valid, errors } = validate('project', manifest)
   if (!valid) {
-    throw new CprojError('INTERNAL_ERROR', `Generated manifest does not match the project schema: ${errors.join('; ')}`)
+    throw new BandolierError('INTERNAL_ERROR', `Generated manifest does not match the project schema: ${errors.join('; ')}`)
   }
 
   mkdirSync(dir, { recursive: false })
@@ -156,10 +156,10 @@ export function renderNew(output: NewOutput): string[] {
   }
   lines.push('')
   if (output.services.length === 0) {
-    lines.push(`Next: cproj service add ${project.name} postgres   # attach a service`)
-    lines.push(`      cproj up ${project.name}`)
+    lines.push(`Next: bandolier service add ${project.name} postgres   # attach a service`)
+    lines.push(`      bandolier up ${project.name}`)
   } else {
-    lines.push(`Next: cproj up ${project.name}`)
+    lines.push(`Next: bandolier up ${project.name}`)
   }
   return lines
 }

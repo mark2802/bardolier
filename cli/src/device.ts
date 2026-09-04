@@ -15,7 +15,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { CprojError } from './errors.ts'
+import { BandolierError } from './errors.ts'
 
 /** A process holding files open on the volume. Rendered by the app on refusal. */
 export type Holder = {
@@ -298,7 +298,7 @@ function adviseOn(holders: readonly Holder[]): string {
     // The one dissenter that is neither "close it" nor "wait": Docker's VM
     // holds the file share for as long as it is alive, so no amount of
     // retrying moves it and there is no document to save first.
-    return ` ${nameHolders(holders)} did not let go — that is Docker's virtual machine, which holds the volume until the engine stops. Run \`cproj eject --stop-docker\` (or \`docker desktop stop\`) and try again.`
+    return ` ${nameHolders(holders)} did not let go — that is Docker's virtual machine, which holds the volume until the engine stops. Run \`bandolier eject --stop-docker\` (or \`docker desktop stop\`) and try again.`
   }
   if (holders.every((holder) => !isActionableHolder(holder.command))) {
     return ` ${nameHolders(holders)} did not let go — a system agent, so try again in a moment rather than quitting anything.`
@@ -309,7 +309,7 @@ function adviseOn(holders: readonly Holder[]): string {
 /**
  * The real device.
  *
- * `selfPid` is excluded from the holder list: `cproj eject` is very often run
+ * `selfPid` is excluded from the holder list: `bandolier eject` is very often run
  * from a shell whose cwd is on the SSD, and this process's own cwd must not be
  * the thing that blocks the eject. The PARENT shell still counts — it is a real
  * holder and the user has to leave it.
@@ -322,7 +322,7 @@ export function createSsdDevice(runner: HostRunner = execHost(), selfPid: number
     // "nothing holds it", not a failure.
     if (result.code !== 0 && result.stdout.trim().length === 0) {
       if (result.code === 1 && result.stderr.trim().length === 0) return []
-      throw new CprojError(
+      throw new BandolierError(
         'EJECT_BLOCKED',
         `Could not determine what is holding ${mountPoint}: ${result.stderr.trim() || `lsof exited ${result.code}`}. Refusing to eject without knowing.`,
         { holders: [], reason: 'holder-check-failed' },
@@ -359,7 +359,7 @@ export function createSsdDevice(runner: HostRunner = execHost(), selfPid: number
         // empty list under a sentence it would have to parse itself.
         const said = result.stderr.trim() || result.stdout.trim() || `diskutil exited ${result.code}`
         const holders = parseDissenter(`${result.stdout}\n${result.stderr}`)
-        throw new CprojError(
+        throw new BandolierError(
           'EJECT_BLOCKED',
           `diskutil refused to eject ${mountPoint}: ${said}${adviseOn(holders)}`,
           { holders, reason: 'diskutil-refused' },

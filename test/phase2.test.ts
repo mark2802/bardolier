@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { COMPOSE_FILENAME, PASSTHROUGH_ENV, attachedKeys, projectVolumes, renderCompose } from '../cli/src/compose.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../cli/src/naming.ts'
@@ -112,12 +112,12 @@ describe('compose generation (cli-spec.md §9)', () => {
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
     const dev = doc.services.dev
     assert.equal(dev.container_name, devContainerName('myapp'))
-    assert.equal(dev.image, 'claude-web:latest')
+    assert.equal(dev.image, 'bandolier-web:latest')
     // The bind mount, then $HOME as a per-project named volume: `down` removes
     // the container, so a home in its writable layer would lose the shell
     // history and the `claude login` on every stop (images.ts, CONTAINER_HOME).
-    // Last, the shared `uv` cache every claude-web project mounts (Phase 11).
-    assert.deepEqual(dev.volumes, ['.:/work', 'cproj-myapp-home:/state/home', 'cproj-uv-cache:/cache/uv'])
+    // Last, the shared `uv` cache every bandolier-web project mounts (Phase 11).
+    assert.deepEqual(dev.volumes, ['.:/work', 'bandolier-myapp-home:/state/home', 'bandolier-uv-cache:/cache/uv'])
     assert.equal(dev.working_dir, '/work')
     assert.deepEqual(dev.command, ['sleep', 'infinity'])
     assert.equal(dev.ports, undefined, 'the dev container must not publish host ports')
@@ -130,16 +130,16 @@ describe('compose generation (cli-spec.md §9)', () => {
   })
 
   test('a bare project on an image with no cache declares exactly one volume: the dev container home', () => {
-    // claude-ios has no toolchain cache (images.ts); claude-web's `uv` cache
+    // bandolier-ios has no toolchain cache (images.ts); bandolier-web's `uv` cache
     // would otherwise be a second volume here, so this is the one archetype
     // that isolates the claim being tested.
-    const ios = manifest('myapp', { archetype: 'ios', base_image: 'claude-ios' })
+    const ios = manifest('myapp', { archetype: 'ios', base_image: 'bandolier-ios' })
     const doc = parseYaml(renderCompose({ manifest: ios, catalogue: null })) as Record<string, any>
     // Every project has a home volume, so a `volumes:` block is no longer the
     // sign that services are attached — the KEYS are.
-    assert.deepEqual(Object.keys(doc.volumes), ['cproj-myapp-home'])
-    assert.equal(doc.volumes['cproj-myapp-home'].labels['cproj.role'], 'home')
-    assert.equal(doc.volumes['cproj-myapp-home'].labels['cproj.project'], 'myapp')
+    assert.deepEqual(Object.keys(doc.volumes), ['bandolier-myapp-home'])
+    assert.equal(doc.volumes['bandolier-myapp-home'].labels['bandolier.role'], 'home')
+    assert.equal(doc.volumes['bandolier-myapp-home'].labels['bandolier.project'], 'myapp')
     assert.deepEqual(Object.keys(doc.services), ['dev'])
   })
 
@@ -179,7 +179,7 @@ describe('compose generation (cli-spec.md §9)', () => {
     const bad = manifest('myapp', { services: { kafka: { host_port: 9092 } } })
     assert.throws(
       () => renderCompose({ manifest: bad, catalogue: catalogue() }),
-      (error: unknown) => error instanceof CprojError && error.code === 'SERVICE_UNKNOWN',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_UNKNOWN',
     )
   })
 
@@ -208,7 +208,7 @@ describe('new (cli-spec.md §6, §10)', () => {
 
     assert.ok(validate('new', result).valid, 'new output must match new.schema.json')
     assert.deepEqual(result.seeded, ['.gitignore', '.dockerignore', 'CLAUDE.md'])
-    assert.equal(result.project.base_image, 'claude-web')
+    assert.equal(result.project.base_image, 'bandolier-web')
     assert.equal(result.project.created, FIXED_NOW.toISOString())
 
     for (const file of ['project.yml', 'docker-compose.yml', '.gitignore', '.dockerignore', 'CLAUDE.md']) {
@@ -246,7 +246,7 @@ describe('new (cli-spec.md §6, §10)', () => {
 
     await assert.rejects(
       () => runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_EXISTS',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_EXISTS',
     )
     assert.equal(box.read('myapp', 'keepme'), 'precious')
     assert.ok(!box.exists('myapp', 'CLAUDE.md'), 'a failed new must not seed anything')
@@ -254,10 +254,10 @@ describe('new (cli-spec.md §6, §10)', () => {
 
   test('an unmounted SSD is SSD_NOT_MOUNTED — never a project on the internal disk', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined }),
-      (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
     )
     assert.ok(!existsSync(join(box.root, 'unplugged')))
   })
@@ -274,7 +274,7 @@ describe('new (cli-spec.md §6, §10)', () => {
     ]) {
       await assert.rejects(
         () => runNew(makeContext(box), request),
-        (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+        (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
         `accepted ${JSON.stringify(request)}`,
       )
     }
@@ -286,7 +286,7 @@ describe('new (cli-spec.md §6, §10)', () => {
     const box = sandbox()
     await assert.rejects(
       () => runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: 'toaster' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'SERVICE_UNKNOWN',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_UNKNOWN',
     )
     assert.ok(!box.exists('myapp'), 'nothing may be created when the request cannot be honoured')
   })
@@ -339,7 +339,7 @@ describe('up (cli-spec.md §6)', () => {
     )
     assert.deepEqual(
       docker.calls.map((c) => c.kind),
-      // claude-web's shared `uv` cache volume (Phase 11) is ensured before `up`.
+      // bandolier-web's shared `uv` cache volume (Phase 11) is ensured before `up`.
       ['ensureVolume', 'up'],
     )
   })
@@ -404,7 +404,7 @@ describe('up (cli-spec.md §6)', () => {
     await assert.rejects(
       () => runUp(ctx, { name: 'myapp', noShell: false }),
       (error: unknown) =>
-        error instanceof CprojError &&
+        error instanceof BandolierError &&
         error.code === 'PORT_UNAVAILABLE' &&
         error.message.includes('5433') &&
         error.details?.port === 5433,
@@ -420,7 +420,7 @@ describe('up (cli-spec.md §6)', () => {
     const ctx = makeContext(box, docker, { ports: stubPorts([5433]) })
 
     const result = await runUp(ctx, { name: 'myapp', noShell: false })
-    // claude-web's shared `uv` cache volume (Phase 11) is ensured, then `up`.
+    // bandolier-web's shared `uv` cache volume (Phase 11) is ensured, then `up`.
     assert.equal(docker.calls.length, 2)
     assert.equal(result.already_running, false)
   })
@@ -438,12 +438,12 @@ describe('up (cli-spec.md §6)', () => {
     const box = sandbox()
     await assert.rejects(
       () => runUp(makeContext(box), { name: 'ghost', noShell: false }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
-    const unplugged = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const unplugged = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => runUp(unplugged, { name: 'myapp', noShell: false }),
-      (error: unknown) => error instanceof CprojError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
     )
   })
 
@@ -452,7 +452,7 @@ describe('up (cli-spec.md §6)', () => {
     box.writeProject('myapp', manifest('myapp'))
     await assert.rejects(
       () => runUp(makeContext(box, stubDocker({ available: false })), { name: 'myapp', noShell: false }),
-      (error: unknown) => error instanceof CprojError && error.code === 'DOCKER_UNAVAILABLE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'DOCKER_UNAVAILABLE',
     )
   })
 })
@@ -516,7 +516,7 @@ describe('down (cli-spec.md §6)', () => {
     const box = sandbox()
     await assert.rejects(
       () => runDown(makeContext(box), 'ghost'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -538,7 +538,7 @@ describe('delete (cli-spec.md §6)', () => {
     box.writeProject('myapp', withServices())
     const docker = stubDocker({
       running: [devContainerName('myapp')],
-      volumes: ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'],
+      volumes: ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'],
     })
 
     const result = await runDelete(makeContext(box, docker), request('myapp', { force: true }))
@@ -549,23 +549,23 @@ describe('delete (cli-spec.md §6)', () => {
     assert.deepEqual(result.removed_volumes, [])
     // The dev container's home is kept like any other data volume — a plain
     // delete destroys nothing, so the shell history and the login outlive it.
-    assert.deepEqual(result.kept_volumes, ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(result.kept_volumes, ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
     assert.ok(!box.exists('myapp'), 'the project directory must be gone')
     assert.deepEqual(
       docker.calls.map((c) => c.kind),
       ['down'],
       'delete must stop containers before removing the directory',
     )
-    assert.deepEqual(await docker.volumeNames(), ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(await docker.volumeNames(), ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
   })
 
   test('--purge is the only path that destroys volumes', async () => {
     const box = sandbox()
     box.writeProject('myapp', withServices())
-    const docker = stubDocker({ volumes: ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'] })
+    const docker = stubDocker({ volumes: ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'] })
 
     const result = await runDelete(makeContext(box, docker), request('myapp', { force: true, purge: true }))
-    assert.deepEqual(result.removed_volumes, ['cproj-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(result.removed_volumes, ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
     assert.deepEqual(result.kept_volumes, [])
     assert.deepEqual(await docker.volumeNames(), [])
   })
@@ -630,7 +630,7 @@ describe('delete (cli-spec.md §6)', () => {
     box.writeProject('myapp', manifest('myapp'))
     await assert.rejects(
       () => runDelete(makeContext(box, stubDocker()), request('myapp', { json: true })),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
     assert.ok(box.exists('myapp', 'project.yml'))
   })
@@ -640,7 +640,7 @@ describe('delete (cli-spec.md §6)', () => {
     box.writeProject('myapp', manifest('myapp'))
     await assert.rejects(
       () => runDelete(makeContext(box, stubDocker()), request('myapp', { force: true, keepData: true, purge: true })),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
     assert.ok(box.exists('myapp', 'project.yml'))
   })
@@ -651,7 +651,7 @@ describe('delete (cli-spec.md §6)', () => {
     const docker = stubDocker({ volumes: ['myapp_pgdata'], volumesInUse: ['myapp_pgdata'] })
     await assert.rejects(
       () => runDelete(makeContext(box, docker), request('myapp', { force: true, purge: true })),
-      (error: unknown) => error instanceof CprojError && error.code === 'VOLUME_IN_USE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'VOLUME_IN_USE',
     )
     assert.ok(box.exists('myapp', 'project.yml'), 'the directory must survive a failed purge')
   })
@@ -669,7 +669,7 @@ describe('delete (cli-spec.md §6)', () => {
     const box = sandbox()
     await assert.rejects(
       () => runDelete(makeContext(box), request('ghost', { force: true })),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -685,20 +685,20 @@ describe('build (cli-spec.md §6, Images)', () => {
     assert.ok(validate('build', result).valid, 'build output must match build.schema.json')
     assert.equal(result.uid, 501)
     assert.equal(result.gid, 20)
-    assert.deepEqual(result.images.map((i) => [i.image, i.status]), [['claude-web', 'built']])
+    assert.deepEqual(result.images.map((i) => [i.image, i.status]), [['bandolier-web', 'built']])
 
     const call = docker.calls[0]
     assert.ok(call?.kind === 'build')
-    assert.equal(call.request.tag, 'claude-web:latest')
+    assert.equal(call.request.tag, 'bandolier-web:latest')
     assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
-    assert.ok(call.request.dockerfile.endsWith(join('claude-web', 'Dockerfile')))
+    assert.ok(call.request.dockerfile.endsWith(join('bandolier-web', 'Dockerfile')))
   })
 
   test('`library` shares the web base, per the §4.3 map', async () => {
     const box = sandbox()
     const docker = stubDocker()
     const result = await runBuild(makeContext(box, docker), 'library')
-    assert.deepEqual(result.images.map((i) => i.image), ['claude-web'])
+    assert.deepEqual(result.images.map((i) => i.image), ['bandolier-web'])
     assert.deepEqual(result.images[0]?.archetypes, ['web', 'library'])
   })
 
@@ -708,9 +708,9 @@ describe('build (cli-spec.md §6, Images)', () => {
     assert.deepEqual(
       result.images.map((i) => [i.image, i.status]),
       [
-        ['claude-web', 'built'],
-        ['claude-ios', 'built'],
-        ['claude-and', 'built'],
+        ['bandolier-web', 'built'],
+        ['bandolier-ios', 'built'],
+        ['bandolier-and', 'built'],
       ],
     )
     for (const image of result.images) {
@@ -732,24 +732,24 @@ describe('build (cli-spec.md §6, Images)', () => {
     const box = sandbox()
     await assert.rejects(
       () => runBuild(makeContext(box, stubDocker({ available: false })), 'web'),
-      (error: unknown) => error instanceof CprojError && error.code === 'DOCKER_UNAVAILABLE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'DOCKER_UNAVAILABLE',
     )
     await assert.rejects(
       () => runBuild(makeContext(box, stubDocker()), 'toaster'),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
   test('build works with the SSD unplugged — images live on the internal disk', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { CPROJ_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: join(box.root, 'unplugged') } })
     const result = await runBuild(ctx, 'web')
     assert.equal(result.images[0]?.status, 'built')
   })
 
   test('the base image the doctor looks for is the one build produces', () => {
-    const web = baseImages().find((image) => image.image === 'claude-web')
-    assert.ok(web?.dockerfile, 'the claude-web Dockerfile is missing from the install')
+    const web = baseImages().find((image) => image.image === 'bandolier-web')
+    assert.ok(web?.dockerfile, 'the bandolier-web Dockerfile is missing from the install')
     const dockerfile = readFileSync(web.dockerfile, 'utf8')
     // The build args are the contract between build.ts and the Dockerfile.
     assert.ok(dockerfile.includes('ARG HOST_UID'))
@@ -787,22 +787,22 @@ describe('lifecycle (new → up → down → delete)', () => {
     box.writeProject('bad', 'name: [unclosed')
     assert.throws(
       () => requireProject(makeContext(box), 'bad'),
-      (error: unknown) => error instanceof CprojError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
     )
     assert.throws(
       () => requireProject(makeContext(box), undefined),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
   test('projectVolumes names exactly what delete --purge would remove', () => {
     // Sorted, and the dev container's home is one of the project's own.
     assert.deepEqual(projectVolumes(withServices('shop'), catalogue()), [
-      'cproj-shop-home',
+      'bandolier-shop-home',
       'shop_pgdata',
       'shop_redisdata',
     ])
-    assert.deepEqual(projectVolumes(manifest('bare'), catalogue()), ['cproj-bare-home'])
+    assert.deepEqual(projectVolumes(manifest('bare'), catalogue()), ['bandolier-bare-home'])
     assert.deepEqual(attachedKeys(withServices()), ['postgres', 'redis'])
   })
 
@@ -815,7 +815,7 @@ describe('lifecycle (new → up → down → delete)', () => {
     assert.deepEqual(status.projects, [])
     await assert.rejects(
       () => runDown(makeContext(box), 'notes'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
     assert.equal(readFileSync(join(box.root, 'notes', 'todo.md'), 'utf8'), 'buy milk')
   })

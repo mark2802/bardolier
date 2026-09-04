@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { CprojError, EXIT_FAILURE, EXIT_SUCCESS, toCprojError } from './errors.ts'
+import { BandolierError, EXIT_FAILURE, EXIT_SUCCESS, toBandolierError } from './errors.ts'
 import { parse } from './argv.ts'
 import { ROOT, resolve } from './commands/registry.ts'
 import { renderJson, renderJsonError } from './render/json.ts'
@@ -31,20 +31,20 @@ export async function main(argv: readonly string[]): Promise<number> {
 
     if (parsed.version) {
       if (parsed.json) renderJson({ version: version() })
-      else renderHuman([`cproj ${version()}`])
+      else renderHuman([`bandolier ${version()}`])
       return EXIT_SUCCESS
     }
 
-    // Bare `cproj`, `cproj --help`, or a grouping node like `cproj service`.
+    // Bare `bandolier`, `bandolier --help`, or a grouping node like `bandolier service`.
     const isGroupingNode = command !== null && (command.children?.length ?? 0) > 0
     if (command === null || parsed.help || isGroupingNode) {
       if (command === null && parsed.args.length > 0) {
-        throw new CprojError('INVALID_ARGUMENT', `Unknown command \`${parsed.args[0]}\`. Try --help.`)
+        throw new BandolierError('INVALID_ARGUMENT', `Unknown command \`${parsed.args[0]}\`. Try --help.`)
       }
       if (isGroupingNode && !parsed.help && parsed.args.length > 0) {
-        throw new CprojError(
+        throw new BandolierError(
           'INVALID_ARGUMENT',
-          `Unknown subcommand \`${parsed.args[0]}\` for \`cproj ${command.path.join(' ')}\`. Try --help.`,
+          `Unknown subcommand \`${parsed.args[0]}\` for \`bandolier ${command.path.join(' ')}\`. Try --help.`,
         )
       }
 
@@ -59,7 +59,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     else renderHuman(output.human(output.json))
     return EXIT_SUCCESS
   } catch (cause) {
-    const error = toCprojError(cause)
+    const error = toBandolierError(cause)
     if (wantsJson) renderJsonError(error)
     else renderHumanError(error)
     return EXIT_FAILURE

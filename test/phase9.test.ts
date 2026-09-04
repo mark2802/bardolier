@@ -73,7 +73,7 @@ const SOME_FACTS: GitFacts = {
 
 function context(box: Sandbox, options: Parameters<typeof createContext>[0] = {}) {
   return createContext({
-    env: { CPROJ_SSD_ROOT: box.root },
+    env: { BANDOLIER_SSD_ROOT: box.root },
     home: box.home,
     path: box.configPath,
     ports: { isFree: async () => true },
@@ -134,8 +134,8 @@ describe('the dev container home', () => {
   test('is the project’s own, labelled so the orphan scan can attribute it', () => {
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
     const volume = doc.volumes[homeVolumeName('myapp')]
-    assert.equal(volume.labels['cproj.project'], 'myapp')
-    assert.equal(volume.labels['cproj.role'], 'home')
+    assert.equal(volume.labels['bandolier.project'], 'myapp')
+    assert.equal(volume.labels['bandolier.role'], 'home')
     // NOT external: unlike the shared toolchain cache, this one is created and
     // owned by this project's Compose (images.ts).
     assert.equal(volume.external, undefined)

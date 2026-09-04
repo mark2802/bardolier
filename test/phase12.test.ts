@@ -11,7 +11,7 @@ import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { parse as parseYaml } from 'yaml'
 
-import { CprojError } from '../cli/src/errors.ts'
+import { BandolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { composeDocument } from '../cli/src/compose.ts'
 import { runNew } from '../cli/src/commands/new.ts'
@@ -121,7 +121,7 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
 
     await assert.rejects(
       () => runPortAdd(ctx, { project: 'myapp', name: 'notebook', containerPort: '9999' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'EXTRA_PORT_ATTACHED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'EXTRA_PORT_ATTACHED',
     )
     assert.equal(readManifest(box, 'myapp').extra_ports?.notebook?.host_port, 8888, 'the first declaration is untouched')
   })
@@ -133,7 +133,7 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
 
     await assert.rejects(
       () => runPortAdd(ctx, { project: 'myapp', name: 'Not A Name', containerPort: '8888' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
@@ -144,11 +144,11 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
 
     await assert.rejects(
       () => runPortAdd(ctx, { project: 'myapp', name: 'notebook', containerPort: undefined }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
     await assert.rejects(
       () => runPortAdd(ctx, { project: 'myapp', name: 'notebook', containerPort: '99999' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 
@@ -158,10 +158,10 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
     await project(ctx, 'myapp')
     const before = box.read('myapp', 'docker-compose.yml')
 
-    const running = makeContext(box, stubDocker({ running: ['cproj-myapp'] }))
+    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp'] }))
     await assert.rejects(
       () => runPortAdd(running, { project: 'myapp', name: 'notebook', containerPort: '8888' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.equal(box.read('myapp', 'docker-compose.yml'), before)
   })
@@ -171,7 +171,7 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
     const ctx = makeContext(box)
     await assert.rejects(
       () => runPortAdd(ctx, { project: 'ghost', name: 'notebook', containerPort: '8888' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -219,7 +219,7 @@ describe('port remove (cli-spec.md §6, Ports)', () => {
 
     await assert.rejects(
       () => runPortRemove(ctx, { project: 'myapp', name: 'notebook' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'EXTRA_PORT_NOT_ATTACHED',
+      (error: unknown) => error instanceof BandolierError && error.code === 'EXTRA_PORT_NOT_ATTACHED',
     )
   })
 
@@ -229,10 +229,10 @@ describe('port remove (cli-spec.md §6, Ports)', () => {
     await project(ctx, 'myapp')
     await runPortAdd(ctx, { project: 'myapp', name: 'notebook', containerPort: '8888' })
 
-    const running = makeContext(box, stubDocker({ running: ['cproj-myapp'] }))
+    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp'] }))
     await assert.rejects(
       () => runPortRemove(running, { project: 'myapp', name: 'notebook' }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.equal(readManifest(box, 'myapp').extra_ports?.notebook?.host_port, 8888)
   })
@@ -281,7 +281,7 @@ describe('port list (cli-spec.md §6, Ports)', () => {
     const ctx = makeContext(box)
     assert.throws(
       () => collectPortList(ctx, 'ghost'),
-      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -335,7 +335,7 @@ describe('extra ports elsewhere in the system', () => {
     const squatted = makeContext(box, stubDocker(), { ports: stubPorts([8888]) })
     await assert.rejects(
       () => runUp(squatted, { name: 'myapp', noShell: true }),
-      (error: unknown) => error instanceof CprojError && error.code === 'PORT_UNAVAILABLE',
+      (error: unknown) => error instanceof BandolierError && error.code === 'PORT_UNAVAILABLE',
     )
   })
 })

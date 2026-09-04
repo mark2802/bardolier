@@ -1,4 +1,4 @@
-# Migrating an existing project onto cproj
+# Migrating an existing project onto bandolier
 
 **Audience:** whoever (human or agent) is doing the migration. Written as a
 runbook to execute, not background reading — follow it in order. Steps marked
@@ -7,7 +7,7 @@ guess past them.
 
 **Not a phase spec.** This changes no CLI behaviour, so it carries no schema
 and no done-check. When a step below turns out to need one — the project
-needs something cproj cannot do yet — write that down in
+needs something bandolier cannot do yet — write that down in
 `docs/migration-guide-gaps.md` (last section) and route around it for now.
 Don't hand-invent the capability per project; a generated file a hand-edit
 "fixes" today is overwritten the next `up` (`docker-compose.yml` is generated,
@@ -33,7 +33,7 @@ Before touching anything, read (don't yet act on):
   whether it calls a backend directly or through its own dev server.
 - Backend manifest (`requirements.txt`/`pyproject.toml`/`package.json`/...) —
   language, pinned runtime version, any background-worker process.
-- Root-level dotfiles that will collide with what `cproj new` seeds:
+- Root-level dotfiles that will collide with what `bandolier new` seeds:
   `.gitignore`, `.dockerignore`, `CLAUDE.md` (see step 5).
 - Whether there's a `.git` at all, and if so `git remote -v` and current
   branch, and whether anything local is uncommitted or unpushed — this is
@@ -67,7 +67,7 @@ Before touching anything, read (don't yet act on):
 ### 3. Create the project
 
 ```
-cproj new <name> --archetype web --services <postgres,redis,...>
+bandolier new <name> --archetype web --services <postgres,redis,...>
 ```
 
 This assigns ports and writes `project.yml`, a generated `docker-compose.yml`,
@@ -106,23 +106,23 @@ check was for.
 - **No git at all.** There's nothing to move but the files — copy or move
   them in directly. **STOP:** decide now whether to `git init` a fresh
   repository at this point (recommended, so this project gets the same
-  history-going-forward that every other cproj project has) or leave it
+  history-going-forward that every other bandolier project has) or leave it
   untracked; either is fine, but it's the project owner's call, not a
   default this guide should make for you.
 
 ### 5. Reconcile files that exist on both sides — merge, don't clobber
 
-`cproj new` just seeded three files the old project may already have:
+`bandolier new` just seeded three files the old project may already have:
 
 - **`.gitignore`** — keep the project's own (it's more complete for that
-  project); just add cproj's one addition, `.cproj/` (the handoff note,
+  project); just add bandolier's one addition, `.bandolier/` (the handoff note,
   regenerated on every stop — churn, not history).
-- **`.dockerignore`** — keep cproj's seeded one unless the project had its
+- **`.dockerignore`** — keep bandolier's seeded one unless the project had its
   own at the root (rare, since most only had one per Dockerfile's own
   directory).
 - **`CLAUDE.md`** — genuinely merge. Keep the project's own dev-workflow
   content (test commands, conventions, architecture notes) and append
-  cproj's seeded sections (environment boundary, dev-server/proxy note,
+  bandolier's seeded sections (environment boundary, dev-server/proxy note,
   services, "managing this project"). One file, both halves.
 
 **Check for a case-only collision before you do any of this.** On the
@@ -168,31 +168,31 @@ before `up`.
 ### 9. Bring it up and verify
 
 ```
-cproj up <name>
+bandolier up <name>
 ```
 Shell in (or let the app), install dependencies for whatever runs in the
 container (`uv sync` / `npm install`, per process), start each process by
 hand — this container is a devbox to exec into, nothing supervises processes
 for you. Then verify from the **Mac**, not from inside the container:
-`cproj status <name>` for the URL, load it in a browser, confirm a page that
+`bandolier status <name>` for the URL, load it in a browser, confirm a page that
 hits the backend actually gets data, confirm the backend can reach its
 services by name (archetypes with a dev server; a `library` project instead
 just runs its scripts/test suite by hand inside the container and confirms
 they complete — there's no URL to load).
 
-### 10. Note anything the project needed that cproj couldn't do
+### 10. Note anything the project needed that bandolier couldn't do
 
-If step 8, or anything else, needed a capability cproj doesn't have — don't
+If step 8, or anything else, needed a capability bandolier doesn't have — don't
 build a per-project workaround for it. Add it to
 `docs/migration-guide-gaps.md` and route around it in this migration (Part 2
 covers the port-policy decision itself, including a second published port,
-which `cproj port add` now handles).
+which `bandolier port add` now handles).
 
 ---
 
 ## Part 2 — The port-policy decision
 
-cproj's `web` archetype publishes **exactly one *fixed* port** — the
+bandolier's `web` archetype publishes **exactly one *fixed* port** — the
 frontend's dev server, `app_port`. A project with its own backend process, or
 a second UI app, wants *that* process reachable by *something* — the question
 is by what, and there are two shapes:
@@ -202,14 +202,14 @@ is by what, and there are two shapes:
 mainstream dev servers support this) forwards a path (`/api/*`) to the
 backend running on an **unpublished, internal-only** port in the same
 container. The browser only ever talks to one origin. No CORS needed
-(same-origin). No cproj changes required.
+(same-origin). No bandolier changes required.
 
 **B — A second, real, published port**, reachable directly from the Mac's
 network — needed when something *other than the browser hitting the
 frontend* must reach a process directly: a native mobile client running in
 the Simulator/emulator during dev, a third-party webhook sender, a second
 team's service, or a second UI app of the project's own with no proxy
-relationship to the first. `cproj port add <project> <name>
+relationship to the first. `bandolier port add <project> <name>
 --container-port <n>` declares one — independent of archetype, so it also
 covers a `library`/`ios`/`android` project that wants a browser-reachable dev
 tool (a notebook server, a debugger UI) and otherwise publishes nothing at
@@ -219,9 +219,9 @@ all. See `cli-spec.md` §5.1.
 - Only the browser (via the web frontend) ever needs to reach the backend →
   **use A.** Simple, one origin, nothing to declare.
 - A native mobile client, a second UI app, or anything else outside the
-  project's own frontend needs direct access → **use B**: `cproj port add
+  project's own frontend needs direct access → **use B**: `bandolier port add
   <project> <name> --container-port <n>`, then point the client at
-  `http://localhost:<host_port>` (from the command's own output, or `cproj
+  `http://localhost:<host_port>` (from the command's own output, or `bandolier
   status`/`port list` afterwards — never guess or hand-compose the host
   port). Still wire the web frontend through A too, where it applies — the
   two are not exclusive, and A costs nothing extra.
@@ -251,7 +251,7 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
 
 - **More than one of the project's own processes need to run** (an API plus
   a worker plus a scheduler). Each is just another process started by hand
-  in the same one dev container — not a cproj concept, no extra ports unless
+  in the same one dev container — not a bandolier concept, no extra ports unless
   Part 2 applies to it too.
 
 - **Existing volume data needs to survive the move**, rather than starting
@@ -273,7 +273,7 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   (needs its hostnames updated).
 
 - **The project's dev setup assumes multiple hostnames/subdomains**
-  (tenant-per-subdomain routing, cookie-domain assumptions). cproj gives you
+  (tenant-per-subdomain routing, cookie-domain assumptions). bandolier gives you
   one origin on one Mac-reachable port. If the app has a path-based or
   single-host fallback, use it for local dev; otherwise this is a real
   limitation to flag, not something to solve with an ad hoc `/etc/hosts`
@@ -293,13 +293,13 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
 - **The project's toolchain needs OS-level packages the base image doesn't
   ship** — Playwright's browser dependencies (`libnss3`, `libatk-bridge2.0-0`,
   …) are the recurring case, but anything the old Dockerfile ran `apt-get
-  install` for beyond the base image's own kit qualifies. `cproj deps add
+  install` for beyond the base image's own kit qualifies. `bandolier deps add
   <project> <package...>` (stopped project only) declares one or more apt
-  package names; `cproj up` then builds a derived image with them installed
+  package names; `bandolier up` then builds a derived image with them installed
   and switches the dev container to it — nothing to hand-edit, and nothing
   installed at container-runtime (there's no root there, and `down` throws the
-  writable layer away regardless). `cproj deps remove <project> <package...>`
-  undeclares them; `cproj deps list <project>` shows what's declared and which
+  writable layer away regardless). `bandolier deps remove <project> <package...>`
+  undeclares them; `bandolier deps list <project>` shows what's declared and which
   image the container currently resolves to. See `cli-spec.md` §6 (Deps),
   §4.2, §9. This is for OS packages only — a genuinely new language/toolchain
   is the different, bigger gap below.
@@ -335,7 +335,7 @@ the project in those updates.
 >   there is actually wrong or incomplete) — phrased entirely generically,
 >   describing the *situation and the instruction*, never this project by
 >   name or anything identifying about it.
-> - If it needs a cproj/app capability that doesn't exist (check
+> - If it needs a bandolier/app capability that doesn't exist (check
 >   `docs/migration-guide-gaps.md`'s Open section first — it may already be
 >   tracked), propose a new entry instead of a workaround — also phrased
 >   generically.
