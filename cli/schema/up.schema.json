@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/up.schema.json",
-  "title": "bandolier up output",
-  "description": "What `bandolier up` started. cli-spec.md §6 (Projects). Additive changes only once the app ships (Phase 5+).",
+  "$id": "https://bardolier.local/schema/up.schema.json",
+  "title": "bardolier up output",
+  "description": "What `bardolier up` started. cli-spec.md §6 (Projects). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "state", "dev_container", "services", "already_running", "compose_regenerated", "open_shell"],

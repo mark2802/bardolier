@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/port-list.schema.json",
-  "title": "bandolier port list output",
+  "$id": "https://bardolier.local/schema/port-list.schema.json",
+  "title": "bardolier port list output",
   "description": "Declared extra ports with their resolved host ports. cli-spec.md §6 (Ports). Manifest only — no daemon is consulted, so it answers with Docker down.",
   "type": "object",
   "additionalProperties": false,

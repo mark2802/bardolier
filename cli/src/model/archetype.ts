@@ -9,14 +9,14 @@
 export const ARCHETYPES = ['web', 'ios', 'android', 'library'] as const
 export type Archetype = (typeof ARCHETYPES)[number]
 
-export const BASE_IMAGES = ['bandolier-web', 'bandolier-ios', 'bandolier-and'] as const
+export const BASE_IMAGES = ['bardolier-web', 'bardolier-ios', 'bardolier-and'] as const
 export type BaseImage = (typeof BASE_IMAGES)[number]
 
 export const ARCHETYPE_BASE_IMAGE: Readonly<Record<Archetype, BaseImage>> = {
-  web: 'bandolier-web',
-  ios: 'bandolier-ios',
-  android: 'bandolier-and',
-  library: 'bandolier-web',
+  web: 'bardolier-web',
+  ios: 'bardolier-ios',
+  android: 'bardolier-and',
+  library: 'bardolier-web',
 }
 
 /**

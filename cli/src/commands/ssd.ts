@@ -1,5 +1,5 @@
 /**
- * `bandolier down-all` and `bandolier eject` — `cli-spec.md` §6 (Lifecycle / SSD).
+ * `bardolier down-all` and `bardolier eject` — `cli-spec.md` §6 (Lifecycle / SSD).
  *
  * `eject` is a removability check, then `down-all`, then a holder check, then
  * `diskutil eject`, in that order and with no way to skip a step. The order
@@ -29,16 +29,16 @@
  * and the VM helper that holds `/Volumes` goes a few seconds later.
  *
  * `down-all` stops the projects that are actually up, then sweeps any leftover
- * `bandolier-*` container no manifest claims — the residue of a deleted project or
+ * `bardolier-*` container no manifest claims — the residue of a deleted project or
  * of a compose file that has since been regenerated. Stopping every project
  * unconditionally would mean a `docker compose down` per project on the SSD;
  * this way the cost is proportional to what is running.
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { isActionableHolder, isRuntimeHolder } from '../device.ts'
-import { devContainerName, isBandolierContainer, serviceContainerName } from '../naming.ts'
+import { devContainerName, isBardolierContainer, serviceContainerName } from '../naming.ts'
 import { attachedKeys } from '../compose.ts'
 import { discoverProjects, probeSsd } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
@@ -82,7 +82,7 @@ export async function runDownAll(ctx: Context): Promise<DownAllOutput> {
 
   const known = knownContainers(ctx)
   const strays = [...runningNames(await ctx.docker.runningContainers())]
-    .filter((name) => isBandolierContainer(name) && !known.has(name))
+    .filter((name) => isBardolierContainer(name) && !known.has(name))
     .sort()
   for (const name of strays) await ctx.docker.removeContainer(name)
 
@@ -132,8 +132,8 @@ function toHolders(holders: readonly { pid: number; command: string; user: strin
   }))
 }
 
-/** The holder records a BandolierError is carrying, if any. */
-function detailHolders(error: BandolierError): EjectHolder[] {
+/** The holder records a BardolierError is carrying, if any. */
+function detailHolders(error: BardolierError): EjectHolder[] {
   const holders = error.details?.holders
   return Array.isArray(holders) ? (holders as EjectHolder[]) : []
 }
@@ -141,7 +141,7 @@ function detailHolders(error: BandolierError): EjectHolder[] {
 export async function runEject(ctx: Context, options: EjectOptions = {}): Promise<EjectOutput> {
   const ssd = probeSsd(ctx.config)
   if (!ssd.volumePresent) {
-    throw new BandolierError('SSD_NOT_MOUNTED', `Nothing is mounted at ${ssd.volume}; there is nothing to eject.`)
+    throw new BardolierError('SSD_NOT_MOUNTED', `Nothing is mounted at ${ssd.volume}; there is nothing to eject.`)
   }
 
   if (!(await ctx.device.removable(ssd.volume))) {
@@ -149,9 +149,9 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
     // means `diskutil eject` — asked of `/` or another ordinary directory,
     // that is at best a no-op and at worst a request to unmount the wrong
     // thing. Checked before down-all, so a refusal here touches no container.
-    throw new BandolierError(
+    throw new BardolierError(
       'EJECT_NOT_APPLICABLE',
-      `${ssd.volume} is not a removable volume, so there is nothing to eject. Use \`bandolier down-all\` to stop every project instead.`,
+      `${ssd.volume} is not a removable volume, so there is nothing to eject. Use \`bardolier down-all\` to stop every project instead.`,
     )
   }
 
@@ -160,9 +160,9 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
   const holders: EjectHolder[] = toHolders(await ctx.device.holders(ssd.volume))
 
   if (holders.length > 0) {
-    throw new BandolierError(
+    throw new BardolierError(
       'EJECT_BLOCKED',
-      `${ssd.volume} is still held by ${holders.length} process(es): ${holders.map(describeHolder).join('; ')}. Close them and try again — bandolier will not force an unmount.`,
+      `${ssd.volume} is still held by ${holders.length} process(es): ${holders.map(describeHolder).join('; ')}. Close them and try again — bardolier will not force an unmount.`,
       { holders },
     )
   }
@@ -171,7 +171,7 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
   try {
     await ctx.device.eject(ssd.volume)
   } catch (error) {
-    if (!(error instanceof BandolierError) || error.code !== 'EJECT_BLOCKED') throw error
+    if (!(error instanceof BardolierError) || error.code !== 'EJECT_BLOCKED') throw error
     const held = await stopEngineFor(ctx, ssd.volume, error, options)
     if (held === null) throw error
     dockerStopped = true
@@ -196,7 +196,7 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
 async function stopEngineFor(
   ctx: Context,
   volume: string,
-  refusal: BandolierError,
+  refusal: BardolierError,
   options: EjectOptions,
 ): Promise<EjectHolder[] | null> {
   const dissenters = detailHolders(refusal)
@@ -214,9 +214,9 @@ async function stopEngineFor(
 
   const named = held.map(describeHolder).join('; ')
   if (!(await allowed(ctx, options, volume, named))) {
-    throw new BandolierError(
+    throw new BardolierError(
       'EJECT_BLOCKED',
-      `${volume} is held by Docker's virtual machine (${named}), which keeps the file share open until the engine stops — no retry and no app to quit will release it. Run \`bandolier eject --stop-docker\` (or \`docker desktop stop\`) and try again; \`docker desktop start\` brings it back.`,
+      `${volume} is held by Docker's virtual machine (${named}), which keeps the file share open until the engine stops — no retry and no app to quit will release it. Run \`bardolier eject --stop-docker\` (or \`docker desktop stop\`) and try again; \`docker desktop start\` brings it back.`,
       { holders: held, reason: 'runtime-holds-volume' },
     )
   }
@@ -224,8 +224,8 @@ async function stopEngineFor(
   try {
     await ctx.docker.stopEngine()
   } catch (error) {
-    const said = error instanceof BandolierError ? error.message : String(error)
-    throw new BandolierError(
+    const said = error instanceof BardolierError ? error.message : String(error)
+    throw new BardolierError(
       'EJECT_BLOCKED',
       `${volume} is held by Docker's virtual machine (${named}), and the engine would not stop: ${said} Quit Docker Desktop and try again.`,
       { holders: held, reason: 'runtime-holds-volume' },
@@ -302,14 +302,14 @@ async function ejectAfterEngineStop(ctx: Context, volume: string, held: EjectHol
     await ctx.wait(RELEASE_POLL_MS)
   }
 
-  let refusal: BandolierError | null = null
+  let refusal: BardolierError | null = null
   let dissenters: EjectHolder[] = []
   for (let attempt = 1; ; attempt++) {
     try {
       await ctx.device.eject(volume)
       return
     } catch (error) {
-      if (!(error instanceof BandolierError) || error.code !== 'EJECT_BLOCKED') throw error
+      if (!(error instanceof BardolierError) || error.code !== 'EJECT_BLOCKED') throw error
       dissenters = detailHolders(error)
       // Somebody else refused this time — an Xcode that opened a file while we
       // waited, a Spotlight mid-write. Their refusal already carries its own
@@ -329,9 +329,9 @@ async function ejectAfterEngineStop(ctx: Context, volume: string, held: EjectHol
   if (still.length === 0 && refusal !== null) throw refusal
 
   const named = still.length > 0 ? still : held
-  throw new BandolierError(
+  throw new BardolierError(
     'EJECT_BLOCKED',
-    `${volume} still would not unmount ${RELEASE_BUDGET_S}s after the Docker engine was stopped — held by ${named.map(describeHolder).join('; ')}. The engine is already down, so there is nothing left for bandolier to stop: if Docker Desktop itself is still running, quit it and retry; otherwise give the volume a moment and retry.`,
+    `${volume} still would not unmount ${RELEASE_BUDGET_S}s after the Docker engine was stopped — held by ${named.map(describeHolder).join('; ')}. The engine is already down, so there is nothing left for bardolier to stop: if Docker Desktop itself is still running, quit it and retry; otherwise give the volume a moment and retry.`,
     { holders: named, reason: 'runtime-holds-volume-after-stop' },
   )
 }

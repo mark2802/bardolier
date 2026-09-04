@@ -20,7 +20,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { BandolierError } from './errors.ts'
+import { BardolierError } from './errors.ts'
 
 export type ExecResult = {
   readonly code: number
@@ -58,7 +58,7 @@ export type DockerImage = {
 export type DockerVolume = {
   readonly name: string
   /**
-   * The volume's labels. `bandolier.project` / `bandolier.service` are written by the
+   * The volume's labels. `bardolier.project` / `bardolier.service` are written by the
    * generated compose file (§9), which is how an orphaned volume is attributed
    * to the project it came from without a second registry.
    */
@@ -68,7 +68,7 @@ export type DockerVolume = {
 export type ComposeTarget = {
   /** Absolute path to the generated compose file. */
   readonly file: string
-  /** Compose project name (`bandolier-<name>`), which namespaces the network. */
+  /** Compose project name (`bardolier-<name>`), which namespaces the network. */
   readonly project: string
   /** Directory the compose file lives in — relative bind mounts resolve here. */
   readonly cwd: string
@@ -90,7 +90,7 @@ export type ContainerExec = {
 }
 
 export type BuildRequest = {
-  /** Full image reference, e.g. `bandolier-web:latest` or `bandolier-deps-bandolier-web:<hash>`. */
+  /** Full image reference, e.g. `bardolier-web:latest` or `bardolier-deps-bardolier-web:<hash>`. */
   readonly tag: string
   /** Absolute path to the build context directory. */
   readonly context: string
@@ -275,7 +275,7 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
         : { ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(env === undefined ? {} : { env }) }
     const result = await runner(args, options)
     if (result.code !== 0) {
-      throw new BandolierError('DOCKER_UNAVAILABLE', `Could not ${what}: ${result.stderr.trim() || `docker exited ${result.code}`}`)
+      throw new BardolierError('DOCKER_UNAVAILABLE', `Could not ${what}: ${result.stderr.trim() || `docker exited ${result.code}`}`)
     }
     return result
   }
@@ -426,9 +426,9 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
         const stderr = result.stderr.trim()
         // Docker's own words for "a container still references this".
         if (/in use|is being used/i.test(stderr)) {
-          throw new BandolierError('VOLUME_IN_USE', `Volume ${name} is still in use: ${stderr}`)
+          throw new BardolierError('VOLUME_IN_USE', `Volume ${name} is still in use: ${stderr}`)
         }
-        throw new BandolierError(
+        throw new BardolierError(
           'DOCKER_UNAVAILABLE',
           `Could not remove volume ${name}: ${stderr || `docker exited ${result.code}`}`,
         )

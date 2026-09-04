@@ -13,7 +13,7 @@
 #            absent for the same reason `xcodebuild` is.
 #
 # Files the container writes come back owned by the HOST user — the reason
-# `bandolier build` passes HOST_UID/HOST_GID. Needs a Docker daemon and the network;
+# `bardolier build` passes HOST_UID/HOST_GID. Needs a Docker daemon and the network;
 # the first run builds both images (several GB, and the Android one compiles
 # under emulation on Apple Silicon).
 #
@@ -25,7 +25,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 manual=0
@@ -41,18 +41,18 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_VOLUME="$VOLUME"
-export BANDOLIER_SSD_ROOT="$MOUNTED"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_VOLUME="$VOLUME"
+export BARDOLIER_SSD_ROOT="$MOUNTED"
 
 cleanup() {
   # Never leave containers behind: the projects are in a temp dir that is about
   # to vanish, and a running container holding it would be the mess this tool
   # exists to prevent.
-  $BANDOLIER down-all --force >/dev/null 2>&1 || true
+  $BARDOLIER down-all --force >/dev/null 2>&1 || true
   # Every project now owns a $HOME volume (cli-spec.md §9). NOT the Gradle
   # cache: that is shared, expensive to refill, and the point of this phase.
-  docker volume rm -f bandolier-swiftbits-home bandolier-droid-home >/dev/null 2>&1 || true
+  docker volume rm -f bardolier-swiftbits-home bardolier-droid-home >/dev/null 2>&1 || true
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -74,7 +74,7 @@ if node --input-type=module -e "
     assert.ok(image.dockerfile, image.image + ' has no Dockerfile')
   }
 " 2>/dev/null; then
-  ok "bandolier-web, bandolier-ios and bandolier-and all have a Dockerfile on disk"
+  ok "bardolier-web, bardolier-ios and bardolier-and all have a Dockerfile on disk"
 else
   bad 'a base image declared in §4.3 has no Dockerfile — build would report it unavailable'
 fi
@@ -94,19 +94,19 @@ ok "the Docker daemon responded"
 
 have_image() { docker image inspect "$1:latest" >/dev/null 2>&1; }
 
-for pair in "ios:bandolier-ios" "android:bandolier-and"; do
+for pair in "ios:bardolier-ios" "android:bardolier-and"; do
   archetype="${pair%%:*}"
   image="${pair##*:}"
   if have_image "$image"; then
     ok "$image:latest is present"
   elif [ "${PHASE8_NO_BUILD:-0}" = "1" ]; then
-    bad "$image:latest is missing and PHASE8_NO_BUILD=1 — run \`bandolier build --archetype $archetype\`"
+    bad "$image:latest is missing and PHASE8_NO_BUILD=1 — run \`bardolier build --archetype $archetype\`"
   else
     printf '    building %s (this is the slow part; ^C is safe)\n' "$image"
-    if $BANDOLIER build --archetype "$archetype" >"$TMP/build-$archetype.log" 2>&1; then
+    if $BARDOLIER build --archetype "$archetype" >"$TMP/build-$archetype.log" 2>&1; then
       ok "$image:latest built from cli/images/$image/Dockerfile"
     else
-      bad "\`bandolier build --archetype $archetype\` failed:"
+      bad "\`bardolier build --archetype $archetype\` failed:"
       tail -5 "$TMP/build-$archetype.log" | sed 's/^/      /'
     fi
   fi
@@ -115,7 +115,7 @@ done
 # The host identity is the whole reason `build` exists rather than `docker build`.
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
-if BUILD="$($BANDOLIER build --archetype web --json 2>/dev/null)" \
+if BUILD="$($BARDOLIER build --archetype web --json 2>/dev/null)" \
   && json_assert "$BUILD" "d.uid === $HOST_UID && d.gid === $HOST_GID"; then
   ok "build passes this Mac's uid/gid ($HOST_UID:$HOST_GID) as build args"
 else
@@ -125,13 +125,13 @@ fi
 # ── 3. An ios project, from `new` to a test run ───────────────────────────────
 section "3. ios — Swift toolchain, swiftlint, and no way to build the app (§4.3)"
 
-$BANDOLIER new swiftbits --archetype ios >/dev/null || bad "\`bandolier new --archetype ios\` failed"
+$BARDOLIER new swiftbits --archetype ios >/dev/null || bad "\`bardolier new --archetype ios\` failed"
 IOS_DIR="$MOUNTED/swiftbits"
 
-if [ -f "$IOS_DIR/docker-compose.yml" ] && grep -q "image: bandolier-ios:latest" "$IOS_DIR/docker-compose.yml"; then
+if [ -f "$IOS_DIR/docker-compose.yml" ] && grep -q "image: bardolier-ios:latest" "$IOS_DIR/docker-compose.yml"; then
   ok "the generated compose file starts the ios base image"
 else
-  bad "the ios project's compose file does not use bandolier-ios"
+  bad "the ios project's compose file does not use bardolier-ios"
 fi
 
 CLAUDE_MD="$IOS_DIR/CLAUDE.md"
@@ -141,13 +141,13 @@ else
   bad "the ios CLAUDE.md does not steer the agent away from host-only build steps (§10)"
 fi
 
-if $BANDOLIER up swiftbits --no-shell >/dev/null 2>&1; then
-  ok "bandolier up swiftbits"
+if $BARDOLIER up swiftbits --no-shell >/dev/null 2>&1; then
+  ok "bardolier up swiftbits"
 else
-  bad "bandolier up swiftbits failed"
+  bad "bardolier up swiftbits failed"
 fi
 
-IOS_CONTAINER="$($BANDOLIER status swiftbits --json 2>/dev/null | node -e "
+IOS_CONTAINER="$($BARDOLIER status swiftbits --json 2>/dev/null | node -e "
   let s = ''
   process.stdin.on('data', (c) => (s += c)).on('end', () => {
     const d = JSON.parse(s)
@@ -220,12 +220,12 @@ if [ -n "$IOS_CONTAINER" ]; then
   fi
 fi
 
-$BANDOLIER down swiftbits >/dev/null 2>&1 || true
+$BARDOLIER down swiftbits >/dev/null 2>&1 || true
 
 # ── 4. An android project, built and tested by Gradle ─────────────────────────
 section "4. android — a real Gradle build and unit test in-container (§4.3)"
 
-$BANDOLIER new droid --archetype android >/dev/null || bad "\`bandolier new --archetype android\` failed"
+$BARDOLIER new droid --archetype android >/dev/null || bad "\`bardolier new --archetype android\` failed"
 AND_DIR="$MOUNTED/droid"
 
 if grep -q "platform: linux/amd64" "$AND_DIR/docker-compose.yml"; then
@@ -234,11 +234,11 @@ else
   bad "the android compose file has no platform pin — aapt2 is x86_64-only, so the build would fail"
 fi
 
-if grep -q "bandolier-gradle-cache:/cache/gradle" "$AND_DIR/docker-compose.yml" \
+if grep -q "bardolier-gradle-cache:/cache/gradle" "$AND_DIR/docker-compose.yml" \
   && grep -q "external: true" "$AND_DIR/docker-compose.yml"; then
   ok "and mounts the shared Gradle cache as an external volume (§4.3, §9)"
 else
-  bad "the android compose file does not mount bandolier-gradle-cache as an external volume"
+  bad "the android compose file does not mount bardolier-gradle-cache as an external volume"
 fi
 
 if grep -qi "emulator" "$AND_DIR/CLAUDE.md" && grep -q "adb" "$AND_DIR/CLAUDE.md"; then
@@ -290,27 +290,27 @@ public class MathTest {
 }
 JAVA
 
-if $BANDOLIER up droid --no-shell >/dev/null 2>&1; then
-  ok "bandolier up droid"
+if $BARDOLIER up droid --no-shell >/dev/null 2>&1; then
+  ok "bardolier up droid"
 else
-  bad "bandolier up droid failed"
+  bad "bardolier up droid failed"
 fi
 
 # `up` creates the volume Compose was told is external — nobody else can, and
 # without it `compose up` fails outright rather than silently.
-if docker volume inspect bandolier-gradle-cache >/dev/null 2>&1; then
-  ok "bandolier up created the shared cache volume"
-  ROLE="$(docker volume inspect bandolier-gradle-cache --format '{{index .Labels "bandolier.role"}}' 2>/dev/null)"
+if docker volume inspect bardolier-gradle-cache >/dev/null 2>&1; then
+  ok "bardolier up created the shared cache volume"
+  ROLE="$(docker volume inspect bardolier-gradle-cache --format '{{index .Labels "bardolier.role"}}' 2>/dev/null)"
   if [ "$ROLE" = "cache" ]; then
-    ok "labelled bandolier.role=cache, so the orphan scan knows it belongs to no project"
+    ok "labelled bardolier.role=cache, so the orphan scan knows it belongs to no project"
   else
     bad "the cache volume is labelled '$ROLE' — the volume scan would misattribute it"
   fi
 else
-  bad "bandolier up did not create bandolier-gradle-cache"
+  bad "bardolier up did not create bardolier-gradle-cache"
 fi
 
-AND_CONTAINER="$($BANDOLIER status droid --json 2>/dev/null | node -e "
+AND_CONTAINER="$($BARDOLIER status droid --json 2>/dev/null | node -e "
   let s = ''
   process.stdin.on('data', (c) => (s += c)).on('end', () => {
     const d = JSON.parse(s)
@@ -391,7 +391,7 @@ if [ -n "$AND_CONTAINER" ]; then
   fi
 fi
 
-$BANDOLIER down droid >/dev/null 2>&1 || true
+$BARDOLIER down droid >/dev/null 2>&1 || true
 
 # ── 5. Nothing in the repo attempts a host-only step ──────────────────────────
 section "5. The boundary holds in the tooling too (CLAUDE.md)"
@@ -428,7 +428,7 @@ section "6. Earlier phases"
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
+if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-7: already being walked, in order, by test/regression.sh"
 else
   if bash test/regression.sh --through 7 >"$TMP/ladder.log" 2>&1; then
@@ -450,9 +450,9 @@ What is still the human's, on the Mac — the other side of the boundary:
   1. IOS, THE HOST HALF. Open the real app's .xcodeproj in Xcode, ⌘B, run it on
      a simulator, sign it. None of that is in the container and none of it ever
      will be; if a task seems to need it in there, the answer is this step.
-  2. ANDROID, THE HOST HALF. Instrumented tests and the emulator. `bandolier shell`
+  2. ANDROID, THE HOST HALF. Instrumented tests and the emulator. `bardolier shell`
      into the project and run the unit tests; run the AVD from Android Studio.
-  3. THE AGENT'S SIDE OF IT. Start an ios project, `bandolier shell` into it, and
+  3. THE AGENT'S SIDE OF IT. Start an ios project, `bardolier shell` into it, and
      ask the agent inside to build the app. It should read its CLAUDE.md, say
      the step is yours, and stop — rather than looking for a workaround.
 MANUAL

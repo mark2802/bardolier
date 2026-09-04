@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/deps-list.schema.json",
-  "title": "bandolier deps list output",
+  "$id": "https://bardolier.local/schema/deps-list.schema.json",
+  "title": "bardolier deps list output",
   "description": "Declared extra packages and the resolved image. cli-spec.md §6 (Deps). Manifest only — no daemon is consulted, so it answers with Docker down.",
   "type": "object",
   "additionalProperties": false,

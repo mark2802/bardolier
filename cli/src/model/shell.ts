@@ -1,5 +1,5 @@
 /**
- * Payload for `bandolier shell <name>` — `cli-spec.md` §6 (Shell).
+ * Payload for `bardolier shell <name>` — `cli-spec.md` §6 (Shell).
  *
  * The CLI NAMES the command; the app spawns the terminal. That split is the
  * whole contract here: this payload is an instruction to be executed elsewhere,
@@ -12,9 +12,9 @@
 
 export type ShellOutput = {
   project: string
-  /** The running dev container, e.g. `bandolier-myapp`. */
+  /** The running dev container, e.g. `bardolier-myapp`. */
   container: string
-  /** Argv to run, e.g. `["docker","exec","-it","bandolier-myapp","bash"]` (§6). */
+  /** Argv to run, e.g. `["docker","exec","-it","bardolier-myapp","bash"]` (§6). */
   exec: string[]
   /** Where that shell lands — the bind-mounted project directory inside the container. */
   workdir: string

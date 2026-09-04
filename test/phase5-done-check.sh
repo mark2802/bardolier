@@ -57,10 +57,10 @@ fi
 head "2. Build settings (app-spec.md §1)"
 
 if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
-  ok "App Sandbox is off — the app can shell out to bandolier"
+  ok "App Sandbox is off — the app can shell out to bardolier"
 else
   todo "App Sandbox is still ON. Xcode → target → Signing & Capabilities → remove App Sandbox."
-  todo "  Until then every bandolier call fails: a sandboxed app may not exec a helper it doesn't ship."
+  todo "  Until then every bardolier call fails: a sandboxed app may not exec a helper it doesn't ship."
 fi
 
 if grep -q "INFOPLIST_KEY_LSUIElement = YES" "$PBXPROJ"; then
@@ -82,7 +82,7 @@ head "4. Earlier phases"
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
+if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-4: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"
@@ -106,18 +106,18 @@ The half a terminal cannot check — on the Mac, in Xcode:
   1. Fix anything marked ⚠ above (App Sandbox off, LSUIElement YES).
   2. ⌘B. The synchronized folder group means the new files are already in the
      target; confirm they compiled.
-  3. Make `bandolier` reachable from a GUI app — a Finder-launched app inherits no
+  3. Make `bardolier` reachable from a GUI app — a Finder-launched app inherits no
      shell PATH. Either point the app straight at this working copy:
-       defaults write com.mw.claude-yard CprojPath "$PWD/cli/bin/bandolier.js"
+       defaults write com.mw.claude-yard CprojPath "$PWD/cli/bin/bardolier.js"
      or install it once and let the search find it:
-       ln -s "$PWD/cli/bin/bandolier.js" /usr/local/bin/bandolier
+       ln -s "$PWD/cli/bin/bardolier.js" /usr/local/bin/bardolier
      (Running from Xcode instead? Set CPROJ_BIN in the scheme's environment.)
   4. Run. A box icon appears in the menu bar and no dock icon does.
   5. Click it. The debug view shows the SSD root, Docker, each project with its
      archetype and state, each service with `host → container` ports and its
      connection hint, the orphaned volumes, and the doctor findings.
   6. Compare against the terminal:
-       bandolier status --json
+       bardolier status --json
      Same projects, same ports, same states. That is the done-check.
 MANUAL
 printf '\033[32mDone-check passed the automated half.\033[0m\n'

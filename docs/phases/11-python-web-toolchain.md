@@ -1,6 +1,6 @@
 # Phase 11 — Python in the web image
 
-**Goal:** Existing projects being migrated onto bandolier typically pair a Python
+**Goal:** Existing projects being migrated onto bardolier typically pair a Python
 API with a React frontend. The `web`/`library` archetype's dev container is
 already a general-purpose devbox (bind-mounted `/work`, `sleep infinity`, exec
 in and run whatever) — it just has no Python. Add one, with a shared package
@@ -11,7 +11,7 @@ an internal-only port inside the same container — the existing "one thing
 published" rule (§9) is unaffected.
 
 **Deliverables:**
-- `cli/images/bandolier-web/Dockerfile` gains `uv` (astral-sh/uv), pinned and
+- `cli/images/bardolier-web/Dockerfile` gains `uv` (astral-sh/uv), pinned and
   checksum-verified from the release's `.sha256` sidecar — same posture as the
   Claude Code binary already in this image. `uv` manages Python installs
   itself; no separate `apt-get install python3`.
@@ -21,7 +21,7 @@ published" rule (§9) is unaffected.
   per-project on the SSD. `UV_PYTHON_INSTALL_DIR=/cache/uv/python` shares the
   same volume (`IMAGE_CACHE` is one mount per image) so `uv python install`
   doesn't re-pull an interpreter per project either. `cli/src/images.ts`'s
-  `IMAGE_CACHE` gains `'bandolier-web': { volume: 'bandolier-uv-cache', mount:
+  `IMAGE_CACHE` gains `'bardolier-web': { volume: 'bardolier-uv-cache', mount:
   '/cache/uv' }`. Everything that reads `IMAGE_CACHE` generically (compose
   generation, `up`, the volume scan) already handles a second entry — this is
   additive, not a new mechanism. `library` shares the image and so shares the
@@ -31,7 +31,7 @@ published" rule (§9) is unaffected.
   `/work` (bind-mounted, per-project, same reasoning as any other project
   file) and must not get committed or shipped in a build context.
 - `docs/cli-spec.md` §4.3 table note and the Dockerfile's own comments record
-  that `bandolier-web` now carries Python via `uv`; `CLAUDE.md`'s cache paragraph
+  that `bardolier-web` now carries Python via `uv`; `CLAUDE.md`'s cache paragraph
   gets one line noting the second cache entry rather than a rewrite.
 - Seeded `CLAUDE.md`'s dev-server note (`scaffold.ts`) gains one sentence for
   `web`/`library`: a second, unpublished process (e.g. a Python API on
@@ -50,6 +50,6 @@ container: `uv --version` succeeds; `uv python install 3.12 && uv run --python
 populates `/cache/uv`; delete the project and create a second web project,
 confirm the second container's `uv pip install` of the same package is served
 from the cache with `--offline` (mirrors phase 8's Gradle offline proof).
-`bandolier-ios`/`bandolier-and` containers still have no `uv` (boundary is the
+`bardolier-ios`/`bardolier-and` containers still have no `uv` (boundary is the
 image, not just documentation). Land as `test/phase11-done-check.sh` plus a
 section in `test/regression.sh` (`LAST=11`).

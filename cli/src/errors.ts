@@ -77,13 +77,13 @@ export type ErrorPayload = {
  * The only error type commands should throw. Anything else is coerced to
  * INTERNAL_ERROR at the top level so no failure escapes without a stable code.
  */
-export class BandolierError extends Error {
+export class BardolierError extends Error {
   readonly code: ErrorCode
   readonly details: Record<string, unknown> | undefined
 
   constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
     super(message)
-    this.name = 'BandolierError'
+    this.name = 'BardolierError'
     this.code = code
     this.details = details
   }
@@ -99,13 +99,13 @@ export class BandolierError extends Error {
   }
 }
 
-export function toBandolierError(cause: unknown): BandolierError {
-  if (cause instanceof BandolierError) return cause
+export function toBardolierError(cause: unknown): BardolierError {
+  if (cause instanceof BardolierError) return cause
   const message = cause instanceof Error ? cause.message : String(cause)
-  return new BandolierError('INTERNAL_ERROR', message)
+  return new BardolierError('INTERNAL_ERROR', message)
 }
 
 /** Phase 0: every command is a stub. Removed command-by-command as behaviour lands. */
 export function notImplemented(command: string): never {
-  throw new BandolierError('NOT_IMPLEMENTED', `\`bandolier ${command}\` is not implemented yet.`)
+  throw new BardolierError('NOT_IMPLEMENTED', `\`bardolier ${command}\` is not implemented yet.`)
 }

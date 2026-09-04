@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Phase 14 done-check — root shell (docs/phases/14-root-shell.md): `docker exec
-# -u root` named as `bandolier shell --root`, one argv difference, no new checks
+# -u root` named as `bardolier shell --root`, one argv difference, no new checks
 # beyond the ones `shell` already has. SSD is a temp dir (§8); the Docker half
 # proves `up` → shell/--root/--print → down against a real container.
 #
 #   bash test/phase14-done-check.sh
-#   BANDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 
@@ -23,8 +23,8 @@ head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 TMP="$(mktemp -d)"
 cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bandolier-alpha >/dev/null 2>&1 || true
-    docker volume rm -f bandolier-alpha-home >/dev/null 2>&1 || true
+    docker rm -f bardolier-alpha >/dev/null 2>&1 || true
+    docker volume rm -f bardolier-alpha-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -33,9 +33,9 @@ trap cleanup EXIT
 MOUNTED="$TMP/ssd/claude-projects"
 mkdir -p "$MOUNTED"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_VOLUME="$TMP/ssd"
-export BANDOLIER_SSD_ROOT="$MOUNTED"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_VOLUME="$TMP/ssd"
+export BARDOLIER_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -55,11 +55,11 @@ schema_assert() { # schema_assert <schema-name> <json>
 # ── 1. new → up → shell/--root/--print, plain shell unchanged ─────────────────
 head "1. \`shell --root\` swaps to \`docker exec -u root\`; plain \`shell\` is untouched"
 
-$BANDOLIER new alpha --archetype web >/dev/null
+$BARDOLIER new alpha --archetype web >/dev/null
 
 DOCKER_OK=0
-if [ "${BANDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
-  skip "BANDOLIER_SKIP_DOCKER=1 — skipping the Docker half"
+if [ "${BARDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
+  skip "BARDOLIER_SKIP_DOCKER=1 — skipping the Docker half"
 elif ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   skip "no Docker daemon — skipping the Docker half"
 else
@@ -67,37 +67,37 @@ else
 fi
 
 if [ "$DOCKER_OK" = "1" ]; then
-  docker rm -f bandolier-alpha >/dev/null 2>&1 || true
-  docker volume rm -f bandolier-alpha-home >/dev/null 2>&1 || true
+  docker rm -f bardolier-alpha >/dev/null 2>&1 || true
+  docker volume rm -f bardolier-alpha-home >/dev/null 2>&1 || true
 
-  if ! docker image inspect bandolier-web:latest >/dev/null 2>&1; then
-    printf '    building bandolier-web (first run only, this takes a few minutes)…\n'
-    $BANDOLIER build --archetype web >/dev/null 2>&1 || bad "bandolier build failed"
+  if ! docker image inspect bardolier-web:latest >/dev/null 2>&1; then
+    printf '    building bardolier-web (first run only, this takes a few minutes)…\n'
+    $BARDOLIER build --archetype web >/dev/null 2>&1 || bad "bardolier build failed"
   fi
 
-  $BANDOLIER up alpha --json >/dev/null || bad "up alpha exited non-zero"
+  $BARDOLIER up alpha --json >/dev/null || bad "up alpha exited non-zero"
 
-  PLAIN="$($BANDOLIER shell alpha --json)" || bad "shell exited non-zero"
+  PLAIN="$($BARDOLIER shell alpha --json)" || bad "shell exited non-zero"
   schema_assert shell "$PLAIN" && ok "plain shell --json still validates against shell.schema.json" || bad "plain shell output does not match its schema"
-  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-it','bandolier-alpha','bash'])" \
+  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-it','bardolier-alpha','bash'])" \
     && ok "plain shell is byte-identical to today's output" || bad "plain shell's exec argv changed"
 
-  ROOT="$($BANDOLIER shell alpha --root --json)" || bad "shell --root exited non-zero"
+  ROOT="$($BARDOLIER shell alpha --root --json)" || bad "shell --root exited non-zero"
   schema_assert shell "$ROOT" && ok "shell --root --json validates against the same shell.schema.json (no bump)" || bad "shell --root output does not match its schema"
-  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-it','bandolier-alpha','bash'])" \
+  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-it','bardolier-alpha','bash'])" \
     && ok "shell --root's exec has -u root ahead of -it" || bad "shell --root's exec argv is wrong"
 
-  ROOT_PRINT="$($BANDOLIER shell alpha --root --print)"
-  [ "$ROOT_PRINT" = "docker exec -u root -it bandolier-alpha bash" ] \
+  ROOT_PRINT="$($BARDOLIER shell alpha --root --print)"
+  [ "$ROOT_PRINT" = "docker exec -u root -it bardolier-alpha bash" ] \
     && ok "shell --root --print prints the same command" || bad "shell --root --print printed '$ROOT_PRINT'"
 
   # Prove -u root actually lands as root, not just named as such.
-  WHOAMI="$(docker exec -u root bandolier-alpha whoami 2>/dev/null | tr -d '\r')"
+  WHOAMI="$(docker exec -u root bardolier-alpha whoami 2>/dev/null | tr -d '\r')"
   [ "$WHOAMI" = "root" ] \
     && ok "the named invocation really does land as root" || bad "docker exec -u root did not land as root (got '$WHOAMI')"
 
-  $BANDOLIER down alpha >/dev/null || bad "down alpha exited non-zero"
-  STOPPED_ROOT="$($BANDOLIER shell alpha --root --json 2>/dev/null || true)"
+  $BARDOLIER down alpha >/dev/null || bad "down alpha exited non-zero"
+  STOPPED_ROOT="$($BARDOLIER shell alpha --root --json 2>/dev/null || true)"
   json_assert "$STOPPED_ROOT" 'd.error && d.error.code === "PROJECT_STOPPED"' \
     && ok "a stopped project still fails PROJECT_STOPPED with --root" || bad "shell --root resolved a stopped project"
 fi

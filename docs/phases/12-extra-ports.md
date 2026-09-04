@@ -36,8 +36,8 @@ publish nothing at all.
   schemas `port-add`/`port-remove`/`port-list`; `status.schema.json` and
   `up.schema.json` gain `extra_ports`.
 - App: `AttachedExtraPort`/`PortAddOutput`/`PortRemoveOutput`/
-  `PortListOutput` in `BandolierModels.swift`; `BandolierProject.extraPorts`
-  (optional, matching `appPort`/`appUrl`); two `BandolierErrorCode` constants.
+  `PortListOutput` in `BardolierModels.swift`; `BardolierProject.extraPorts`
+  (optional, matching `appPort`/`appUrl`); two `BardolierErrorCode` constants.
 - `cli-spec.md` §4.2, new §5.1, §6 (Ports), §7, §9; `CLAUDE.md`'s dev-container
   paragraph; `docs/migration-guide.md` Part 2 rewritten now that option B
   exists; both gaps in `docs/migration-guide-gaps.md` moved to Resolved.

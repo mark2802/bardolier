@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/new.schema.json",
-  "title": "bandolier new output",
-  "description": "What `bandolier new` created. cli-spec.md §6 (Projects), §10 (seeded files). Additive changes only once the app ships (Phase 5+).",
+  "$id": "https://bardolier.local/schema/new.schema.json",
+  "title": "bardolier new output",
+  "description": "What `bardolier new` created. cli-spec.md §6 (Projects), §10 (seeded files). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "manifest_path", "compose_path", "seeded", "services"],
@@ -14,7 +14,7 @@
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
-        "base_image": { "type": "string", "enum": ["bandolier-web", "bandolier-ios", "bandolier-and"] },
+        "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
         "dir": { "type": "string", "minLength": 1 },
         "created": { "type": "string", "format": "date-time" }
       }

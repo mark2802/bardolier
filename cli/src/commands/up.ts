@@ -1,5 +1,5 @@
 /**
- * `bandolier up <name> [--no-shell]` — `cli-spec.md` §6 (Projects).
+ * `bardolier up <name> [--no-shell]` — `cli-spec.md` §6 (Projects).
  *
  * Several things happen, in this order, and the order matters:
  *
@@ -25,7 +25,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../naming.ts'
 import { attachedKeys, CACHE_VOLUME_LABELS, cacheFor, PASSTHROUGH_ENV } from '../compose.ts'
 import { attachedExtraPorts, extraPortNames } from '../extraports.ts'
@@ -58,9 +58,9 @@ async function validatePorts(
   // The dev server's port is ours to check too (§9) — unless the dev container
   // is the thing already holding it, which is what makes `up` idempotent.
   if (!devRunning && typeof manifest.app_port === 'number' && !(await ctx.ports.isFree(manifest.app_port))) {
-    throw new BandolierError(
+    throw new BardolierError(
       'PORT_UNAVAILABLE',
-      `Host port ${manifest.app_port} (the dev server for \`${manifest.name}\`) is already in use. bandolier will not remap it — free the port, or delete \`app_port\` from project.yml to be assigned a new one.`,
+      `Host port ${manifest.app_port} (the dev server for \`${manifest.name}\`) is already in use. bardolier will not remap it — free the port, or delete \`app_port\` from project.yml to be assigned a new one.`,
       { port: manifest.app_port, project: manifest.name },
     )
   }
@@ -71,9 +71,9 @@ async function validatePorts(
     const port = manifest.services?.[key]?.host_port
     if (port === undefined) continue
     if (!(await ctx.ports.isFree(port))) {
-      throw new BandolierError(
+      throw new BardolierError(
         'PORT_UNAVAILABLE',
-        `Host port ${port} (for \`${key}\` in \`${manifest.name}\`) is already in use. bandolier will not remap it — free the port, or remove and re-add the service to assign a new one.`,
+        `Host port ${port} (for \`${key}\` in \`${manifest.name}\`) is already in use. bardolier will not remap it — free the port, or remove and re-add the service to assign a new one.`,
         { port, service: key, project: manifest.name },
       )
     }
@@ -86,9 +86,9 @@ async function validatePorts(
       const port = manifest.extra_ports?.[name]?.host_port
       if (port === undefined) continue
       if (!(await ctx.ports.isFree(port))) {
-        throw new BandolierError(
+        throw new BardolierError(
           'PORT_UNAVAILABLE',
-          `Host port ${port} (extra port \`${name}\` in \`${manifest.name}\`) is already in use. bandolier will not remap it — free the port, or remove and re-add it to assign a new one.`,
+          `Host port ${port} (extra port \`${name}\` in \`${manifest.name}\`) is already in use. bardolier will not remap it — free the port, or remove and re-add it to assign a new one.`,
           { port, name, project: manifest.name },
         )
       }
@@ -100,7 +100,7 @@ async function validatePorts(
  * The environment `compose up` itself runs with — which is what decides what
  * the dev container inherits (`compose.ts`, PASSTHROUGH_ENV).
  *
- * Two sources, and the caller's wins. Anything already in bandolier's own
+ * Two sources, and the caller's wins. Anything already in bardolier's own
  * environment is forwarded as-is; the host's git identity fills in the `GIT_*`
  * names nobody set, so a commit made inside the container is attributed to the
  * human instead of failing on an unset `user.email`. Reading that identity
@@ -240,7 +240,7 @@ export function renderUp(output: UpOutput): string[] {
   if (output.compose_regenerated) lines.push('  (docker-compose.yml regenerated from project.yml)')
   if (output.state !== 'running') {
     lines.push('')
-    lines.push(`Not everything came up — run \`bandolier status ${output.project}\` for detail.`)
+    lines.push(`Not everything came up — run \`bardolier status ${output.project}\` for detail.`)
   } else {
     lines.push('')
     lines.push(`Shell in with: docker exec -it ${output.dev_container} bash`)

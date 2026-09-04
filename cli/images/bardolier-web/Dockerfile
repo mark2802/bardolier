@@ -1,6 +1,6 @@
-# bandolier-web — base image for the `web` and `library` archetypes (cli-spec.md §4.3).
+# bardolier-web — base image for the `web` and `library` archetypes (cli-spec.md §4.3).
 #
-# Built by `bandolier build`, which passes HOST_UID/HOST_GID so that everything the
+# Built by `bardolier build`, which passes HOST_UID/HOST_GID so that everything the
 # container writes into the bind-mounted /work is owned by the Mac user. Without
 # that, every file the agent creates would come back root-owned on the host.
 #
@@ -11,7 +11,7 @@ ARG NODE_VERSION=22
 FROM node:${NODE_VERSION}-bookworm-slim
 
 # 501:20 is the macOS default (first user, `staff`) — the common case, and only
-# a default: `bandolier build` always passes the real values.
+# a default: `bardolier build` always passes the real values.
 ARG HOST_UID=501
 ARG HOST_GID=20
 ARG USERNAME=dev
@@ -47,14 +47,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #
 # Checksum-verified against the publisher's manifest for whatever version it
 # installs, exactly as swiftlint and the Android SDK are — but unlike them, NOT
-# pinned by default: `bandolier build` always passes CLAUDE_CODE_VERSION, and its
+# pinned by default: `bardolier build` always passes CLAUDE_CODE_VERSION, and its
 # own default is `latest`, resolved against the publisher at build time. This
 # one component is deliberately exempt from "a base image that builds a
 # different toolchain tomorrow is not a base image" — everything else in here
-# keeps that guarantee. `bandolier build --claude-code-version <X.Y.Z>` pins an
+# keeps that guarantee. `bardolier build --claude-code-version <X.Y.Z>` pins an
 # exact release when reproducibility matters more than freshness (e.g.
 # bisecting a regression to a specific agent build). The literal default below
-# is reached only by a `docker build` that bypasses `bandolier build` entirely.
+# is reached only by a `docker build` that bypasses `bardolier build` entirely.
 ARG CLAUDE_CODE_VERSION=2.1.247
 ARG TARGETARCH
 RUN set -eux; \
@@ -113,8 +113,8 @@ RUN set -eux; \
 
 # uv's downloaded wheels — and the Python interpreters `uv python install` pulls
 # down — are rebuildable and identical across projects, the same argument as
-# /cache/gradle in bandolier-and (cli/src/images.ts, IMAGE_CACHE): they belong once,
-# on the internal disk, not per-project on the SSD. `bandolier up` creates this as a
+# /cache/gradle in bardolier-and (cli/src/images.ts, IMAGE_CACHE): they belong once,
+# on the internal disk, not per-project on the SSD. `bardolier up` creates this as a
 # named volume and the generated compose file mounts it at ONE path (IMAGE_CACHE
 # is one volume per image), so the Python install dir is a subdirectory of the
 # wheel cache rather than a second mount. Owned by the host user in the image:
@@ -131,10 +131,10 @@ RUN mkdir -p ${NPM_CONFIG_PREFIX} && chown -R "${HOST_UID}:${HOST_GID}" ${NPM_CO
 
 # A PERSISTENT HOME, at a path the compose file can name.
 #
-# `bandolier down` removes the container, so a home living in the container layer
+# `bardolier down` removes the container, so a home living in the container layer
 # takes the shell history, the dotfiles and any `claude login` with it — the
 # next `up` would start from nothing. So $HOME is a named volume, one per
-# project (`bandolier-<project>-home`, cli/src/images.ts CONTAINER_HOME).
+# project (`bardolier-<project>-home`, cli/src/images.ts CONTAINER_HOME).
 #
 # A FIXED path rather than the useradd-derived one, for the same reason
 # /cache/gradle is: HOST_UID may collide with a user the base image already

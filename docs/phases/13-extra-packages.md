@@ -14,7 +14,7 @@ time, on the internal disk, exactly like the base images already are.
   `workspace.ts`'s `orderManifest` whitelist (the phase 12 lesson: a field
   silently drops if it isn't).
 - `cli/src/deps.ts` (new): the read model and the derived-image mechanics.
-  - `derivedImageTag(baseImage, packages)` — `bandolier-deps-<baseImage>:<hash>`,
+  - `derivedImageTag(baseImage, packages)` — `bardolier-deps-<baseImage>:<hash>`,
     `hash` a short sha256 of `baseImage + sorted packages`. Content-addressed
     (not per-project) so two projects declaring the same base image and
     package set share one image, the same reasoning as `IMAGE_CACHE`.
@@ -24,8 +24,8 @@ time, on the internal disk, exactly like the base images already are.
     packages> && rm -rf /var/lib/apt/lists/*` → `USER <uid>:<gid>` back to
     the identity the base image already switched to. No `ARG`s: the caller
     already has concrete uid/gid from `ctx.host`, unlike the base images
-    which are built once for whoever runs `bandolier build`.
-  - Written to `~/.config/bandolier/deps-images/<hash>/Dockerfile` — internal
+    which are built once for whoever runs `bardolier build`.
+  - Written to `~/.config/bardolier/deps-images/<hash>/Dockerfile` — internal
     disk, alongside `config.yml`, not the SSD (disk frugality: images live on
     the internal disk full stop). Regenerated deterministically each time,
     same as `docker-compose.yml`; never hand-edited.
@@ -47,7 +47,7 @@ time, on the internal disk, exactly like the base images already are.
 - `up.ts`: new step between regenerating compose and validating ports — when
   `extra_packages` is non-empty, write the derived Dockerfile and call
   `ctx.docker.build` (tag/context/dockerfile/platform — reusing
-  `IMAGE_PLATFORM[manifest.base_image]` for `bandolier-and` projects) *before*
+  `IMAGE_PLATFORM[manifest.base_image]` for `bardolier-and` projects) *before*
   `composeUp`, since Compose references a local tag and never builds it
   itself. Docker's own build cache makes a repeat `up` with an unchanged
   package list and unchanged base image cheap — no existence check needed,
@@ -57,7 +57,7 @@ time, on the internal disk, exactly like the base images already are.
 - New schemas `deps-add`/`deps-remove`/`deps-list`; `project.schema.json`
   gains `extra_packages`.
 - App: `DepsAddOutput`/`DepsRemoveOutput`/`DepsListOutput` in
-  `BandolierModels.swift`; two new `BandolierErrorCode` constants.
+  `BardolierModels.swift`; two new `BardolierErrorCode` constants.
 - `cli-spec.md`: §4.2 (`extra_packages`), new §6 (Deps, alongside Services and
   Ports), §9 (image selection rule), §7 error list. `CLAUDE.md`'s "Extra ports
   are the same exception" paragraph gets a sibling paragraph for this.
@@ -68,8 +68,8 @@ three are Debian-family today, `apt-get` is assumed); no per-package version
 pins (matches `extra_ports`' "declare after creation" precedent, not a lockfile);
 no `status`/`up` JSON surfacing of `extra_packages` (`deps list` is the read
 path — this is not a live resource the way a port or a running service is); no
-pruning of superseded `bandolier-deps-*` images when a project's package list
-changes — same as the tool doing nothing today about a stale `bandolier build`
+pruning of superseded `bardolier-deps-*` images when a project's package list
+changes — same as the tool doing nothing today about a stale `bardolier build`
 output, left to `docker image prune`.
 
 **Done-check:** on a temp SSD: `deps add` on a stopped `web` project, `up`

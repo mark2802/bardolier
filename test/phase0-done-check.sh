@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 0 done-check — `bandolier --help` lists every command, the schema and data
+# Phase 0 done-check — `bardolier --help` lists every command, the schema and data
 # files parse, and the error-code list exists in code.
 #
 #   bash test/phase0-done-check.sh
@@ -8,7 +8,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 
@@ -21,10 +21,10 @@ check() { # check <description> <command...>
   if "$@" >/dev/null 2>&1; then ok "$desc"; else bad "$desc"; fi
 }
 
-# ── 1. bandolier --help lists all commands ────────────────────────────────────────
-head "1. \`bandolier --help\` lists every command in cli-spec.md §6"
+# ── 1. bardolier --help lists all commands ────────────────────────────────────────
+head "1. \`bardolier --help\` lists every command in cli-spec.md §6"
 
-HELP="$($BANDOLIER --help)"
+HELP="$($BARDOLIER --help)"
 COMMANDS=(
   "new <name> --archetype <a> [--services a,b]"
   "list"
@@ -116,7 +116,7 @@ head "5. --json emits a single JSON value; failures use the §2 error envelope"
 # which keeps this a §2 envelope check rather than a stub check.
 FAILING=(status --nope)
 
-ENVELOPE="$($BANDOLIER "${FAILING[@]}" --json 2>/dev/null || true)"
+ENVELOPE="$($BARDOLIER "${FAILING[@]}" --json 2>/dev/null || true)"
 if node -e "
   const v = JSON.parse(process.argv[1])
   if (!v.error || typeof v.error.code !== 'string' || typeof v.error.message !== 'string') process.exit(1)
@@ -126,7 +126,7 @@ else
   bad "failure envelope is malformed: $ENVELOPE"
 fi
 
-if $BANDOLIER "${FAILING[@]}" --json >/dev/null 2>&1; then
+if $BARDOLIER "${FAILING[@]}" --json >/dev/null 2>&1; then
   bad "a failing command exited 0 (expected non-zero)"
 else
   ok "a failing command exits non-zero"
@@ -134,8 +134,8 @@ fi
 
 # Note: capture rather than pipe — under `pipefail` a pipeline would inherit
 # the CLI's intentional non-zero exit and mask a matching grep.
-HUMAN_ERR="$($BANDOLIER "${FAILING[@]}" 2>&1 >/dev/null || true)"
-HUMAN_OUT="$($BANDOLIER "${FAILING[@]}" 2>/dev/null || true)"
+HUMAN_ERR="$($BARDOLIER "${FAILING[@]}" 2>&1 >/dev/null || true)"
+HUMAN_OUT="$($BARDOLIER "${FAILING[@]}" 2>/dev/null || true)"
 if grep -q 'INVALID_ARGUMENT' <<<"$HUMAN_ERR" && [ -z "$HUMAN_OUT" ]; then
   ok "human renderer writes the error to stderr, keeping stdout clean"
 else

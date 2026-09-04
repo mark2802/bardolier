@@ -1,19 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/config.schema.json",
-  "title": "bandolier config file (~/.config/bandolier/config.yml)",
+  "$id": "https://bardolier.local/schema/config.schema.json",
+  "title": "bardolier config file (~/.config/bardolier/config.yml)",
   "description": "cli-spec.md §8. Lives on the INTERNAL disk so doctor/status can report \"SSD not mounted\". Every key is optional; a missing file is equivalent to an empty one.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "ssd_root": {
       "type": "string",
-      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to <ssd_volume>/claude-projects. Overridden by $BANDOLIER_SSD_ROOT.",
+      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to <ssd_volume>/claude-projects. Overridden by $BARDOLIER_SSD_ROOT.",
       "minLength": 1
     },
     "ssd_volume": {
       "type": "string",
-      "description": "Mount point of the SSD itself, e.g. /Volumes/ssd — what `eject` unmounts. Overridden by $BANDOLIER_SSD_VOLUME.",
+      "description": "Mount point of the SSD itself, e.g. /Volumes/ssd — what `eject` unmounts. Overridden by $BARDOLIER_SSD_VOLUME.",
       "minLength": 1
     },
     "catalogue_path": {

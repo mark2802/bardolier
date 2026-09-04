@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/status.schema.json",
-  "title": "bandolier status output",
+  "$id": "https://bardolier.local/schema/status.schema.json",
+  "title": "bardolier status output",
   "description": "The app's primary contract. cli-spec.md §7. Once the app ships (Phase 5+), changes to this schema are ADDITIVE ONLY.",
   "type": "object",
   "additionalProperties": false,
@@ -236,7 +236,7 @@
             "string",
             "null"
           ],
-          "description": "Owning project, from the volume's bandolier.project label, or null when it can't be attributed."
+          "description": "Owning project, from the volume's bardolier.project label, or null when it can't be attributed."
         }
       }
     }

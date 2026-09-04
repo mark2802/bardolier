@@ -16,13 +16,13 @@ import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import { WORKDIR } from './compose.ts'
 
 /** Ignored everywhere, whatever the archetype. */
-// `.bandolier/` holds the handoff note (§12) — generated on every stop, so it is
+// `.bardolier/` holds the handoff note (§12) — generated on every stop, so it is
 // churn rather than history. Ignored by default; track it deliberately if you
 // want the notes in the repo.
-const COMMON_IGNORE = ['.bandolier/', '.DS_Store', '*.log', '.env', '.env.local']
+const COMMON_IGNORE = ['.bardolier/', '.DS_Store', '*.log', '.env', '.env.local']
 
 const NODE_IGNORE = ['node_modules/', 'dist/', 'build/', '.next/', 'coverage/']
-// A project's own Python backend (§4.3, bandolier-web now carries `uv`) keeps its
+// A project's own Python backend (§4.3, bardolier-web now carries `uv`) keeps its
 // venv under /work like any other project file — bind-mounted, per-project,
 // never shipped in a build context or committed.
 const PYTHON_IGNORE = ['.venv/', '__pycache__/', '*.pyc']
@@ -42,7 +42,7 @@ function ignoreFile(intro: readonly string[], entries: readonly string[]): strin
 
 export function gitignore(archetype: Archetype): string {
   return ignoreFile(
-    [`# Seeded by bandolier for the \`${archetype}\` archetype (cli-spec.md §10).`, '# Yours to edit — bandolier never rewrites this file.'],
+    [`# Seeded by bardolier for the \`${archetype}\` archetype (cli-spec.md §10).`, '# Yours to edit — bardolier never rewrites this file.'],
     [...ARCHETYPE_IGNORE[archetype], ...COMMON_IGNORE],
   )
 }
@@ -50,7 +50,7 @@ export function gitignore(archetype: Archetype): string {
 export function dockerignore(archetype: Archetype): string {
   return ignoreFile(
     [
-      `# Seeded by bandolier for the \`${archetype}\` archetype (cli-spec.md §10).`,
+      `# Seeded by bardolier for the \`${archetype}\` archetype (cli-spec.md §10).`,
       '# Keeps the build context small: images live on the internal disk and are',
       '# shared, so nothing project-sized should ever be copied into one.',
     ],
@@ -102,7 +102,7 @@ function devServerNote(archetype: Archetype): string {
 
 This project publishes one port to the Mac: the dev server, on **${port}**
 inside the container. \`$PORT\` is set to it, and the host port it is published
-on may differ — run \`bandolier status\` on the host for the URL to open.
+on may differ — run \`bardolier status\` on the host for the URL to open.
 
 **Bind to \`0.0.0.0\`, not \`localhost\`.** A server bound to localhost listens on
 the container's own loopback, which no browser on the Mac can reach; the port
@@ -121,7 +121,7 @@ to it, the same way a browser only ever talks to the one port above.
 export function projectClaudeMd(name: string, archetype: Archetype): string {
   return `# CLAUDE.md — ${name}
 
-Seeded by \`bandolier new\` for the \`${archetype}\` archetype. Edit freely; bandolier
+Seeded by \`bardolier new\` for the \`${archetype}\` archetype. Edit freely; bardolier
 will not rewrite this file.
 
 ## Environment boundary
@@ -141,18 +141,18 @@ also publishes a port on the Mac, but that port is a **debugging tap** for host
 GUI tools only. Never wire application code to \`localhost:<port>\`; it would
 make dev diverge from prod and would break the moment the port changed.
 
-Run \`bandolier status ${name}\` on the host to see what is attached and where.
+Run \`bardolier status ${name}\` on the host to see what is attached and where.
 
 ## Managing this project
 
 The lifecycle is driven from the **host**, not from in here:
 
-    bandolier status ${name}
-    bandolier service add ${name} postgres
-    bandolier up ${name}
-    bandolier down ${name}
+    bardolier status ${name}
+    bardolier service add ${name} postgres
+    bardolier up ${name}
+    bardolier down ${name}
 
-Nothing in this container should invoke \`bandolier\`, \`docker\`, or touch the
+Nothing in this container should invoke \`bardolier\`, \`docker\`, or touch the
 compose file. \`docker-compose.yml\` is **generated** from \`project.yml\` and
 is overwritten on every regeneration — never hand-edit it.
 `

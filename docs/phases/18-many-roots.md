@@ -20,10 +20,10 @@ holding a project called `api` collide destructively.
 - Config: `ssd_root` is replaced by `roots`, an ordered array of
   `{ name, path }`. Names are unique and are what the user and the app refer to
   a root by; **the first root is the default** for `new`. Duplicate names or
-  duplicate paths are `CONFIG_INVALID`. `$BANDOLIER_SSD_ROOT` becomes `$BANDOLIER_ROOT`
+  duplicate paths are `CONFIG_INVALID`. `$BARDOLIER_SSD_ROOT` becomes `$BARDOLIER_ROOT`
   and replaces the whole list with a single root named after the path's
   basename — one variable, so every done-check stays hermetic with a temp dir.
-  The default when nothing is configured becomes one root at `~/bandolier-projects`:
+  The default when nothing is configured becomes one root at `~/bardolier-projects`:
   a published tool must not assume `/Volumes/ssd` exists. (Second and last
   spend of §5's additive-only rule; see phase 17.)
 - `cli/src/commands/root.ts` (new): `root add <path> [--name] | root remove

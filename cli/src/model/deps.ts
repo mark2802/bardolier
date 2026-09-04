@@ -5,7 +5,7 @@
  * The shape a service/extra-port attachment would have if there were no host
  * port behind it at all: no catalogue, no volume, no port — just the
  * manifest's own package list plus the one derived fact every caller needs,
- * `image`, so nobody composes `bandolier-deps-<base>:<hash>` by hand (`deps.ts`).
+ * `image`, so nobody composes `bardolier-deps-<base>:<hash>` by hand (`deps.ts`).
  */
 
 export type DepsAddOutput = {

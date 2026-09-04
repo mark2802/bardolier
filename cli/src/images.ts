@@ -46,14 +46,14 @@ export type ImageCache = {
  * The one image that cannot be built for the machine it runs on.
  *
  * Google publishes the Linux Android SDK build tools — aapt2 above all — for
- * x86_64 only, so on Apple Silicon `bandolier-and` is built and run emulated. It
+ * x86_64 only, so on Apple Silicon `bardolier-and` is built and run emulated. It
  * is pinned HERE, in one place, because `build` and the generated compose file
  * must agree: an image built `linux/amd64` and started without the pin either
  * fails to start or silently pulls a different image. Everything else builds
  * for whatever the Mac is.
  */
 export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
-  'bandolier-and': 'linux/amd64',
+  'bardolier-and': 'linux/amd64',
 }
 
 /**
@@ -63,7 +63,7 @@ export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
  * hundreds of megabytes — before it compiles anything. Kept under the project's
  * bind mount that cost is paid again by every project, and again by every
  * throwaway project a test makes, and it is paid onto the SSD, which is the
- * scarce disk. So it lives in a NAMED VOLUME shared by every `bandolier-and`
+ * scarce disk. So it lives in a NAMED VOLUME shared by every `bardolier-and`
  * container: rebuildable data on the internal disk, like the image layers next
  * to it, while the SSD keeps only what is actually the project's.
  *
@@ -72,14 +72,14 @@ export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
  * writes, and the volume `up` creates before Compose asks for it. The Dockerfile
  * coupling is asserted in `test/phase8.test.ts` rather than trusted.
  *
- * `bandolier-web` carries the same shape of cache for `uv`'s downloaded wheels
+ * `bardolier-web` carries the same shape of cache for `uv`'s downloaded wheels
  * (docs/phases/11-python-web-toolchain.md) — Python projects migrated onto this
  * archetype pay the same "rebuildable, identical across projects" cost Gradle
  * does, just smaller. `library` shares the image and so shares the cache.
  */
 export const IMAGE_CACHE: Readonly<Partial<Record<BaseImage, ImageCache>>> = {
-  'bandolier-web': { volume: 'bandolier-uv-cache', mount: '/cache/uv' },
-  'bandolier-and': { volume: 'bandolier-gradle-cache', mount: '/cache/gradle' },
+  'bardolier-web': { volume: 'bardolier-uv-cache', mount: '/cache/uv' },
+  'bardolier-and': { volume: 'bardolier-gradle-cache', mount: '/cache/gradle' },
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * `bandolier build` output — `cli-spec.md` §6 (Images).
+ * `bardolier build` output — `cli-spec.md` §6 (Images).
  *
  * One entry per base image, whether or not it could be built: an image with no
  * Dockerfile behind it is reported as `unavailable` rather than silently

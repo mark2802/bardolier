@@ -1,18 +1,18 @@
 {
-  "name": "bandolier",
+  "name": "bardolier",
   "version": "0.0.0",
   "private": true,
   "description": "Container Project Manager engine — the CLI is the API",
   "type": "module",
   "bin": {
-    "bandolier": "./bin/bandolier.js",
-    "bdlr": "./bin/bandolier.js"
+    "bardolier": "./bin/bardolier.js",
+    "bdlr": "./bin/bardolier.js"
   },
   "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
-    "bandolier": "node ./bin/bandolier.js",
+    "bardolier": "node ./bin/bardolier.js",
     "typecheck": "tsc --noEmit",
     "test": "node --test ../test",
     "done-check": "bash ../test/phase2-done-check.sh"

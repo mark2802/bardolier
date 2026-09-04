@@ -1,5 +1,5 @@
 /**
- * Payloads for `bandolier volumes orphaned | rm` — `cli-spec.md` §6 (Volumes / disk).
+ * Payloads for `bardolier volumes orphaned | rm` — `cli-spec.md` §6 (Volumes / disk).
  *
  * The row shape is §7's `orphaned_volumes` entry, imported rather than
  * redeclared: the app's reclaim view (app-spec.md §9) renders the same rows it

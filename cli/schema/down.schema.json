@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/down.schema.json",
-  "title": "bandolier down output",
-  "description": "What `bandolier down` stopped. Data always persists. cli-spec.md §6 (Projects).",
+  "$id": "https://bardolier.local/schema/down.schema.json",
+  "title": "bardolier down output",
+  "description": "What `bardolier down` stopped. Data always persists. cli-spec.md §6 (Projects).",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "state", "was_running", "data_kept"],

@@ -1,7 +1,7 @@
 # Fixture mirroring cli-spec.md §4.2 verbatim. Validated by test/contracts.test.ts.
 name: myapp
 archetype: web            # web | ios | android | library
-base_image: bandolier-web    # resolved from archetype
+base_image: bardolier-web    # resolved from archetype
 services:
   postgres:
     host_port: 5433       # ASSIGNED at add-time, STABLE for life, persisted here

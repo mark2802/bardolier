@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/port-remove.schema.json",
-  "title": "bandolier port remove output",
-  "description": "What `bandolier port remove` released. cli-spec.md §6 (Ports), §5.1.",
+  "$id": "https://bardolier.local/schema/port-remove.schema.json",
+  "title": "bardolier port remove output",
+  "description": "What `bardolier port remove` released. cli-spec.md §6 (Ports), §5.1.",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -30,7 +30,7 @@ import type { Holder, SsdDevice } from '../cli/src/device.ts'
 import type { ProjectManifest } from '../cli/src/model/project.ts'
 import type { PortProbe } from '../cli/src/ports.ts'
 import type { Confirm } from '../cli/src/confirm.ts'
-import { BandolierError } from '../cli/src/errors.ts'
+import { BardolierError } from '../cli/src/errors.ts'
 
 export type Sandbox = {
   /** Stands in for the SSD root. */
@@ -52,12 +52,12 @@ export type Sandbox = {
 }
 
 export function makeSandbox(): Sandbox {
-  const base = mkdtempSync(join(tmpdir(), 'bandolier-test-'))
+  const base = mkdtempSync(join(tmpdir(), 'bardolier-test-'))
   const root = join(base, 'ssd', 'claude-projects')
   const home = join(base, 'home')
-  const configPath = join(home, '.config', 'bandolier', 'config.yml')
+  const configPath = join(home, '.config', 'bardolier', 'config.yml')
   mkdirSync(root, { recursive: true })
-  mkdirSync(join(home, '.config', 'bandolier'), { recursive: true })
+  mkdirSync(join(home, '.config', 'bardolier'), { recursive: true })
 
   return {
     root,
@@ -102,7 +102,7 @@ export function manifest(name: string, overrides: Partial<ProjectManifest> = {})
   return {
     name,
     archetype: 'web',
-    base_image: 'bandolier-web',
+    base_image: 'bardolier-web',
     created: FIXED_NOW.toISOString(),
     ...overrides,
   }
@@ -116,7 +116,7 @@ export function manifest(name: string, overrides: Partial<ProjectManifest> = {})
  */
 export type StubVolume = {
   readonly name: string
-  /** Usually `{ 'bandolier.project': 'myapp', 'bandolier.service': 'postgres' }` (§9). */
+  /** Usually `{ 'bardolier.project': 'myapp', 'bardolier.service': 'postgres' }` (§9). */
   readonly labels?: Readonly<Record<string, string>>
   /** Omitted = Docker could not measure it, which is reported as unknown. */
   readonly size_bytes?: number
@@ -184,7 +184,7 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
     throw new Error('stubDocker: queried while unavailable')
   }
   const requireAvailable = (what: string) => {
-    if (!available) throw new BandolierError('DOCKER_UNAVAILABLE', `Could not ${what}: the stub daemon is down.`)
+    if (!available) throw new BardolierError('DOCKER_UNAVAILABLE', `Could not ${what}: the stub daemon is down.`)
   }
 
   return {
@@ -238,7 +238,7 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
 
     async removeVolume(name) {
       requireAvailable(`remove volume ${name}`)
-      if (inUse.has(name)) throw new BandolierError('VOLUME_IN_USE', `Volume ${name} is still in use.`)
+      if (inUse.has(name)) throw new BardolierError('VOLUME_IN_USE', `Volume ${name} is still in use.`)
       calls.push({ kind: 'removeVolume', name })
       volumes.delete(name)
     },
@@ -342,13 +342,13 @@ export function stubDevice(initial: readonly Holder[] = [], options: StubDeviceO
       if (holders.length > 0) {
         // The real `diskutil` would refuse too; a stub that ejected anyway
         // would let a bug in the ordering pass unnoticed.
-        throw new BandolierError('EJECT_BLOCKED', `${mountPoint} is held by ${holders.length} process(es).`)
+        throw new BardolierError('EJECT_BLOCKED', `${mountPoint} is held by ${holders.length} process(es).`)
       }
       if (runtime.length > 0) {
         // The refusal that only stopping the engine clears, shaped like the
         // real one: diskutil's words, and whoever it named (if anyone).
         const named = options.dissenters ?? runtime
-        throw new BandolierError(
+        throw new BardolierError(
           'EJECT_BLOCKED',
           `diskutil refused to eject ${mountPoint}: Unmount failed.`,
           { holders: [...named], reason: 'diskutil-refused' },
@@ -412,7 +412,7 @@ export function makeContext(
   return createContext({
     path: sandbox.configPath,
     home: sandbox.home,
-    env: { BANDOLIER_SSD_ROOT: sandbox.root, ...env },
+    env: { BARDOLIER_SSD_ROOT: sandbox.root, ...env },
     docker,
     ports: stubPorts(),
     // Ejecting is destructive and host-wide: a test that reaches the device

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Phase 15 done-check — the rename: CLI, docs, artefact namespaces
-# (docs/phases/15-rename-cli.md). The engine is now `bandolier` (alias `bdlr`);
+# (docs/phases/15-rename-cli.md). The engine is now `bardolier` (alias `bdlr`);
 # `cproj`/`claude-yard`/`CPROJ_`/`claude-{web,ios,and}` must be gone from the
 # CLI side of the boundary. `app/` is excluded on purpose — the Swift rename is
 # phase 16, and this file's own comments and docs/phases/{15,16} are excluded
 # because they are text ABOUT the rename, not code the rename touches.
 #
 #   bash test/phase15-done-check.sh
-#   BANDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 
@@ -60,22 +60,22 @@ else
   printf '%s\n' "$HITS" | sed 's/^/      /'
 fi
 
-# ── 2. bandolier and its alias bdlr both work ──────────────────────────────────
-head "2. bandolier --help and the bdlr alias"
+# ── 2. bardolier and its alias bdlr both work ──────────────────────────────────
+head "2. bardolier --help and the bdlr alias"
 
-$BANDOLIER --help >/dev/null && ok "bandolier --help" || bad "bandolier --help exited non-zero"
+$BARDOLIER --help >/dev/null && ok "bardolier --help" || bad "bardolier --help exited non-zero"
 
-BDLR_BIN="cli/bin/bandolier.js"
-node "$BDLR_BIN" --version >/dev/null && ok "the bdlr-aliased script runs" || bad "bandolier.js --version exited non-zero"
+BDLR_BIN="cli/bin/bardolier.js"
+node "$BDLR_BIN" --version >/dev/null && ok "the bdlr-aliased script runs" || bad "bardolier.js --version exited non-zero"
 node -e "
   const pkg = JSON.parse(require('fs').readFileSync('cli/package.json', 'utf8'))
-  process.exit(pkg.bin && pkg.bin.bdlr === './bin/bandolier.js' && pkg.bin.bandolier === './bin/bandolier.js' ? 0 : 1)
-" && ok "cli/package.json declares both \`bandolier\` and \`bdlr\` pointing at the same script" \
-  || bad "cli/package.json bin field is missing bandolier or bdlr"
+  process.exit(pkg.bin && pkg.bin.bdlr === './bin/bardolier.js' && pkg.bin.bardolier === './bin/bardolier.js' ? 0 : 1)
+" && ok "cli/package.json declares both \`bardolier\` and \`bdlr\` pointing at the same script" \
+  || bad "cli/package.json bin field is missing bardolier or bdlr"
 
-STATUS="$($BANDOLIER status --json)"
+STATUS="$($BARDOLIER status --json)"
 node -e "JSON.parse(process.argv[1])" "$STATUS" >/dev/null 2>&1 \
-  && ok "bandolier status --json prints valid JSON" || bad "status --json did not print valid JSON: $STATUS"
+  && ok "bardolier status --json prints valid JSON" || bad "status --json did not print valid JSON: $STATUS"
 
 # ── 3. Full lifecycle, unchanged behaviour ─────────────────────────────────────
 head "3. new → up → service add → status → down → delete"
@@ -83,8 +83,8 @@ head "3. new → up → service add → status → down → delete"
 TMP="$(mktemp -d)"
 cleanup() {
   if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bandolier-rename bandolier-rename-postgres >/dev/null 2>&1 || true
-    docker volume rm -f rename_pgdata bandolier-rename-home >/dev/null 2>&1 || true
+    docker rm -f bardolier-rename bardolier-rename-postgres >/dev/null 2>&1 || true
+    docker volume rm -f rename_pgdata bardolier-rename-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -93,9 +93,9 @@ trap cleanup EXIT
 ROOT="$TMP/local-root"
 mkdir -p "$ROOT"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_ROOT="$ROOT"
-export BANDOLIER_SSD_VOLUME="$ROOT"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_ROOT="$ROOT"
+export BARDOLIER_SSD_VOLUME="$ROOT"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -104,35 +104,35 @@ json_assert() { # json_assert <json> <js body over `d`>
   " "$1" 2>/dev/null
 }
 
-$BANDOLIER new rename --archetype web >/dev/null && ok "new" || bad "new exited non-zero"
+$BARDOLIER new rename --archetype web >/dev/null && ok "new" || bad "new exited non-zero"
 # service add/remove require the project stopped (CLAUDE.md) — attach before up.
-$BANDOLIER service add rename postgres >/dev/null && ok "service add" || bad "service add exited non-zero"
+$BARDOLIER service add rename postgres >/dev/null && ok "service add" || bad "service add exited non-zero"
 
 DOCKER_OK=0
-if [ "${BANDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
-  skip "BANDOLIER_SKIP_DOCKER=1 — skipping the Docker half"
+if [ "${BARDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
+  skip "BARDOLIER_SKIP_DOCKER=1 — skipping the Docker half"
 elif ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   skip "no Docker daemon — skipping the Docker half"
 else
   DOCKER_OK=1
-  $BANDOLIER build --archetype web >/dev/null 2>&1 || bad "bandolier build --archetype web failed"
-  $BANDOLIER up rename --no-shell >/dev/null && ok "up" || bad "up exited non-zero"
+  $BARDOLIER build --archetype web >/dev/null 2>&1 || bad "bardolier build --archetype web failed"
+  $BARDOLIER up rename --no-shell >/dev/null && ok "up" || bad "up exited non-zero"
 
-  STATUS="$($BANDOLIER status --json)"
-  if json_assert "$STATUS" "d.projects[0]?.state === 'running' && d.projects[0]?.dev_container === 'bandolier-rename'"; then
-    ok "status: running, dev_container named bandolier-rename"
+  STATUS="$($BARDOLIER status --json)"
+  if json_assert "$STATUS" "d.projects[0]?.state === 'running' && d.projects[0]?.dev_container === 'bardolier-rename'"; then
+    ok "status: running, dev_container named bardolier-rename"
   else
     bad "status did not report the renamed container: $STATUS"
   fi
 
-  docker ps --format '{{.Names}}' | grep -qx 'bandolier-rename' \
-    && ok "the running container is actually named bandolier-rename" \
-    || bad "no container named bandolier-rename is running"
+  docker ps --format '{{.Names}}' | grep -qx 'bardolier-rename' \
+    && ok "the running container is actually named bardolier-rename" \
+    || bad "no container named bardolier-rename is running"
 
-  $BANDOLIER down rename >/dev/null && ok "down" || bad "down exited non-zero"
+  $BARDOLIER down rename >/dev/null && ok "down" || bad "down exited non-zero"
 fi
 
-$BANDOLIER delete rename --force --purge >/dev/null && ok "delete" || bad "delete exited non-zero"
+$BARDOLIER delete rename --force --purge >/dev/null && ok "delete" || bad "delete exited non-zero"
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 printf '\n\033[1mPhase 15: %d passed, %d failed\033[0m\n' "$pass" "$fail"

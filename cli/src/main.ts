@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { BandolierError, EXIT_FAILURE, EXIT_SUCCESS, toBandolierError } from './errors.ts'
+import { BardolierError, EXIT_FAILURE, EXIT_SUCCESS, toBardolierError } from './errors.ts'
 import { parse } from './argv.ts'
 import { ROOT, resolve } from './commands/registry.ts'
 import { renderJson, renderJsonError } from './render/json.ts'
@@ -31,20 +31,20 @@ export async function main(argv: readonly string[]): Promise<number> {
 
     if (parsed.version) {
       if (parsed.json) renderJson({ version: version() })
-      else renderHuman([`bandolier ${version()}`])
+      else renderHuman([`bardolier ${version()}`])
       return EXIT_SUCCESS
     }
 
-    // Bare `bandolier`, `bandolier --help`, or a grouping node like `bandolier service`.
+    // Bare `bardolier`, `bardolier --help`, or a grouping node like `bardolier service`.
     const isGroupingNode = command !== null && (command.children?.length ?? 0) > 0
     if (command === null || parsed.help || isGroupingNode) {
       if (command === null && parsed.args.length > 0) {
-        throw new BandolierError('INVALID_ARGUMENT', `Unknown command \`${parsed.args[0]}\`. Try --help.`)
+        throw new BardolierError('INVALID_ARGUMENT', `Unknown command \`${parsed.args[0]}\`. Try --help.`)
       }
       if (isGroupingNode && !parsed.help && parsed.args.length > 0) {
-        throw new BandolierError(
+        throw new BardolierError(
           'INVALID_ARGUMENT',
-          `Unknown subcommand \`${parsed.args[0]}\` for \`bandolier ${command.path.join(' ')}\`. Try --help.`,
+          `Unknown subcommand \`${parsed.args[0]}\` for \`bardolier ${command.path.join(' ')}\`. Try --help.`,
         )
       }
 
@@ -59,7 +59,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     else renderHuman(output.human(output.json))
     return EXIT_SUCCESS
   } catch (cause) {
-    const error = toBandolierError(cause)
+    const error = toBardolierError(cause)
     if (wantsJson) renderJsonError(error)
     else renderHumanError(error)
     return EXIT_FAILURE

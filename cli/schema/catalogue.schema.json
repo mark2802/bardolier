@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/catalogue.schema.json",
-  "title": "bandolier catalogue output",
+  "$id": "https://bardolier.local/schema/catalogue.schema.json",
+  "title": "bardolier catalogue output",
   "description": "Every service type the catalogue defines (cli-spec.md §4.1), and which file answered. The app offers this list when attaching a service (app-spec.md §6) and when creating a project (§8); without it the app would have to hold its own copy of the catalogue, which is the desync §4.1 exists to prevent.",
   "type": "object",
   "additionalProperties": false,

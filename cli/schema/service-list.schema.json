@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/service-list.schema.json",
-  "title": "bandolier service list output",
+  "$id": "https://bardolier.local/schema/service-list.schema.json",
+  "title": "bardolier service list output",
   "description": "Attached services with their resolved host ports. cli-spec.md §6 (Services). Manifest plus catalogue only — no daemon is consulted, so it answers with Docker down.",
   "type": "object",
   "additionalProperties": false,

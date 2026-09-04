@@ -1,5 +1,5 @@
 /**
- * `bandolier deps add | remove | list` — `cli-spec.md` §6 (Deps), §4.2
+ * `bardolier deps add | remove | list` — `cli-spec.md` §6 (Deps), §4.2
  * (`extra_packages`); docs/phases/13-extra-packages.md.
  *
  * OS-level packages a project's toolchain needs beyond its base image
@@ -16,7 +16,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { attachedPackages, selectedImage } from '../deps.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { DepsAddOutput, DepsListOutput, DepsRemoveOutput } from '../model/deps.ts'
@@ -32,10 +32,10 @@ export type DepsRequest = {
 }
 
 function requirePackages(values: readonly string[], usage: string): string[] {
-  if (values.length === 0) throw new BandolierError('INVALID_ARGUMENT', `Usage: bandolier ${usage}`)
+  if (values.length === 0) throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${usage}`)
   for (const name of values) {
     if (!PACKAGE_PATTERN.test(name)) {
-      throw new BandolierError('INVALID_ARGUMENT', `\`${name}\` is not a usable apt package name.`)
+      throw new BardolierError('INVALID_ARGUMENT', `\`${name}\` is not a usable apt package name.`)
     }
   }
   return [...values]
@@ -51,7 +51,7 @@ export async function runDepsAdd(ctx: Context, request: DepsRequest): Promise<De
   const existing = new Set(manifest.extra_packages ?? [])
   const already = packages.find((name) => existing.has(name))
   if (already) {
-    throw new BandolierError(
+    throw new BardolierError(
       'PACKAGE_ATTACHED',
       `\`${already}\` is already declared on \`${manifest.name}\`.`,
       { project: manifest.name, package: already },
@@ -73,7 +73,7 @@ export function renderDepsAdd(output: DepsAddOutput): string[] {
     `Declared ${noun} ${output.added.map((p) => `\`${p}\``).join(', ')} on ${output.project}.`,
     `  image: ${output.image}`,
     '',
-    `Next: bandolier up ${output.project}`,
+    `Next: bardolier up ${output.project}`,
   ]
 }
 
@@ -88,7 +88,7 @@ export async function runDepsRemove(ctx: Context, request: DepsRequest): Promise
   const missing = packages.find((name) => !declared.has(name))
   if (missing) {
     const list = [...declared].sort().join(', ')
-    throw new BandolierError(
+    throw new BardolierError(
       'PACKAGE_NOT_ATTACHED',
       `\`${missing}\` is not declared on \`${manifest.name}\`.${list ? ` Declared: ${list}.` : ''}`,
       { project: manifest.name, package: missing },
@@ -126,7 +126,7 @@ export function renderDepsList(output: DepsListOutput): string[] {
     return [
       `${output.project} has no extra packages declared. Image: ${output.image}`,
       '',
-      `Declare one with: bandolier deps add ${output.project} <package>`,
+      `Declare one with: bardolier deps add ${output.project} <package>`,
     ]
   }
   return [

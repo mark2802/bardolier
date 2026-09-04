@@ -3,7 +3,7 @@
 # on a temp SSD, then prove `uv` works in the dev container and its cache
 # (wheels + managed Python installs) is a shared volume, not a per-project one.
 #
-# Needs a Docker daemon and the network; always rebuilds bandolier-web (fast — a
+# Needs a Docker daemon and the network; always rebuilds bardolier-web (fast — a
 # Node image, unlike the emulated Android one phase8 avoids rebuilding).
 #
 #   bash test/phase11-done-check.sh
@@ -13,7 +13,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 
@@ -27,13 +27,13 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_VOLUME="$VOLUME"
-export BANDOLIER_SSD_ROOT="$MOUNTED"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_VOLUME="$VOLUME"
+export BARDOLIER_SSD_ROOT="$MOUNTED"
 
 cleanup() {
-  $BANDOLIER down-all --force >/dev/null 2>&1 || true
-  docker volume rm -f bandolier-pybits-home bandolier-pybits2-home >/dev/null 2>&1 || true
+  $BARDOLIER down-all --force >/dev/null 2>&1 || true
+  docker volume rm -f bardolier-pybits-home bardolier-pybits2-home >/dev/null 2>&1 || true
   # The shared cache is the point of this phase — leave it for the next run
   # unless explicitly asked to prove it survives from nothing.
   rm -rf "$TMP"
@@ -53,27 +53,27 @@ if ! docker info >/dev/null 2>&1; then
 fi
 ok "the Docker daemon responded"
 
-# ── 2. Build bandolier-web fresh, so this Dockerfile is the one running ─────────
-section "2. bandolier-web, rebuilt with uv"
+# ── 2. Build bardolier-web fresh, so this Dockerfile is the one running ─────────
+section "2. bardolier-web, rebuilt with uv"
 
-printf '    building bandolier-web (fast — a Node image)\n'
-if $BANDOLIER build --archetype web >"$TMP/build.log" 2>&1; then
-  ok "bandolier-web:latest built from cli/images/bandolier-web/Dockerfile"
+printf '    building bardolier-web (fast — a Node image)\n'
+if $BARDOLIER build --archetype web >"$TMP/build.log" 2>&1; then
+  ok "bardolier-web:latest built from cli/images/bardolier-web/Dockerfile"
 else
-  bad "\`bandolier build --archetype web\` failed:"
+  bad "\`bardolier build --archetype web\` failed:"
   tail -8 "$TMP/build.log" | sed 's/^/      /'
 fi
 
 # ── 3. A web project, up, with uv inside ──────────────────────────────────────
 section "3. A Python API alongside the React frontend, in one dev container"
 
-$BANDOLIER new pybits --archetype web >/dev/null || bad "\`bandolier new --archetype web\` failed"
+$BARDOLIER new pybits --archetype web >/dev/null || bad "\`bardolier new --archetype web\` failed"
 DIR="$MOUNTED/pybits"
 
-if grep -q "bandolier-uv-cache:/cache/uv" "$DIR/docker-compose.yml" && grep -q "external: true" "$DIR/docker-compose.yml"; then
+if grep -q "bardolier-uv-cache:/cache/uv" "$DIR/docker-compose.yml" && grep -q "external: true" "$DIR/docker-compose.yml"; then
   ok "the compose file mounts the shared uv cache as an external volume (§4.3, §9)"
 else
-  bad "the web project's compose file does not mount bandolier-uv-cache as an external volume"
+  bad "the web project's compose file does not mount bardolier-uv-cache as an external volume"
 fi
 
 if grep -qi "proxy" "$DIR/CLAUDE.md"; then
@@ -82,25 +82,25 @@ else
   bad "the seeded CLAUDE.md is missing the proxy-not-a-second-port note"
 fi
 
-if $BANDOLIER up pybits --no-shell >/dev/null 2>&1; then
-  ok "bandolier up pybits"
+if $BARDOLIER up pybits --no-shell >/dev/null 2>&1; then
+  ok "bardolier up pybits"
 else
-  bad "bandolier up pybits failed"
+  bad "bardolier up pybits failed"
 fi
 
-if docker volume inspect bandolier-uv-cache >/dev/null 2>&1; then
-  ok "bandolier up created the shared uv cache volume"
-  ROLE="$(docker volume inspect bandolier-uv-cache --format '{{index .Labels "bandolier.role"}}' 2>/dev/null)"
+if docker volume inspect bardolier-uv-cache >/dev/null 2>&1; then
+  ok "bardolier up created the shared uv cache volume"
+  ROLE="$(docker volume inspect bardolier-uv-cache --format '{{index .Labels "bardolier.role"}}' 2>/dev/null)"
   if [ "$ROLE" = "cache" ]; then
-    ok "labelled bandolier.role=cache, so the orphan scan knows it belongs to no project"
+    ok "labelled bardolier.role=cache, so the orphan scan knows it belongs to no project"
   else
     bad "the cache volume is labelled '$ROLE' — the volume scan would misattribute it"
   fi
 else
-  bad "bandolier up did not create bandolier-uv-cache"
+  bad "bardolier up did not create bardolier-uv-cache"
 fi
 
-CONTAINER="$($BANDOLIER status pybits --json 2>/dev/null | node -e "
+CONTAINER="$($BARDOLIER status pybits --json 2>/dev/null | node -e "
   let s = ''
   process.stdin.on('data', (c) => (s += c)).on('end', () => {
     const d = JSON.parse(s)
@@ -148,9 +148,9 @@ if [ -n "$CONTAINER" ]; then
     fi
 
     # The offline proof: a second, unrelated project reuses the warm cache.
-    $BANDOLIER new pybits2 --archetype web >/dev/null || bad "second \`bandolier new\` failed"
-    $BANDOLIER up pybits2 --no-shell >/dev/null 2>&1 || bad "bandolier up pybits2 failed"
-    CONTAINER2="$($BANDOLIER status pybits2 --json 2>/dev/null | node -e "
+    $BARDOLIER new pybits2 --archetype web >/dev/null || bad "second \`bardolier new\` failed"
+    $BARDOLIER up pybits2 --no-shell >/dev/null 2>&1 || bad "bardolier up pybits2 failed"
+    CONTAINER2="$($BARDOLIER status pybits2 --json 2>/dev/null | node -e "
       let s = ''
       process.stdin.on('data', (c) => (s += c)).on('end', () => {
         const d = JSON.parse(s)
@@ -163,12 +163,12 @@ if [ -n "$CONTAINER" ]; then
     else
       bad "the second project could not install six --offline — the cache did not carry over"
     fi
-    $BANDOLIER down pybits2 >/dev/null 2>&1 || true
-    $BANDOLIER delete pybits2 --force >/dev/null 2>&1 || true
+    $BARDOLIER down pybits2 >/dev/null 2>&1 || true
+    $BARDOLIER delete pybits2 --force >/dev/null 2>&1 || true
   fi
 fi
 
-$BANDOLIER down pybits >/dev/null 2>&1 || true
+$BARDOLIER down pybits >/dev/null 2>&1 || true
 
 printf '\n\033[1mPhase 11: %d passed, %d failed\033[0m\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1,4 +1,4 @@
-# bandolier-ios — base image for the `ios` archetype (cli-spec.md §4.3).
+# bardolier-ios — base image for the `ios` archetype (cli-spec.md §4.3).
 #
 # EDIT + SWIFTLINT + LOGIC TESTS, and nothing else. Xcode, the Simulator, and
 # code signing are macOS-host-only (CLAUDE.md's boundary); the seeded project
@@ -9,14 +9,14 @@
 # `swift test`, and `swiftlint`. That covers a package's logic tests and every
 # lint the human would otherwise only see in Xcode.
 #
-# Built by `bandolier build`, which passes HOST_UID/HOST_GID so that everything the
+# Built by `bardolier build`, which passes HOST_UID/HOST_GID so that everything the
 # container writes into the bind-mounted /work is owned by the Mac user.
 
 ARG SWIFT_VERSION=6.3
 FROM swift:${SWIFT_VERSION}-noble
 
 # 501:20 is the macOS default (first user, `staff`) — the common case, and only
-# a default: `bandolier build` always passes the real values.
+# a default: `bardolier build` always passes the real values.
 ARG HOST_UID=501
 ARG HOST_GID=20
 ARG USERNAME=dev
@@ -24,7 +24,7 @@ ARG USERNAME=dev
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
 
-# The same working kit as bandolier-web: git for history, ripgrep for search,
+# The same working kit as bardolier-web: git for history, ripgrep for search,
 # curl/ca-certs for the network, tini so `docker exec`-spawned processes get
 # reaped. The Swift toolchain's own build dependencies are already in the base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,10 +49,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # $HOME here is a per-project named volume (below) and anything the image leaves
 # under $HOME is copied into it once per project.
 #
-# Checksum-verified like swiftlint below, but NOT pinned by default: `bandolier
+# Checksum-verified like swiftlint below, but NOT pinned by default: `bardolier
 # build` defaults CLAUDE_CODE_VERSION to `latest`, resolved at build time.
 # `--claude-code-version <X.Y.Z>` pins an exact release when needed
-# (cli/images/bandolier-web/Dockerfile has the full case for why).
+# (cli/images/bardolier-web/Dockerfile has the full case for why).
 ARG CLAUDE_CODE_VERSION=2.1.247
 ARG TARGETARCH
 RUN set -eux; \
@@ -106,7 +106,7 @@ RUN set -eux; \
     chown -R "${HOST_UID}:${HOST_GID}" "${home}" /work
 
 # A PERSISTENT HOME, at a path the compose file can name (cli/src/images.ts,
-# CONTAINER_HOME). `bandolier down` removes the container, so a home in the
+# CONTAINER_HOME). `bardolier down` removes the container, so a home in the
 # container layer takes the shell history, the dotfiles and any `claude login`
 # with it. A fixed path rather than the useradd-derived one because HOST_UID may
 # collide with a user the base image already ships, which moves ~ — and compose

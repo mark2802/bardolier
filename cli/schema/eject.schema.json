@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/eject.schema.json",
-  "title": "bandolier eject output",
+  "$id": "https://bardolier.local/schema/eject.schema.json",
+  "title": "bardolier eject output",
   "description": "down-all, then a holder check, then diskutil eject. cli-spec.md §6 (Lifecycle / SSD). A held volume fails EJECT_BLOCKED with the same holder records in error.details.holders — it is never forced. Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,

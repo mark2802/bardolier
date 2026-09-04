@@ -1,5 +1,5 @@
 /**
- * `bandolier delete <name> [--force] [--keep-data | --purge]` — `cli-spec.md` §6.
+ * `bardolier delete <name> [--force] [--keep-data | --purge]` — `cli-spec.md` §6.
  *
  * The most destructive command in the CLI, so it is the most conservative one:
  *
@@ -17,7 +17,7 @@
 
 import { rmSync } from 'node:fs'
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { attachedKeys, projectVolumes } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { homeVolumeName } from '../naming.ts'
@@ -45,7 +45,7 @@ function assignedPorts(manifest: ProjectManifest): number[] {
 
 export async function runDelete(ctx: Context, request: DeleteRequest): Promise<DeleteOutput> {
   if (request.keepData && request.purge) {
-    throw new BandolierError('INVALID_ARGUMENT', '`--keep-data` and `--purge` contradict each other; pass at most one.')
+    throw new BardolierError('INVALID_ARGUMENT', '`--keep-data` and `--purge` contradict each other; pass at most one.')
   }
   const project = requireProject(ctx, request.name)
   const { manifest, dir } = project
@@ -69,7 +69,7 @@ export async function runDelete(ctx: Context, request: DeleteRequest): Promise<D
     if (request.json) {
       // A prompt on stdout would break the §2 single-JSON-value guarantee, and
       // the app does its own confirmation before calling with --force.
-      throw new BandolierError(
+      throw new BardolierError(
         'INVALID_ARGUMENT',
         `Refusing to delete \`${manifest.name}\` without confirmation. Under --json, pass --force.`,
       )
@@ -128,7 +128,7 @@ export function renderDelete(output: DeleteOutput): string[] {
   if (output.removed_volumes.length > 0) lines.push(`  removed volumes: ${output.removed_volumes.join(', ')}`)
   if (output.kept_volumes.length > 0) {
     lines.push(`  kept volumes:   ${output.kept_volumes.join(', ')}`)
-    lines.push('  They are now orphans — reclaim with `bandolier volumes orphaned`.')
+    lines.push('  They are now orphans — reclaim with `bardolier volumes orphaned`.')
   }
   return lines
 }

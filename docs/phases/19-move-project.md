@@ -1,6 +1,6 @@
 # Phase 19 — moving a project between roots
 
-**Goal:** `bandolier move <project> <root>` — offload a project from the internal
+**Goal:** `bardolier move <project> <root>` — offload a project from the internal
 disk to the SSD or pull it back, without deleting and re-creating it.
 
 **Grounding, and the honest limit.** A project's *workspace* is the only thing
@@ -44,7 +44,7 @@ strings — which is the point of §5's stability rule.
   the named volumes that did not move, listed by name, because that is the
   sentence the human formatter needs to print.
 - App: a "Move to…" item on a stopped project's row, the target chosen from the
-  configured roots. `BandolierStore.activity` already disables every other mutation
+  configured roots. `BardolierStore.activity` already disables every other mutation
   while one runs and forces a `status` refresh afterwards, which is exactly the
   behaviour a multi-second copy needs; the confirmation happens in the view.
 - `cli-spec.md` §6 (a Move entry beside the Roots section) and §2 for

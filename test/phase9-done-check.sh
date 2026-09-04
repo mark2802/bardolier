@@ -15,14 +15,14 @@
 #     the stop it rides on.
 #
 #   bash test/phase9-done-check.sh
-#   BANDOLIER_SKIP_DOCKER=1 …   offline assertions only
+#   BARDOLIER_SKIP_DOCKER=1 …   offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 APP="app/claude-yard/claude-yard"
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 manual=0
@@ -37,8 +37,8 @@ TMP="$(cd "$(mktemp -d)" && pwd -P)"
 DOCKER_OK=0
 cleanup() {
   if [ "$DOCKER_OK" = "1" ]; then
-    docker rm -f bandolier-p9web bandolier-p9old >/dev/null 2>&1 || true
-    docker volume rm -f bandolier-p9web-home bandolier-p9old-home >/dev/null 2>&1 || true
+    docker rm -f bardolier-p9web bardolier-p9old >/dev/null 2>&1 || true
+    docker volume rm -f bardolier-p9web-home bardolier-p9old-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -48,9 +48,9 @@ VOLUME="$TMP/ssd"
 MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_VOLUME="$VOLUME"
-export BANDOLIER_SSD_ROOT="$MOUNTED"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_VOLUME="$VOLUME"
+export BARDOLIER_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -59,7 +59,7 @@ json_assert() { # json_assert <json> <js body over `d`>
   " "$1" 2>/dev/null
 }
 
-if [ "${BANDOLIER_SKIP_DOCKER:-0}" != "1" ] && docker info >/dev/null 2>&1; then
+if [ "${BARDOLIER_SKIP_DOCKER:-0}" != "1" ] && docker info >/dev/null 2>&1; then
   DOCKER_OK=1
 fi
 
@@ -80,7 +80,7 @@ if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm
 
 head "2. Claude Code is in every base image"
 
-for image in bandolier-web bandolier-ios bandolier-and; do
+for image in bardolier-web bardolier-ios bardolier-and; do
   DF="cli/images/$image/Dockerfile"
   if grep -q 'ARG CLAUDE_CODE_VERSION=' "$DF" && grep -q 'sha256sum -c -' "$DF"; then
     ok "$image pins and verifies the agent"
@@ -99,7 +99,7 @@ HOME_PATH="$(node --input-type=module -e "
   import { CONTAINER_HOME } from './cli/src/images.ts'
   process.stdout.write(CONTAINER_HOME)
 ")"
-for image in bandolier-web bandolier-ios bandolier-and; do
+for image in bardolier-web bardolier-ios bardolier-and; do
   if grep -q "ENV HOME=$HOME_PATH" "cli/images/$image/Dockerfile"; then
     ok "$image sets \$HOME to $HOME_PATH"
   else
@@ -108,15 +108,15 @@ for image in bandolier-web bandolier-ios bandolier-and; do
 done
 
 if [ "$DOCKER_OK" = "1" ]; then
-  for image in bandolier-web bandolier-ios bandolier-and; do
+  for image in bardolier-web bardolier-ios bardolier-and; do
     if ! docker image inspect "$image:latest" >/dev/null 2>&1; then
-      skip "$image:latest is not built — \`bandolier build\` to check it for real"
+      skip "$image:latest is not built — \`bardolier build\` to check it for real"
       continue
     fi
     # A scalar, not an array: `set -u` treats an empty array expansion as an
     # unbound variable, and an empty scalar simply word-splits to nothing.
     PLATFORM=""
-    [ "$image" = "bandolier-and" ] && PLATFORM="--platform=linux/amd64"
+    [ "$image" = "bardolier-and" ] && PLATFORM="--platform=linux/amd64"
     # shellcheck disable=SC2086
     OUT="$(docker run --rm $PLATFORM "$image:latest" \
       sh -c 'printf "%s %s " "$(claude --version 2>/dev/null | head -1)" "$HOME"; command -v git >/dev/null && printf git' 2>/dev/null || true)"
@@ -126,21 +126,21 @@ if [ "$DOCKER_OK" = "1" ]; then
     esac
   done
 else
-  skip "built-image checks (no daemon, or BANDOLIER_SKIP_DOCKER=1)"
+  skip "built-image checks (no daemon, or BARDOLIER_SKIP_DOCKER=1)"
 fi
 
 # ── 3. what the generated file says ──────────────────────────────────────────
 
 head "3. Compose generation (§9)"
 
-$BANDOLIER new p9web --archetype web --json >"$TMP/new.json"
+$BARDOLIER new p9web --archetype web --json >"$TMP/new.json"
 COMPOSE="$MOUNTED/p9web/docker-compose.yml"
 
-grep -q "bandolier-p9web-home:$HOME_PATH" "$COMPOSE" \
+grep -q "bardolier-p9web-home:$HOME_PATH" "$COMPOSE" \
   && ok "the dev container's \$HOME is a per-project named volume" \
   || bad "no home volume in the generated file"
 
-grep -q 'bandolier.role: home' "$COMPOSE" \
+grep -q 'bardolier.role: home' "$COMPOSE" \
   && ok "labelled so the orphan scan can attribute it" \
   || bad "the home volume carries no role label"
 
@@ -172,13 +172,13 @@ grep -qE '^ *- PORT=3000$' "$COMPOSE" \
   && ok "PORT tells the server which port to bind" \
   || bad "PORT is not set in the container"
 
-$BANDOLIER new p9ios --archetype ios --json >/dev/null
+$BARDOLIER new p9ios --archetype ios --json >/dev/null
 grep -q 'ports:' "$MOUNTED/p9ios/docker-compose.yml" \
   && bad "an ios project must publish nothing" \
   || ok "an archetype that serves nothing publishes nothing"
 
 # The retrofit path: every project that existed before the field.
-$BANDOLIER new p9old --archetype web --json >/dev/null
+$BARDOLIER new p9old --archetype web --json >/dev/null
 node -e "
   const fs = require('fs')
   const p = '$MOUNTED/p9old/project.yml'
@@ -192,8 +192,8 @@ grep -q '^app_port:' "$MOUNTED/p9old/project.yml" \
 
 head "4. \$HOME survives the stop, and the handoff records it (§12)"
 
-if [ "$DOCKER_OK" = "1" ] && docker image inspect bandolier-web:latest >/dev/null 2>&1; then
-  $BANDOLIER up p9old --no-shell --json >"$TMP/up-old.json"
+if [ "$DOCKER_OK" = "1" ] && docker image inspect bardolier-web:latest >/dev/null 2>&1; then
+  $BARDOLIER up p9old --no-shell --json >"$TMP/up-old.json"
   json_assert "$(cat "$TMP/up-old.json")" "d.app_port !== null && d.app_url.startsWith('http://localhost:')" \
     && ok "a project that predates the field is assigned one on its next up" \
     || bad "up did not retrofit the dev-server port"
@@ -201,8 +201,8 @@ if [ "$DOCKER_OK" = "1" ] && docker image inspect bandolier-web:latest >/dev/nul
     && ok "and persists it, because a port is decided once (§5)" \
     || bad "the retrofitted port was not written to the manifest"
 
-  $BANDOLIER up p9web --no-shell --json >/dev/null
-  docker exec bandolier-p9web sh -c 'echo written-before-the-stop > $HOME/.p9-marker' >/dev/null 2>&1 \
+  $BARDOLIER up p9web --no-shell --json >/dev/null
+  docker exec bardolier-p9web sh -c 'echo written-before-the-stop > $HOME/.p9-marker' >/dev/null 2>&1 \
     && ok "wrote a marker into the container's \$HOME" \
     || bad "could not write to \$HOME in the container"
 
@@ -213,11 +213,11 @@ if [ "$DOCKER_OK" = "1" ] && docker image inspect bandolier-web:latest >/dev/nul
     && git -c user.name=T -c user.email=t@e commit -qm "Phase 9 done-check" \
     && echo scratch > uncommitted.txt ) >/dev/null 2>&1
 
-  $BANDOLIER down p9web --json >"$TMP/down.json"
+  $BARDOLIER down p9web --json >"$TMP/down.json"
   json_assert "$(cat "$TMP/down.json")" "d.state === 'stopped'" \
     && ok "down succeeded" || bad "down failed"
 
-  NOTE="$MOUNTED/p9web/.bandolier/handoff.md"
+  NOTE="$MOUNTED/p9web/.bardolier/handoff.md"
   [ -f "$NOTE" ] && ok "the handoff note was written" || bad "no handoff note at $NOTE"
   grep -q 'Phase 9 done-check' "$NOTE" \
     && ok "it carries the repository's recent commits" \
@@ -231,19 +231,19 @@ if [ "$DOCKER_OK" = "1" ] && docker image inspect bandolier-web:latest >/dev/nul
     && bad "a refusal from the agent was pasted in as if it were a summary" \
     || ok "an agent that cannot answer costs the note its summary, not the stop"
 
-  $BANDOLIER up p9web --no-shell --json >/dev/null
-  MARKER="$(docker exec bandolier-p9web sh -c 'cat $HOME/.p9-marker' 2>/dev/null || true)"
+  $BARDOLIER up p9web --no-shell --json >/dev/null
+  MARKER="$(docker exec bardolier-p9web sh -c 'cat $HOME/.p9-marker' 2>/dev/null || true)"
   [ "$MARKER" = "written-before-the-stop" ] \
     && ok "\$HOME survived a full down/up — the container was removed, the volume was not" \
     || bad "\$HOME did not survive the stop (got: ${MARKER:-<nothing>})"
 
-  $BANDOLIER down p9web --no-handoff --json >"$TMP/down2.json"
+  $BARDOLIER down p9web --no-handoff --json >"$TMP/down2.json"
   json_assert "$(cat "$TMP/down2.json")" "d.handoff_path === null" \
     && ok "--no-handoff writes nothing" || bad "--no-handoff still wrote a note"
 
-  $BANDOLIER down p9old --no-handoff --json >/dev/null 2>&1 || true
+  $BARDOLIER down p9old --no-handoff --json >/dev/null 2>&1 || true
 else
-  skip "the live lifecycle (needs a daemon and bandolier-web:latest — \`bandolier build\`)"
+  skip "the live lifecycle (needs a daemon and bardolier-web:latest — \`bardolier build\`)"
 fi
 
 # ── 5. the app ───────────────────────────────────────────────────────────────
@@ -289,7 +289,7 @@ fi
 head "6. Earlier phases"
 
 # Walked ONCE, in order, by test/regression.sh — see its header.
-if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
+if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-8: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"
@@ -311,15 +311,15 @@ cat <<'MANUAL'
 
 The half a terminal cannot check — it needs a real login and a real session:
 
-  1. LOGIN, ONCE PER PROJECT. `bandolier up <p>` then `bandolier shell <p>`, and in the
-     container run `claude`. Log in. Now `bandolier down <p>` and `bandolier up <p>`
+  1. LOGIN, ONCE PER PROJECT. `bardolier up <p>` then `bardolier shell <p>`, and in the
+     container run `claude`. Log in. Now `bardolier down <p>` and `bardolier up <p>`
      again, shell back in, run `claude`: STILL LOGGED IN. That is the home
      volume doing its job — the container was destroyed and rebuilt in between.
      (Or export CLAUDE_CODE_OAUTH_TOKEN on the Mac — `claude setup-token` — and
      every project inherits it with no login at all.)
   2. A REAL HANDOFF. In that shell, give Claude a small piece of real work and
-     let it finish. Exit the shell. `bandolier down <p>`. Read
-     `<project>/.bandolier/handoff.md`: the top section is Claude's own account of
+     let it finish. Exit the shell. `bardolier down <p>`. Read
+     `<project>/.bardolier/handoff.md`: the top section is Claude's own account of
      what it was doing and what comes next, not the git log. That is the whole
      feature.
   3. IT IS THIS PROJECT'S SESSION. Do the same in a SECOND project, then stop
@@ -332,7 +332,7 @@ The half a terminal cannot check — it needs a real login and a real session:
      the container. If the email is empty, your Mac's ~/.gitconfig has an empty
      `user.email` — set it there, not in the container.
   5. THE DEV SERVER. Start a web project's dev server bound to 0.0.0.0 on $PORT,
-     then open the URL `bandolier status <p>` reports. The page loads in Safari.
+     then open the URL `bardolier status <p>` reports. The page loads in Safari.
      Bind it to localhost instead and it does NOT — that is the mistake the
      seeded CLAUDE.md warns about.
   6. THE MENU SAYS WHY. Quit Docker Desktop, open the menu: the Projects section

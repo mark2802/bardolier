@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Phase 2 done-check — new → up → /work mounted and owned by the host user →
 # down (container gone, data kept) → delete, with `status` tracking each step.
-# The SSD is a temp dir (BANDOLIER_SSD_ROOT, §8); the Docker half is real and builds
+# The SSD is a temp dir (BARDOLIER_SSD_ROOT, §8); the Docker half is real and builds
 # the base image if it is missing.
 #
 #   bash test/phase2-done-check.sh
-#   BANDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-BANDOLIER="node cli/bin/bandolier.js"
+BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
 
@@ -24,10 +24,10 @@ TMP="$(mktemp -d)"
 cleanup() {
   # Never leave containers behind, whatever went wrong above.
   if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bandolier-myapp bandolier-second >/dev/null 2>&1 || true
+    docker rm -f bardolier-myapp bardolier-second >/dev/null 2>&1 || true
     # Every project now owns a $HOME volume (cli-spec.md §9); a check that left
     # them behind would litter the machine with one per run.
-    docker volume rm -f bandolier-myapp-home bandolier-second-home >/dev/null 2>&1 || true
+    docker volume rm -f bardolier-myapp-home bardolier-second-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -37,9 +37,9 @@ MOUNTED="$TMP/ssd/claude-projects"
 ABSENT="$TMP/nowhere/claude-projects"
 mkdir -p "$MOUNTED"
 
-export BANDOLIER_CONFIG="$TMP/config.yml"
-export BANDOLIER_SSD_VOLUME="$TMP/ssd"
-export BANDOLIER_SSD_ROOT="$MOUNTED"
+export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_SSD_VOLUME="$TMP/ssd"
+export BARDOLIER_SSD_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -59,7 +59,7 @@ schema_assert() { # schema_assert <schema-name> <json>
 # ── 1. new ────────────────────────────────────────────────────────────────────
 head "1. \`new\` creates the project (§6, §10)"
 
-NEW="$($BANDOLIER new myapp --archetype web --json)" || bad "new exited non-zero"
+NEW="$($BARDOLIER new myapp --archetype web --json)" || bad "new exited non-zero"
 schema_assert new "$NEW" && ok "new --json validates against new.schema.json" || bad "new output does not match its schema"
 
 for file in project.yml docker-compose.yml .gitignore .dockerignore CLAUDE.md; do
@@ -73,7 +73,7 @@ node --input-type=module -e "
   const m = parse(readFileSync(process.argv[1], 'utf8'))
   const { valid, errors } = validate('project', m)
   if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  if (m.name !== 'myapp' || m.archetype !== 'web' || m.base_image !== 'bandolier-web') process.exit(1)
+  if (m.name !== 'myapp' || m.archetype !== 'web' || m.base_image !== 'bardolier-web') process.exit(1)
 " "$MOUNTED/myapp/project.yml" 2>/dev/null \
   && ok "project.yml validates and records archetype → base image (§4.2, §4.3)" \
   || bad "project.yml is wrong"
@@ -86,16 +86,16 @@ grep -q 'postgres:5432' "$MOUNTED/myapp/CLAUDE.md" \
   && ok "seeded CLAUDE.md points at the Docker network, not localhost (§5)" || bad "CLAUDE.md does not steer away from localhost"
 
 # Error paths.
-EXISTS="$($BANDOLIER new myapp --archetype web --json 2>/dev/null || true)"
+EXISTS="$($BARDOLIER new myapp --archetype web --json 2>/dev/null || true)"
 json_assert "$EXISTS" 'd.error && d.error.code === "PROJECT_EXISTS"' \
   && ok "a second new is PROJECT_EXISTS" || bad "duplicate new did not fail PROJECT_EXISTS"
 
-UNMOUNTED="$(BANDOLIER_SSD_ROOT="$ABSENT" $BANDOLIER new nope --archetype web --json 2>/dev/null || true)"
+UNMOUNTED="$(BARDOLIER_SSD_ROOT="$ABSENT" $BARDOLIER new nope --archetype web --json 2>/dev/null || true)"
 json_assert "$UNMOUNTED" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
   && ok "new with the SSD absent is SSD_NOT_MOUNTED" || bad "new did not fail SSD_NOT_MOUNTED"
 [ ! -e "$ABSENT" ] && ok "no project directory was created on the internal disk" || bad "new created $ABSENT"
 
-BADTYPE="$($BANDOLIER new other --archetype toaster --json 2>/dev/null || true)"
+BADTYPE="$($BARDOLIER new other --archetype toaster --json 2>/dev/null || true)"
 json_assert "$BADTYPE" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
   && ok "an unknown archetype is refused" || bad "an unknown archetype was accepted"
 
@@ -138,7 +138,7 @@ grep -q 'vandalised' "$MOUNTED/myapp/docker-compose.yml" \
 # ── 3. status reflects a stopped, freshly-created project ─────────────────────
 head "3. \`status\` sees the new project"
 
-STATUS="$($BANDOLIER status myapp --json)"
+STATUS="$($BARDOLIER status myapp --json)"
 schema_assert status "$STATUS" && ok "status still matches the §7 schema" || bad "status output broke its schema"
 json_assert "$STATUS" 'd.projects[0].name === "myapp" && d.projects[0].state === "stopped" && d.projects[0].dev_container === null' \
   && ok "reports the project stopped with no dev container" || bad "status is wrong for a new project"
@@ -147,8 +147,8 @@ json_assert "$STATUS" 'd.projects[0].name === "myapp" && d.projects[0].state ===
 head "4. Lifecycle against a real daemon"
 
 DOCKER_OK=0
-if [ "${BANDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
-  skip "BANDOLIER_SKIP_DOCKER=1 — skipping the Docker lifecycle"
+if [ "${BARDOLIER_SKIP_DOCKER:-0}" = "1" ]; then
+  skip "BARDOLIER_SKIP_DOCKER=1 — skipping the Docker lifecycle"
 elif ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
   skip "no Docker daemon — skipping the lifecycle (the offline checks above still ran)"
 else
@@ -156,47 +156,47 @@ else
 fi
 
 if [ "$DOCKER_OK" = "1" ]; then
-  docker rm -f bandolier-myapp >/dev/null 2>&1 || true
-  docker volume rm -f bandolier-myapp-home bandolier-second-home >/dev/null 2>&1 || true
+  docker rm -f bardolier-myapp >/dev/null 2>&1 || true
+  docker volume rm -f bardolier-myapp-home bardolier-second-home >/dev/null 2>&1 || true
 
-  if ! docker image inspect bandolier-web:latest >/dev/null 2>&1; then
-    printf '    building bandolier-web (first run only, this takes a few minutes)…\n'
-    if $BANDOLIER build --archetype web >/dev/null 2>&1; then
-      ok "bandolier build produced bandolier-web:latest"
+  if ! docker image inspect bardolier-web:latest >/dev/null 2>&1; then
+    printf '    building bardolier-web (first run only, this takes a few minutes)…\n'
+    if $BARDOLIER build --archetype web >/dev/null 2>&1; then
+      ok "bardolier build produced bardolier-web:latest"
     else
-      bad "bandolier build failed"
+      bad "bardolier build failed"
     fi
   else
-    ok "bandolier-web:latest is present (built by \`bandolier build\`)"
+    ok "bardolier-web:latest is present (built by \`bardolier build\`)"
   fi
 
-  BUILD="$($BANDOLIER build --archetype web --json)"
+  BUILD="$($BARDOLIER build --archetype web --json)"
   schema_assert build "$BUILD" && ok "build --json validates against build.schema.json" || bad "build output does not match its schema"
   json_assert "$BUILD" "d.uid === $(id -u) && d.gid === $(id -g)" \
     && ok "build passes the host UID/GID as build args" || bad "build did not report the host UID/GID"
 
-  UP="$($BANDOLIER up myapp --json)" || bad "up exited non-zero"
+  UP="$($BARDOLIER up myapp --json)" || bad "up exited non-zero"
   schema_assert up "$UP" && ok "up --json validates against up.schema.json" || bad "up output does not match its schema"
-  json_assert "$UP" 'd.state === "running" && d.already_running === false && d.dev_container === "bandolier-myapp"' \
+  json_assert "$UP" 'd.state === "running" && d.already_running === false && d.dev_container === "bardolier-myapp"' \
     && ok "up started the project" || bad "up did not report a running project"
 
-  json_assert "$($BANDOLIER status myapp --json)" 'd.projects[0].state === "running" && d.projects[0].dev_container === "bandolier-myapp"' \
+  json_assert "$($BARDOLIER status myapp --json)" 'd.projects[0].state === "running" && d.projects[0].dev_container === "bardolier-myapp"' \
     && ok "status reflects the transition to running" || bad "status did not follow up"
 
   # The done-check's own words: /work mounted, owned by your user.
-  if docker exec bandolier-myapp test -d /work; then
+  if docker exec bardolier-myapp test -d /work; then
     ok "docker exec shows /work mounted"
   else
     bad "/work is not mounted in the dev container"
   fi
 
-  CONTAINER_UID="$(docker exec bandolier-myapp stat -c '%u' /work 2>/dev/null || echo 'x')"
-  CONTAINER_GID="$(docker exec bandolier-myapp stat -c '%g' /work 2>/dev/null || echo 'x')"
+  CONTAINER_UID="$(docker exec bardolier-myapp stat -c '%u' /work 2>/dev/null || echo 'x')"
+  CONTAINER_GID="$(docker exec bardolier-myapp stat -c '%g' /work 2>/dev/null || echo 'x')"
   [ "$CONTAINER_UID" = "$(id -u)" ] && [ "$CONTAINER_GID" = "$(id -g)" ] \
     && ok "/work is owned by $(id -u):$(id -g) — your user, not root" \
     || bad "/work is owned by $CONTAINER_UID:$CONTAINER_GID, expected $(id -u):$(id -g)"
 
-  docker exec bandolier-myapp sh -c 'echo hello > /work/from-container.txt' 2>/dev/null || true
+  docker exec bardolier-myapp sh -c 'echo hello > /work/from-container.txt' 2>/dev/null || true
   if [ -f "$MOUNTED/myapp/from-container.txt" ]; then
     OWNER="$(stat -f '%u' "$MOUNTED/myapp/from-container.txt" 2>/dev/null || stat -c '%u' "$MOUNTED/myapp/from-container.txt")"
     [ "$OWNER" = "$(id -u)" ] \
@@ -206,67 +206,67 @@ if [ "$DOCKER_OK" = "1" ]; then
     bad "a file written in the container did not appear on the host"
   fi
 
-  json_assert "$($BANDOLIER up myapp --json)" 'd.already_running === true && d.compose_regenerated === false' \
+  json_assert "$($BARDOLIER up myapp --json)" 'd.already_running === true && d.compose_regenerated === false' \
     && ok "up on a running project is an idempotent no-op (§2)" || bad "a second up was not a no-op"
 
-  DOWN="$($BANDOLIER down myapp --json)" || bad "down exited non-zero"
+  DOWN="$($BARDOLIER down myapp --json)" || bad "down exited non-zero"
   schema_assert down "$DOWN" && ok "down --json validates against down.schema.json" || bad "down output does not match its schema"
   json_assert "$DOWN" 'd.was_running === true && d.state === "stopped" && d.data_kept === true' \
     && ok "down stopped the project and kept its data" || bad "down reported the wrong outcome"
 
-  [ -z "$(docker ps -a --filter name='^bandolier-myapp$' --format '{{.Names}}')" ] \
+  [ -z "$(docker ps -a --filter name='^bardolier-myapp$' --format '{{.Names}}')" ] \
     && ok "down removed the container" || bad "the container survived down"
 
   [ -f "$MOUNTED/myapp/from-container.txt" ] && [ -f "$MOUNTED/myapp/project.yml" ] \
     && ok "data persists across down" || bad "down destroyed project data"
 
-  json_assert "$($BANDOLIER status myapp --json)" 'd.projects[0].state === "stopped" && d.projects[0].dev_container === null' \
+  json_assert "$($BARDOLIER status myapp --json)" 'd.projects[0].state === "stopped" && d.projects[0].dev_container === null' \
     && ok "status reflects the transition back to stopped" || bad "status did not follow down"
 
-  json_assert "$($BANDOLIER down myapp --json)" 'd.was_running === false' \
+  json_assert "$($BARDOLIER down myapp --json)" 'd.was_running === false' \
     && ok "down on a stopped project is an idempotent no-op (§2)" || bad "a second down was not a no-op"
 fi
 
 # ── 5. delete ─────────────────────────────────────────────────────────────────
 head "5. \`delete\` is explicit and confirmed"
 
-REFUSED="$($BANDOLIER delete myapp --json 2>/dev/null || true)"
+REFUSED="$($BARDOLIER delete myapp --json 2>/dev/null || true)"
 json_assert "$REFUSED" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
   && ok "delete --json without --force refuses rather than prompting into stdout (§2)" \
   || bad "delete under --json did not refuse"
 [ -d "$MOUNTED/myapp" ] && ok "the refused delete left the project alone" || bad "the refused delete removed the project"
 
-CONTRADICTION="$($BANDOLIER delete myapp --force --keep-data --purge --json 2>/dev/null || true)"
+CONTRADICTION="$($BARDOLIER delete myapp --force --keep-data --purge --json 2>/dev/null || true)"
 json_assert "$CONTRADICTION" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
   && ok "--keep-data and --purge together are refused" || bad "contradictory data flags were accepted"
 
-GHOST="$($BANDOLIER delete ghost --force --json 2>/dev/null || true)"
+GHOST="$($BARDOLIER delete ghost --force --json 2>/dev/null || true)"
 json_assert "$GHOST" 'd.error && d.error.code === "PROJECT_NOT_FOUND"' \
   && ok "deleting an unknown project is PROJECT_NOT_FOUND" || bad "delete of an unknown project did not fail correctly"
 
-DELETED="$($BANDOLIER delete myapp --force --json)" || bad "delete exited non-zero"
+DELETED="$($BARDOLIER delete myapp --force --json)" || bad "delete exited non-zero"
 schema_assert delete "$DELETED" && ok "delete --json validates against delete.schema.json" || bad "delete output does not match its schema"
 json_assert "$DELETED" 'd.deleted === true' && ok "delete reports success" || bad "delete did not report success"
 [ ! -e "$MOUNTED/myapp" ] && ok "the project directory is gone" || bad "the project directory survived delete"
 
-json_assert "$($BANDOLIER status --json)" 'd.projects.length === 0' \
+json_assert "$($BARDOLIER status --json)" 'd.projects.length === 0' \
   && ok "status reflects the deletion" || bad "status still lists the deleted project"
 
-GONE="$($BANDOLIER status myapp --json 2>/dev/null || true)"
+GONE="$($BARDOLIER status myapp --json 2>/dev/null || true)"
 json_assert "$GONE" 'd.error && d.error.code === "PROJECT_NOT_FOUND"' \
   && ok "the deleted project is no longer addressable" || bad "status still resolves the deleted project"
 
 # ── 6. Renderers stay separate (§2) ───────────────────────────────────────────
 head "6. Renderers stay separate (§2)"
 
-$BANDOLIER new humantest --archetype library >/dev/null
-HUMAN="$($BANDOLIER down humantest)"
+$BARDOLIER new humantest --archetype library >/dev/null
+HUMAN="$($BARDOLIER down humantest)"
 if node -e "JSON.parse(process.argv[1])" "$HUMAN" 2>/dev/null; then
   bad "human down output is JSON — the renderers are not separate"
 else
   ok "human output is not JSON"
 fi
-$BANDOLIER delete humantest --force >/dev/null
+$BARDOLIER delete humantest --force >/dev/null
 
 # ── 7. Suites, typecheck, and the earlier phases ──────────────────────────────
 head "7. Test suites, typecheck, and earlier done-checks"
@@ -277,7 +277,7 @@ if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm
 # Recursing here — each check re-running all its predecessors, which did the
 # same — made phase 0 come up dozens of times per invocation and turned this
 # section into most of the run.
-if [ -n "${BANDOLIER_REGRESSION:-}" ]; then
+if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
   ok "phases 0-1: already being walked, in order, by test/regression.sh"
 else
   LADDER="$(mktemp)"

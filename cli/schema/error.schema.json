@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/error.schema.json",
-  "title": "bandolier failure output (--json)",
+  "$id": "https://bardolier.local/schema/error.schema.json",
+  "title": "bardolier failure output (--json)",
   "description": "Emitted on stdout for any failing command run with --json. cli-spec.md §2. The error code list lives in code at cli/src/errors.ts — this enum mirrors it and is checked against it by test/contracts.test.ts.",
   "type": "object",
   "additionalProperties": false,

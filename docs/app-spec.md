@@ -1,10 +1,10 @@
 # App Spec — Menu-Bar Container Project Manager
 
 Status: draft for implementation. macOS status-bar app; a **thin client** over
-the `bandolier` CLI. Companion docs: `cli-spec.md` (the engine — authoritative for
+the `bardolier` CLI. Companion docs: `cli-spec.md` (the engine — authoritative for
 all behaviour), `CLAUDE.md`.
 
-**The CLI is the API; the app is a thin client.** The app shells out to `bandolier`,
+**The CLI is the API; the app is a thin client.** The app shells out to `bardolier`,
 parses `--json`, and renders. It contains no Docker/orchestration logic and holds
 no persistent state beyond UI preferences.
 
@@ -15,7 +15,7 @@ no persistent state beyond UI preferences.
 - SwiftUI `MenuBarExtra`, macOS. Built as its own Xcode project — created and
   maintained by the human at the Mac; Claude writes `.swift` files into the
   synchronized folder group and never touches the project file (`app/README.md`).
-- No sandbox entitlement that would block shelling out to `docker`/`bandolier`
+- No sandbox entitlement that would block shelling out to `docker`/`bardolier`
   (the app runs a helper process; App Sandbox would need to be off or carefully
   configured — v1 targets a non-sandboxed local dev tool).
 
@@ -34,14 +34,14 @@ command in `cli-spec.md` §6.
 
 ## 4. CLI integration
 
-- A single `BandolierClient` type wraps process execution: builds argv, always passes
+- A single `BardolierClient` type wraps process execution: builds argv, always passes
   `--json`, decodes into `Codable` models mirroring the CLI schemas, maps the
   `error.code` strings to a Swift error enum.
-- On every menu open and after every mutating action, call `bandolier status --json`
+- On every menu open and after every mutating action, call `bardolier status --json`
   and re-render. Debounce so rapid reopens don't stack calls.
 - Long operations (`up`, `down`, `eject`, `build`) run off the main thread with a
   progress indicator; conflicting actions disabled until completion.
-- `bandolier doctor --json` on launch; if Docker down or SSD absent, reflect in the
+- `bardolier doctor --json` on launch; if Docker down or SSD absent, reflect in the
   icon and disable inapplicable actions.
 
 ## 5. Menu structure
@@ -81,16 +81,16 @@ Quit
 Lists every catalogue service with a checkmark if attached; each attached row
 shows its host port and a copy-connection action.
 
-- **Attach**: calls `bandolier service add`. If the project is running, the CLI
+- **Attach**: calls `bardolier service add`. If the project is running, the CLI
   returns `PROJECT_RUNNING`; the app shows "Stop the project to change services"
   rather than attempting it. (Both add and remove require stop/start.)
-- **Detach**: calls `bandolier service remove`; the volume is kept and later appears
+- **Detach**: calls `bardolier service remove`; the volume is kept and later appears
   in Reclaim disk. Confirm, naming the service.
 - After any change, show the newly assigned host port.
 
 ## 7. Shell opening
 
-- The CLI (`bandolier shell <name> --json`) returns the container name and the exec
+- The CLI (`bardolier shell <name> --json`) returns the container name and the exec
   argv. The **app** launches the user's terminal running that command.
 - Terminal choice is a **Preference** (Terminal.app default; iTerm, Ghostty,
   etc. optional). The app uses the configured terminal to run the exec command.
@@ -109,27 +109,27 @@ shows its host port and a copy-connection action.
 Small modal:
 - **Name** — validated (no spaces; no collision; the app calls `list` to check).
 - **Archetype** — web / iOS / Android / library.
-- **Services** — checkbox list from the catalogue (from `bandolier status`/catalogue).
-- **Create** → `bandolier new … --json`; on success the window closes and the menu
+- **Services** — checkbox list from the catalogue (from `bardolier status`/catalogue).
+- **Create** → `bardolier new … --json`; on success the window closes and the menu
   refreshes, showing assigned host ports for any initial services.
 
 ## 9. Reclaim disk view
 
 - Lists `orphaned_volumes` (name, human size, last project) from status.
-- Per-volume **Delete** (confirm, names it) → `bandolier volumes rm`.
+- Per-volume **Delete** (confirm, names it) → `bardolier volumes rm`.
 - **Delete all** (confirm, shows total reclaimable) → iterate.
 - Nothing automatic: orphans persist until reclaimed, so a detach never loses
   data by surprise, but disk is never hidden.
 
 ## 10. Close all & eject
 
-1. `bandolier eject --json` (which itself runs down-all → holder check → diskutil).
+1. `bardolier eject --json` (which itself runs down-all → holder check → diskutil).
 2. On `EJECT_BLOCKED`, render the returned `holders` list ("Xcode, Simulator
    still hold the SSD — quit them") and offer **Retry**. Never force.
 2b. On `EJECT_BLOCKED` with `details.reason == "runtime-holds-volume"`, the
    holder is Docker Desktop's own VM: there is nothing to quit and Retry cannot
    clear it. Render it as its own state and offer **Stop Docker & eject**,
-   which is `bandolier eject --stop-docker` — the user consenting to the engine
+   which is `bardolier eject --stop-docker` — the user consenting to the engine
    stopping, not the app deciding to stop it.
 2c. On `reason == "runtime-holds-volume-after-stop"` — the same refusal after
    that offer was taken and the CLI waited for the VM to let go — withdraw the
@@ -157,8 +157,8 @@ disabled) · ejected (distinct, safe-to-unplug). Derive purely from the latest
 - Terminal app for shell-open.
 - Start-auto-opens-shell toggle (default ON).
 
-The first two are read with `bandolier config get` and written with
-`bandolier config set` (`cli-spec.md` §8); only the toggle is the app's own, since
+The first two are read with `bardolier config get` and written with
+`bardolier config set` (`cli-spec.md` §8); only the toggle is the app's own, since
 the CLI has no opinion about it. When an environment variable overrides a key,
 the write still happens and the panel says the environment wins — a preference
 that appears to save and then does nothing is worse than one that explains
@@ -168,7 +168,7 @@ itself.
 
 - Every CLI error code maps to a short, human message; unknown codes fall back to
   the `error.message` string. Never surface a raw stack trace.
-- If `bandolier` itself is missing/not on PATH, show a clear first-run message with
+- If `bardolier` itself is missing/not on PATH, show a clear first-run message with
   the expected install location.
 
 ## 14. What must be true before the app is built

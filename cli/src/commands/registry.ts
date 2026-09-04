@@ -1,7 +1,7 @@
 /**
  * The command surface — cli-spec.md §6, complete.
  *
- * Phase 0 declared the whole surface so `bandolier --help` is the contract you can
+ * Phase 0 declared the whole surface so `bardolier --help` is the contract you can
  * read from the terminal. Each command records the error codes §6 says it can
  * raise, so help output and the app's error mapping (app-spec.md §13) are
  * driven off one declaration rather than drifting apart.
@@ -18,7 +18,7 @@
  */
 
 import type { ErrorCode } from '../errors.ts'
-import { BandolierError, notImplemented } from '../errors.ts'
+import { BardolierError, notImplemented } from '../errors.ts'
 import { createContext } from '../context.ts'
 import { flagKey } from '../argv.ts'
 import { collectStatus, renderStatus } from './status.ts'
@@ -115,7 +115,7 @@ export function output<T>(json: T, human: (value: T) => string[]): CommandOutput
 /** Reject stray positionals rather than ignoring them (§2, INVALID_ARGUMENT). */
 function atMostOneArg(inv: Invocation, command: string, placeholder: string): string | null {
   if (inv.args.length > 1) {
-    throw new BandolierError('INVALID_ARGUMENT', `\`bandolier ${command}\` takes at most one ${placeholder}.`)
+    throw new BardolierError('INVALID_ARGUMENT', `\`bardolier ${command}\` takes at most one ${placeholder}.`)
   }
   return inv.args[0] ?? null
 }
@@ -123,7 +123,7 @@ function atMostOneArg(inv: Invocation, command: string, placeholder: string): st
 /** Exactly `count` positionals, or INVALID_ARGUMENT naming the usage. */
 function exactArgs(inv: Invocation, command: CommandNode, count: number): string[] {
   if (inv.args.length !== count) {
-    throw new BandolierError('INVALID_ARGUMENT', `Usage: bandolier ${command.usage}`)
+    throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${command.usage}`)
   }
   return [...inv.args]
 }
@@ -131,7 +131,7 @@ function exactArgs(inv: Invocation, command: CommandNode, count: number): string
 /** At least `count` positionals, or INVALID_ARGUMENT naming the usage — `deps add/remove`'s variadic package list. */
 function minArgs(inv: Invocation, command: CommandNode, count: number): string[] {
   if (inv.args.length < count) {
-    throw new BandolierError('INVALID_ARGUMENT', `Usage: bandolier ${command.usage}`)
+    throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${command.usage}`)
   }
   return [...inv.args]
 }
@@ -154,7 +154,7 @@ function boolFlag(inv: Invocation, name: string): boolean {
 
 function noArgs(inv: Invocation, command: string): void {
   if (inv.args.length > 0) {
-    throw new BandolierError('INVALID_ARGUMENT', `\`bandolier ${command}\` takes no arguments.`)
+    throw new BardolierError('INVALID_ARGUMENT', `\`bardolier ${command}\` takes no arguments.`)
   }
 }
 
@@ -498,7 +498,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['down-all'],
     group: 'Lifecycle / SSD',
     usage: 'down-all',
-    summary: 'Stop and remove all bandolier containers.',
+    summary: 'Stop and remove all bardolier containers.',
     flags: [],
     errors: ['DOCKER_UNAVAILABLE'],
     run: async (inv) => {
@@ -540,7 +540,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['config'],
     group: 'Lifecycle / SSD',
     usage: 'config <get | set>',
-    summary: 'Read and write ~/.config/bandolier/config.yml (§8) — the app’s Preferences write through here.',
+    summary: 'Read and write ~/.config/bardolier/config.yml (§8) — the app’s Preferences write through here.',
     flags: [],
     errors: [],
     run: group('config'),
@@ -605,18 +605,18 @@ export const COMMANDS: readonly CommandNode[] = [
  */
 function byPath(path: string): CommandNode {
   const found = walk(ROOT).find((command) => command.path.join(' ') === path)
-  if (!found) throw new BandolierError('INTERNAL_ERROR', `No command declared at \`${path}\`.`)
+  if (!found) throw new BardolierError('INTERNAL_ERROR', `No command declared at \`${path}\`.`)
   return found
 }
 
 export const ROOT: CommandNode = {
   path: [],
   group: 'Projects',
-  usage: 'bandolier',
+  usage: 'bardolier',
   summary: 'Container Project Manager',
   flags: [JSON_FLAG],
   errors: [],
-  run: group('bandolier'),
+  run: group('bardolier'),
   children: COMMANDS,
 }
 

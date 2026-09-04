@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { parse as parseYaml } from 'yaml'
 
-import { BandolierError } from '../cli/src/errors.ts'
+import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { collectCatalogue } from '../cli/src/commands/catalogue.ts'
 import { collectConfigGet, runConfigSet } from '../cli/src/commands/config.ts'
@@ -35,7 +35,7 @@ afterEach(() => {
 
 /** A context whose config comes from the FILE, not from the test env (§8). */
 function fileConfigured(box: Sandbox) {
-  return makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: '' } })
+  return makeContext(box, stubDocker(), { env: { BARDOLIER_SSD_ROOT: '' } })
 }
 
 describe('catalogue (app-spec.md §6, §8)', () => {
@@ -87,7 +87,7 @@ describe('catalogue (app-spec.md §6, §8)', () => {
 
     assert.throws(
       () => collectCatalogue(makeContext(box)),
-      (error: unknown) => error instanceof BandolierError && error.code === 'CONFIG_INVALID',
+      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
     )
   })
 })
@@ -119,7 +119,7 @@ describe('config get (app-spec.md §12)', () => {
   test('names the environment overrides, so Preferences can say the file cannot win', () => {
     const box = sandbox()
     const output = collectConfigGet(makeContext(box))
-    assert.deepEqual(output.overrides, ['BANDOLIER_SSD_ROOT'])
+    assert.deepEqual(output.overrides, ['BARDOLIER_SSD_ROOT'])
     assert.equal(output.config.ssd_root, box.root)
   })
 })
@@ -183,18 +183,18 @@ describe('config set (app-spec.md §12)', () => {
     const box = sandbox()
     assert.throws(
       () => runConfigSet(fileConfigured(box), { key: 'ssd_rooot', value: '/x' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
     )
     assert.equal(box.exists('..', 'config.yml'), false)
   })
 
   test('an overridden key is still written, and the override is still reported', () => {
     const box = sandbox()
-    // BANDOLIER_SSD_ROOT is set by makeContext, so the file cannot win here.
+    // BARDOLIER_SSD_ROOT is set by makeContext, so the file cannot win here.
     const output = runConfigSet(makeContext(box), { key: 'ssd_root', value: '/Volumes/elsewhere/projects' })
 
     assert.deepEqual(output.changed, ['ssd_root'])
-    assert.deepEqual(output.overrides, ['BANDOLIER_SSD_ROOT'])
+    assert.deepEqual(output.overrides, ['BARDOLIER_SSD_ROOT'])
     assert.equal(output.config.ssd_root, box.root, 'the environment still wins for the effective value')
   })
 })

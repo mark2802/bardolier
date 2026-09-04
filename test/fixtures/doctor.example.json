@@ -5,7 +5,7 @@
       "id": "config",
       "title": "Config",
       "ok": true,
-      "detail": "Loaded /Users/you/.config/bandolier/config.yml. ssd_root=/Volumes/ssd/claude-projects, ssd_volume=/Volumes/ssd, terminal=Terminal"
+      "detail": "Loaded /Users/you/.config/bardolier/config.yml. ssd_root=/Volumes/ssd/claude-projects, ssd_volume=/Volumes/ssd, terminal=Terminal"
     },
     {
       "id": "ssd",
@@ -23,8 +23,8 @@
       "id": "base_images",
       "title": "Base images",
       "ok": false,
-      "detail": "Missing: bandolier-ios, bandolier-and.",
-      "remedy": "Run `bandolier build` to build the missing base images."
+      "detail": "Missing: bardolier-ios, bardolier-and.",
+      "remedy": "Run `bardolier build` to build the missing base images."
     },
     {
       "id": "catalogue",

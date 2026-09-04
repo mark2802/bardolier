@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/port-add.schema.json",
-  "title": "bandolier port add output",
-  "description": "What `bandolier port add` declared, and on which host port. cli-spec.md §6 (Ports), §5.1.",
+  "$id": "https://bardolier.local/schema/port-add.schema.json",
+  "title": "bardolier port add output",
+  "description": "What `bardolier port add` declared, and on which host port. cli-spec.md §6 (Ports), §5.1.",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -9,7 +9,7 @@
  * A volume is claimed when either
  *   - its NAME is one the catalogue would generate for a service some manifest
  *     still attaches, or
- *   - its `bandolier.project` / `bandolier.service` LABELS name a project that still
+ *   - its `bardolier.project` / `bardolier.service` LABELS name a project that still
  *     attaches that service key.
  *
  * The second rule is not redundant. A manifest can attach a service the
@@ -17,7 +17,7 @@
  * the label rule that live volume would be listed as reclaimable. Being wrong
  * in that direction destroys data, so both rules are asked and either protects.
  *
- * A toolchain cache volume (`bandolier.role: cache`, `images.ts`) is the one volume
+ * A toolchain cache volume (`bardolier.role: cache`, `images.ts`) is the one volume
  * this tool makes that belongs to no project: it is shared by every project on
  * one base image, so it is claimed while ANY manifest names that image, and
  * reclaimable once none does. It is still ours — leaving it out entirely would
@@ -25,7 +25,7 @@
  * account for them.
  *
  * Two refusals guard the same edge:
- *   - With the SSD unmounted there are no manifests to consult, so EVERY bandolier
+ *   - With the SSD unmounted there are no manifests to consult, so EVERY bardolier
  *     volume would look orphaned. That is SSD_NOT_MOUNTED, never an empty
  *     claim-set.
  *   - An unreadable manifest is a project whose attachments cannot be known, so
@@ -34,7 +34,7 @@
  */
 
 import type { Context } from './context.ts'
-import { BandolierError } from './errors.ts'
+import { BardolierError } from './errors.ts'
 import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, ROLE_CACHE, volumeName } from './compose.ts'
 import { discoverProjects } from './projects.ts'
 import { homeVolumeName } from './naming.ts'
@@ -68,7 +68,7 @@ export type VolumeScan = {
   readonly claimedBy: ReadonlyMap<string, string>
   /** Every volume Docker reports, by name. */
   readonly all: ReadonlyMap<string, DockerVolume>
-  /** bandolier-owned volumes nothing claims, sorted by name. */
+  /** bardolier-owned volumes nothing claims, sorted by name. */
   readonly orphans: readonly OrphanedVolume[]
 }
 
@@ -84,7 +84,7 @@ export function isCacheVolume(volume: DockerVolume): boolean {
 }
 
 /** True for a volume this tool created — our project label, or the cache role. */
-export function isBandolierVolume(volume: DockerVolume): boolean {
+export function isBardolierVolume(volume: DockerVolume): boolean {
   return volumeOwner(volume) !== null || isCacheVolume(volume)
 }
 
@@ -99,16 +99,16 @@ type Claims = {
 function claimsFromManifests(ctx: Context): Claims {
   const discovery = discoverProjects(ctx.config)
   if (!discovery.mounted) {
-    throw new BandolierError(
+    throw new BardolierError(
       'SSD_NOT_MOUNTED',
-      `The SSD is not mounted at ${ctx.config.ssd_root}, so bandolier cannot tell which volumes are still in use. Mount it before reclaiming disk.`,
+      `The SSD is not mounted at ${ctx.config.ssd_root}, so bardolier cannot tell which volumes are still in use. Mount it before reclaiming disk.`,
     )
   }
   if (discovery.invalid.length > 0) {
     const broken = discovery.invalid.map((p) => p.name).join(', ')
-    throw new BandolierError(
+    throw new BardolierError(
       'CONFIG_INVALID',
-      `Cannot tell which volumes are in use while these projects have unusable manifests: ${broken}. Run \`bandolier doctor\`.`,
+      `Cannot tell which volumes are in use while these projects have unusable manifests: ${broken}. Run \`bardolier doctor\`.`,
     )
   }
 
@@ -171,7 +171,7 @@ export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
     }
     // Only volumes this tool made are ours to offer for reclaiming. Somebody
     // else's `docker volume create` is none of our business.
-    if (isBandolierVolume(volume)) candidates.push(volume)
+    if (isBardolierVolume(volume)) candidates.push(volume)
   }
 
   const sizes = candidates.length > 0 ? await ctx.docker.volumeSizes() : new Map<string, number>()

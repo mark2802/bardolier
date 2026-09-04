@@ -1,5 +1,5 @@
 /**
- * `bandolier volumes orphaned | rm` — `cli-spec.md` §6 (Volumes / disk).
+ * `bardolier volumes orphaned | rm` — `cli-spec.md` §6 (Volumes / disk).
  *
  * `orphaned` is READ-ONLY (§2): it reports what could be reclaimed and touches
  * nothing. `rm` is the only command in the CLI whose whole purpose is to
@@ -14,7 +14,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import type { VolumesOrphanedOutput, VolumesRemoveOutput } from '../model/volumes.ts'
 import { formatBytes, isCacheVolume, scanVolumes, UNKNOWN_SIZE, volumeOwner } from '../volumes.ts'
 
@@ -38,7 +38,7 @@ export function renderOrphanedVolumes(output: VolumesOrphanedOutput): string[] {
     lines.push(`  ${volume.name}  ${volume.size_human}  (was ${volume.last_project ?? 'unattributed'})`)
   }
   lines.push('')
-  lines.push('Reclaim one with: bandolier volumes rm <name>   — this destroys its data.')
+  lines.push('Reclaim one with: bardolier volumes rm <name>   — this destroys its data.')
   return lines
 }
 
@@ -52,13 +52,13 @@ export type VolumeRemoveRequest = {
 }
 
 export async function runVolumeRemove(ctx: Context, request: VolumeRemoveRequest): Promise<VolumesRemoveOutput> {
-  if (!request.name) throw new BandolierError('INVALID_ARGUMENT', 'Usage: bandolier volumes rm <name> [--force]')
+  if (!request.name) throw new BardolierError('INVALID_ARGUMENT', 'Usage: bardolier volumes rm <name> [--force]')
   const name = request.name
 
   const scan = await scanVolumes(ctx)
   const volume = scan.all.get(name)
   if (!volume) {
-    throw new BandolierError('VOLUME_NOT_FOUND', `Docker has no volume named \`${name}\`.`, { volume: name })
+    throw new BardolierError('VOLUME_NOT_FOUND', `Docker has no volume named \`${name}\`.`, { volume: name })
   }
 
   const claimant = scan.claimedBy.get(name)
@@ -67,8 +67,8 @@ export async function runVolumeRemove(ctx: Context, request: VolumeRemoveRequest
     // this one: it goes when the last project built on that image goes.
     const message = isCacheVolume(volume)
       ? `\`${name}\` is the shared toolchain cache that \`${claimant}\` and every other project on its base image build with. It becomes reclaimable when the last of them is deleted.`
-      : `\`${name}\` still belongs to project \`${claimant}\`. Detach the service (\`bandolier service remove ${claimant} <svc>\`) or delete the project first.`
-    throw new BandolierError('VOLUME_IN_USE', message, { volume: name, project: claimant })
+      : `\`${name}\` still belongs to project \`${claimant}\`. Detach the service (\`bardolier service remove ${claimant} <svc>\`) or delete the project first.`
+    throw new BardolierError('VOLUME_IN_USE', message, { volume: name, project: claimant })
   }
 
   const orphan = scan.orphans.find((entry) => entry.name === name)
@@ -80,7 +80,7 @@ export async function runVolumeRemove(ctx: Context, request: VolumeRemoveRequest
     if (request.json) {
       // A prompt on stdout would break the §2 single-JSON-value guarantee; the
       // app confirms in its own UI and then calls with --force.
-      throw new BandolierError(
+      throw new BardolierError(
         'INVALID_ARGUMENT',
         `Refusing to remove \`${name}\` without confirmation. Under --json, pass --force.`,
       )

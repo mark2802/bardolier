@@ -1,5 +1,5 @@
 /**
- * `bandolier catalogue` — every service type the catalogue defines (`cli-spec.md`
+ * `bardolier catalogue` — every service type the catalogue defines (`cli-spec.md`
  * §4.1).
  *
  * Not in §6's original list. It exists because §1 says the app holds no

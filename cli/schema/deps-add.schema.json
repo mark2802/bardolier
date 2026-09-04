@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/deps-add.schema.json",
-  "title": "bandolier deps add output",
-  "description": "What `bandolier deps add` declared, and the image it resolves to. cli-spec.md §6 (Deps), §4.2.",
+  "$id": "https://bardolier.local/schema/deps-add.schema.json",
+  "title": "bardolier deps add output",
+  "description": "What `bardolier deps add` declared, and the image it resolves to. cli-spec.md §6 (Deps), §4.2.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "added", "extra_packages", "image"],

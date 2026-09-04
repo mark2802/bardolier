@@ -5,7 +5,7 @@
 # of those did the same — exponential, so phase 0's containers came up dozens of
 # times and a run took the better part of an hour for a minute of distinct work.
 # The walk lives here instead: each phase's own sections, once, in order, with
-# BANDOLIER_REGRESSION set — the flag that tells a phase check to skip its own
+# BARDOLIER_REGRESSION set — the flag that tells a phase check to skip its own
 # ladder. Same coverage, linear cost.
 #
 #   bash test/regression.sh                 # every phase that has a check
@@ -14,10 +14,10 @@
 #
 # Phase 8's sections build images and run Gradle, so the full walk is minutes
 # rather than seconds; --through 7 skips that. Phase 11 also rebuilds an image
-# (bandolier-web), but it's a fast Node build, not the emulated Android one. Phase
+# (bardolier-web), but it's a fast Node build, not the emulated Android one. Phase
 # 13 builds a small derived image on top of it (one apt package) — also fast.
 # Phase 14 is a one-argv-difference `docker exec`, no image work. Phase 15 is
-# the rename; its check rebuilds bandolier-web too, same reason as 11/13.
+# the rename; its check rebuilds bardolier-web too, same reason as 11/13.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -52,15 +52,15 @@ esac
 
 # The flag that stops the recursion coming back: a phase check that sees it
 # knows the ladder below it is already being walked here.
-export BANDOLIER_REGRESSION=1
+export BARDOLIER_REGRESSION=1
 
 # Each check builds its own hermetic world — a temp SSD, its own config file —
-# and §8 says the environment BEATS that file. So a caller's BANDOLIER_* would
+# and §8 says the environment BEATS that file. So a caller's BARDOLIER_* would
 # silently override what a check just wrote and fail it for the wrong reason
 # (`config set did not record the change`). The ladder therefore hands every
 # phase a clean slate rather than whatever the shell above it happened to
 # export.
-CLEAN_ENV=(env -u BANDOLIER_CONFIG -u BANDOLIER_SSD_ROOT -u BANDOLIER_SSD_VOLUME)
+CLEAN_ENV=(env -u BARDOLIER_CONFIG -u BARDOLIER_SSD_ROOT -u BARDOLIER_SSD_VOLUME)
 
 pass=0
 fail=0

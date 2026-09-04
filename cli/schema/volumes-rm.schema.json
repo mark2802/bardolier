@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/volumes-rm.schema.json",
-  "title": "bandolier volumes rm output",
+  "$id": "https://bardolier.local/schema/volumes-rm.schema.json",
+  "title": "bardolier volumes rm output",
   "description": "What reclaiming one orphaned volume destroyed. cli-spec.md §6 (Volumes / disk). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,

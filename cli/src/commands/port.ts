@@ -1,5 +1,5 @@
 /**
- * `bandolier port add | remove | list` — `cli-spec.md` §6 (Ports), §5.1.
+ * `bardolier port add | remove | list` — `cli-spec.md` §6 (Ports), §5.1.
  *
  * The gap this closes (`docs/migration-guide-gaps.md`, now resolved): a
  * project whose backend a mobile client must reach directly, a second
@@ -17,7 +17,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { allocateExtraPort } from '../allocator.ts'
 import { attachedExtraPorts, describeExtraPort } from '../extraports.ts'
 import type { ProjectManifest } from '../model/project.ts'
@@ -44,9 +44,9 @@ export type PortAddRequest = PortRequest & {
 }
 
 function requireName(value: string | undefined, usage: string): string {
-  if (!value) throw new BandolierError('INVALID_ARGUMENT', `Usage: bandolier ${usage}`)
+  if (!value) throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${usage}`)
   if (!NAME_PATTERN.test(value)) {
-    throw new BandolierError(
+    throw new BardolierError(
       'INVALID_ARGUMENT',
       `\`${value}\` is not a usable port name: use lower-case letters, digits, dot, dash or underscore, starting with a letter or digit.`,
     )
@@ -55,10 +55,10 @@ function requireName(value: string | undefined, usage: string): string {
 }
 
 function requireContainerPort(value: string | undefined): number {
-  if (!value) throw new BandolierError('INVALID_ARGUMENT', '`--container-port` is required, e.g. --container-port 8888.')
+  if (!value) throw new BardolierError('INVALID_ARGUMENT', '`--container-port` is required, e.g. --container-port 8888.')
   const port = Number(value)
   if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
-    throw new BandolierError('INVALID_ARGUMENT', `\`--container-port ${value}\` is not a usable port (${MIN_PORT}-${MAX_PORT}).`)
+    throw new BardolierError('INVALID_ARGUMENT', `\`--container-port ${value}\` is not a usable port (${MIN_PORT}-${MAX_PORT}).`)
   }
   return port
 }
@@ -72,7 +72,7 @@ export async function runPortAdd(ctx: Context, request: PortAddRequest): Promise
   const { manifest, dir } = project
 
   if (manifest.extra_ports?.[name]) {
-    throw new BandolierError(
+    throw new BardolierError(
       'EXTRA_PORT_ATTACHED',
       `\`${name}\` is already declared on \`${manifest.name}\` on host port ${manifest.extra_ports[name].host_port}.`,
       { project: manifest.name, name, host_port: manifest.extra_ports[name].host_port },
@@ -106,7 +106,7 @@ export function renderPortAdd(output: PortAddOutput): string[] {
     `  host port: ${added.host_port} → :${added.container_port}   ${added.url}`,
     `  compose:   ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`,
     '',
-    `Next: bandolier up ${output.project}`,
+    `Next: bardolier up ${output.project}`,
   ]
 }
 
@@ -120,7 +120,7 @@ export async function runPortRemove(ctx: Context, request: PortRequest): Promise
   const attachment = manifest.extra_ports?.[name]
   if (!attachment) {
     const declared = Object.keys(manifest.extra_ports ?? {}).sort().join(', ')
-    throw new BandolierError(
+    throw new BardolierError(
       'EXTRA_PORT_NOT_ATTACHED',
       `\`${name}\` is not declared on \`${manifest.name}\`.${declared ? ` Declared: ${declared}.` : ''}`,
       { project: manifest.name, name },
@@ -163,7 +163,7 @@ export function collectPortList(ctx: Context, name: string | undefined): PortLis
 
 export function renderPortList(output: PortListOutput): string[] {
   if (output.extra_ports.length === 0) {
-    return [`${output.project} has no extra ports declared.`, '', `Declare one with: bandolier port add ${output.project} notebook --container-port 8888`]
+    return [`${output.project} has no extra ports declared.`, '', `Declare one with: bardolier port add ${output.project} notebook --container-port 8888`]
   }
   const lines = [`${output.project} extra ports:`]
   for (const port of output.extra_ports) {

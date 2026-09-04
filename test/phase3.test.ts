@@ -14,7 +14,7 @@ import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { parse as parseYaml } from 'yaml'
 
-import { BandolierError } from '../cli/src/errors.ts'
+import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { MAX_BAND_SCAN, allocatePorts, assignedPorts } from '../cli/src/allocator.ts'
 import { attachedServices } from '../cli/src/services.ts'
@@ -147,7 +147,7 @@ describe('port allocation (cli-spec.md §5)', () => {
 
   test('ports are stable across stop and start (§5.2)', async () => {
     const box = sandbox()
-    const docker = stubDocker({ startsAs: ['bandolier-myapp', 'bandolier-myapp-postgres'] })
+    const docker = stubDocker({ startsAs: ['bardolier-myapp', 'bardolier-myapp-postgres'] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'myapp')
     await runServiceAdd(ctx, { project: 'myapp', service: 'postgres' })
@@ -196,7 +196,7 @@ describe('port allocation (cli-spec.md §5)', () => {
 
     await assert.rejects(
       () => runServiceAdd(ctx, { project: 'myapp', service: 'tight' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PORT_UNAVAILABLE',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PORT_UNAVAILABLE',
     )
     assert.deepEqual(ports(box, 'myapp'), {}, 'a failed allocation must not be recorded')
   })
@@ -232,7 +232,7 @@ describe('service add (cli-spec.md §6)', () => {
     const compose = box.read('myapp', 'docker-compose.yml') ?? ''
     assert.match(compose, /5432:5432/)
     assert.match(compose, /myapp_pgdata:\/var\/lib\/postgresql\/data/)
-    assert.match(compose, /container_name: bandolier-myapp-postgres/)
+    assert.match(compose, /container_name: bardolier-myapp-postgres/)
   })
 
   test('the manifest stays the single source of truth for the port (§4.2)', async () => {
@@ -251,7 +251,7 @@ describe('service add (cli-spec.md §6)', () => {
 
     await assert.rejects(
       () => runServiceAdd(ctx, { project: 'myapp', service: 'toaster' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_UNKNOWN',
+      (error: unknown) => error instanceof BardolierError && error.code === 'SERVICE_UNKNOWN',
     )
     assert.deepEqual(ports(box, 'myapp'), {})
   })
@@ -264,7 +264,7 @@ describe('service add (cli-spec.md §6)', () => {
 
     await assert.rejects(
       () => runServiceAdd(ctx, { project: 'myapp', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_ATTACHED',
+      (error: unknown) => error instanceof BardolierError && error.code === 'SERVICE_ATTACHED',
     )
     assert.deepEqual(ports(box, 'myapp'), { postgres: 5432 }, 'the first attachment is untouched')
   })
@@ -275,10 +275,10 @@ describe('service add (cli-spec.md §6)', () => {
     await project(ctx, 'myapp')
     const before = box.read('myapp', 'docker-compose.yml')
 
-    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp'] }))
+    const running = makeContext(box, stubDocker({ running: ['bardolier-myapp'] }))
     await assert.rejects(
       () => runServiceAdd(running, { project: 'myapp', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.deepEqual(ports(box, 'myapp'), {})
     assert.equal(box.read('myapp', 'docker-compose.yml'), before)
@@ -292,10 +292,10 @@ describe('service add (cli-spec.md §6)', () => {
 
     // Only the service container is up: the project is `partial`, which is
     // exactly the state a mid-flight rewire would make permanent.
-    const partial = makeContext(box, stubDocker({ running: ['bandolier-myapp-postgres'] }))
+    const partial = makeContext(box, stubDocker({ running: ['bardolier-myapp-postgres'] }))
     await assert.rejects(
       () => runServiceAdd(partial, { project: 'myapp', service: 'redis' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_RUNNING',
     )
   })
 
@@ -304,13 +304,13 @@ describe('service add (cli-spec.md §6)', () => {
     const ctx = makeContext(box)
     await assert.rejects(
       () => runServiceAdd(ctx, { project: 'ghost', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
     )
 
-    const unmounted = makeContext(box, stubDocker(), { env: { BANDOLIER_SSD_ROOT: `${box.root}-gone` } })
+    const unmounted = makeContext(box, stubDocker(), { env: { BARDOLIER_SSD_ROOT: `${box.root}-gone` } })
     await assert.rejects(
       () => runServiceAdd(unmounted, { project: 'myapp', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
     )
   })
 })
@@ -335,7 +335,7 @@ describe('service remove (cli-spec.md §6)', () => {
 
     const compose = box.read('myapp', 'docker-compose.yml') ?? ''
     assert.doesNotMatch(compose, /postgres/)
-    assert.match(compose, /bandolier-myapp/)
+    assert.match(compose, /bardolier-myapp/)
 
     assert.deepEqual(
       docker.calls.filter((call) => call.kind === 'removeVolume'),
@@ -367,7 +367,7 @@ describe('service remove (cli-spec.md §6)', () => {
 
     await assert.rejects(
       () => runServiceRemove(ctx, { project: 'myapp', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_NOT_ATTACHED',
+      (error: unknown) => error instanceof BardolierError && error.code === 'SERVICE_NOT_ATTACHED',
     )
   })
 
@@ -377,10 +377,10 @@ describe('service remove (cli-spec.md §6)', () => {
     await project(ctx, 'myapp')
     await runServiceAdd(ctx, { project: 'myapp', service: 'postgres' })
 
-    const running = makeContext(box, stubDocker({ running: ['bandolier-myapp', 'bandolier-myapp-postgres'] }))
+    const running = makeContext(box, stubDocker({ running: ['bardolier-myapp', 'bardolier-myapp-postgres'] }))
     await assert.rejects(
       () => runServiceRemove(running, { project: 'myapp', service: 'postgres' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_RUNNING',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_RUNNING',
     )
     assert.deepEqual(ports(box, 'myapp'), { postgres: 5432 })
   })
@@ -446,7 +446,7 @@ describe('service list (cli-spec.md §6)', () => {
     const ctx = makeContext(box)
     assert.throws(
       () => collectServiceList(ctx, 'ghost'),
-      (error: unknown) => error instanceof BandolierError && error.code === 'PROJECT_NOT_FOUND',
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
     )
   })
 })
@@ -488,7 +488,7 @@ describe('new --services (cli-spec.md §6)', () => {
 
     await assert.rejects(
       () => runNew(ctx, { name: 'myapp', archetype: 'web', services: 'postgres,toaster' }),
-      (error: unknown) => error instanceof BandolierError && error.code === 'SERVICE_UNKNOWN',
+      (error: unknown) => error instanceof BardolierError && error.code === 'SERVICE_UNKNOWN',
     )
     assert.ok(!box.exists('myapp'))
   })
@@ -497,7 +497,7 @@ describe('new --services (cli-spec.md §6)', () => {
     assert.deepEqual(parseServiceList(' redis , postgres ,redis'), ['postgres', 'redis'])
     assert.throws(
       () => parseServiceList('  ,, '),
-      (error: unknown) => error instanceof BandolierError && error.code === 'INVALID_ARGUMENT',
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
     )
   })
 })
@@ -507,7 +507,7 @@ describe('new --services (cli-spec.md §6)', () => {
 describe('add → up → status → down → remove → delete', () => {
   test('the whole loop keeps one story about ports', async () => {
     const box = sandbox()
-    const docker = stubDocker({ startsAs: ['bandolier-myapp', 'bandolier-myapp-postgres'], volumes: ['myapp_pgdata'] })
+    const docker = stubDocker({ startsAs: ['bardolier-myapp', 'bardolier-myapp-postgres'], volumes: ['myapp_pgdata'] })
     const ctx = makeContext(box, docker)
 
     await project(ctx, 'myapp')
@@ -554,7 +554,7 @@ describe('add → up → status → down → remove → delete', () => {
 
     const deleted = await runDelete(ctx, { name: 'myapp', force: true, keepData: true, purge: false, json: true })
     assert.deepEqual(deleted.released_ports, [5432, 6379])
-    assert.deepEqual(deleted.kept_volumes, ['bandolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(deleted.kept_volumes, ['bardolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
 
     await project(ctx, 'next')
     const reused = await runServiceAdd(ctx, { project: 'next', service: 'postgres' })

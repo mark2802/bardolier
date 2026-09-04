@@ -1,5 +1,5 @@
 /**
- * `bandolier down <name>` — `cli-spec.md` §6 (Projects).
+ * `bardolier down <name>` — `cli-spec.md` §6 (Projects).
  *
  * Stops and removes the project's containers. DATA PERSISTS: `compose down` is
  * called without `-v`, so named volumes survive, and the bind-mounted project

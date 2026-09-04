@@ -1,5 +1,5 @@
 /**
- * `bandolier service add | remove | list` — `cli-spec.md` §6 (Services), §5.
+ * `bardolier service add | remove | list` — `cli-spec.md` §6 (Services), §5.
  *
  * Add and remove both REQUIRE THE PROJECT STOPPED and fail PROJECT_RUNNING
  * otherwise. That is a design choice, not a limitation: a hot-apply path would
@@ -21,7 +21,7 @@
  */
 
 import type { Context } from '../context.ts'
-import { BandolierError } from '../errors.ts'
+import { BardolierError } from '../errors.ts'
 import { attachedKeys, renderCompose, volumeName } from '../compose.ts'
 import { allocatePorts, type PortRequest } from '../allocator.ts'
 import { attachedServices, describeService } from '../services.ts'
@@ -38,7 +38,7 @@ export type ServiceRequest = {
 }
 
 function requireServiceKey(value: string | undefined, usage: string): string {
-  if (!value) throw new BandolierError('INVALID_ARGUMENT', `Usage: bandolier ${usage}`)
+  if (!value) throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${usage}`)
   return value
 }
 
@@ -55,9 +55,9 @@ export function catalogueIfNeeded(ctx: Context, manifest: ProjectManifest): Serv
 export async function requireStopped(ctx: Context, project: DiscoveredProject, action: string): Promise<void> {
   const observed = await observeProject(ctx, project.manifest)
   if (observed.state === 'stopped') return
-  throw new BandolierError(
+  throw new BardolierError(
     'PROJECT_RUNNING',
-    `\`${project.name}\` is ${observed.state}; ${action} needs it stopped. Run \`bandolier down ${project.name}\` first.`,
+    `\`${project.name}\` is ${observed.state}; ${action} needs it stopped. Run \`bardolier down ${project.name}\` first.`,
     { project: project.name, state: observed.state },
   )
 }
@@ -75,7 +75,7 @@ export function persist(dir: string, manifest: ProjectManifest, catalogue: Servi
 
   const { valid, errors } = validate('project', manifest)
   if (!valid) {
-    throw new BandolierError('INTERNAL_ERROR', `Updated manifest does not match the project schema: ${errors.join('; ')}`)
+    throw new BardolierError('INTERNAL_ERROR', `Updated manifest does not match the project schema: ${errors.join('; ')}`)
   }
 
   writeManifest(dir, manifest)
@@ -93,7 +93,7 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
   const definition = catalogue.services[key]
   if (!definition) {
     const known = Object.keys(catalogue.services).sort().join(', ')
-    throw new BandolierError(
+    throw new BardolierError(
       'SERVICE_UNKNOWN',
       `The service catalogue defines no \`${key}\`. Known services: ${known || 'none'}.`,
       { service: key },
@@ -101,7 +101,7 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
   }
 
   if (manifest.services?.[key]) {
-    throw new BandolierError(
+    throw new BardolierError(
       'SERVICE_ATTACHED',
       `\`${key}\` is already attached to \`${manifest.name}\` on host port ${manifest.services[key].host_port}.`,
       { project: manifest.name, service: key, host_port: manifest.services[key].host_port },
@@ -112,7 +112,7 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
 
   const allocated = await allocatePorts(ctx, manifest.name, [{ key, definition }])
   const hostPort = allocated.get(key)
-  if (hostPort === undefined) throw new BandolierError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
+  if (hostPort === undefined) throw new BardolierError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
 
   const next: ProjectManifest = {
     ...manifest,
@@ -138,7 +138,7 @@ export function renderServiceAdd(output: ServiceAddOutput): string[] {
     `  compose:   ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`,
     '',
     `The host port is a debugging tap. Inside the project, connect to \`${added.key}:${added.container_port}\`.`,
-    `Next: bandolier up ${output.project}`,
+    `Next: bardolier up ${output.project}`,
   ]
 }
 
@@ -152,7 +152,7 @@ export async function runServiceRemove(ctx: Context, request: ServiceRequest): P
   const attachment = manifest.services?.[key]
   if (!attachment) {
     const attached = attachedKeys(manifest).join(', ')
-    throw new BandolierError(
+    throw new BardolierError(
       'SERVICE_NOT_ATTACHED',
       `\`${key}\` is not attached to \`${manifest.name}\`.${attached ? ` Attached: ${attached}.` : ''}`,
       { project: manifest.name, service: key },
@@ -196,7 +196,7 @@ export function renderServiceRemove(output: ServiceRemoveOutput): string[] {
     `  released host port ${removed.host_port} — free for the next \`service add\`.`,
   ]
   if (removed.volume) {
-    lines.push(`  kept volume ${removed.volume}; it is now an orphan (\`bandolier volumes orphaned\`).`)
+    lines.push(`  kept volume ${removed.volume}; it is now an orphan (\`bardolier volumes orphaned\`).`)
   } else {
     lines.push('  its volume was kept, but the catalogue no longer defines the service, so its name is unknown.')
   }
@@ -217,7 +217,7 @@ export function collectServiceList(ctx: Context, name: string | undefined): Serv
 
 export function renderServiceList(output: ServiceListOutput): string[] {
   if (output.services.length === 0) {
-    return [`${output.project} has no services attached.`, '', `Attach one with: bandolier service add ${output.project} postgres`]
+    return [`${output.project} has no services attached.`, '', `Attach one with: bardolier service add ${output.project} postgres`]
   }
   const lines = [`${output.project} services:`]
   for (const service of output.services) {
@@ -235,7 +235,7 @@ export function parseServiceList(value: string): string[] {
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
   if (keys.length === 0) {
-    throw new BandolierError('INVALID_ARGUMENT', '`--services` expects a comma-separated list of catalogue keys, e.g. postgres,redis.')
+    throw new BardolierError('INVALID_ARGUMENT', '`--services` expects a comma-separated list of catalogue keys, e.g. postgres,redis.')
   }
   return [...new Set(keys)].sort()
 }
@@ -246,7 +246,7 @@ export function resolveServices(catalogue: ServiceCatalogue, keys: readonly stri
     const definition = catalogue.services[key]
     if (!definition) {
       const known = Object.keys(catalogue.services).sort().join(', ')
-      throw new BandolierError('SERVICE_UNKNOWN', `The service catalogue defines no \`${key}\`. Known services: ${known || 'none'}.`, {
+      throw new BardolierError('SERVICE_UNKNOWN', `The service catalogue defines no \`${key}\`. Known services: ${known || 'none'}.`, {
         service: key,
       })
     }

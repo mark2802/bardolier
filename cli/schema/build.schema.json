@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bandolier.local/schema/build.schema.json",
-  "title": "bandolier build output",
-  "description": "Base images considered by `bandolier build`. cli-spec.md §6 (Images), §4.3.",
+  "$id": "https://bardolier.local/schema/build.schema.json",
+  "title": "bardolier build output",
+  "description": "Base images considered by `bardolier build`. cli-spec.md §6 (Images), §4.3.",
   "type": "object",
   "additionalProperties": false,
   "required": ["uid", "gid", "images"],
@@ -16,7 +16,7 @@
         "additionalProperties": false,
         "required": ["image", "archetypes", "status", "dockerfile"],
         "properties": {
-          "image": { "type": "string", "enum": ["bandolier-web", "bandolier-ios", "bandolier-and"] },
+          "image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
           "archetypes": {
             "type": "array",
             "items": { "type": "string", "enum": ["web", "ios", "android", "library"] }

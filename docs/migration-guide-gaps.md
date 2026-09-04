@@ -1,6 +1,6 @@
-# bandolier gaps found while migrating projects
+# bardolier gaps found while migrating projects
 
-Capabilities `docs/migration-guide.md` needed but bandolier/the app don't have
+Capabilities `docs/migration-guide.md` needed but bardolier/the app don't have
 yet. Each entry is a candidate for a future `docs/phases/N-slug.md`, not a
 scoped plan itself — write one when there's enough real evidence (from
 actual migrations) to know its shape. Entries are phrased generically; no
@@ -43,7 +43,7 @@ that pairs a web frontend with native mobile clients.
 
 **Resolved by:** Phase 12 (`docs/phases/12-extra-ports.md`) — `extra_ports`
 in `project.yml`, a named, per-project port independent of archetype,
-published in compose alongside `app_port`. `bandolier port add <project> <name>
+published in compose alongside `app_port`. `bardolier port add <project> <name>
 --container-port <n>` declares one; the allocator starts at the given
 container port (no catalogue band to inherit) and persists the pair, exactly
 like `app_port`. See `cli-spec.md` §5.1 and Part 2 of the migration guide.
@@ -69,6 +69,6 @@ already has one; this is about archetypes that start with *zero*.
 shaped like pure research/analysis code that also pins a notebook server.
 
 **Resolved by:** the same mechanism as the entry above — `extra_ports` is
-archetype-independent, so `bandolier port add` works identically on `library`,
+archetype-independent, so `bardolier port add` works identically on `library`,
 `ios` and `android` as on `web`; there is no separate "opt-in per archetype"
 flag, because nothing about the port depends on what the archetype serves.

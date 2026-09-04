@@ -11,7 +11,7 @@
  */
 
 import { createInterface } from 'node:readline'
-import { BandolierError } from './errors.ts'
+import { BardolierError } from './errors.ts'
 
 /** Resolves true only on an explicit yes. */
 export type Confirm = (question: string) => Promise<boolean>
@@ -24,7 +24,7 @@ export function createConfirm(
     new Promise((resolve, reject) => {
       if (!input.isTTY) {
         reject(
-          new BandolierError(
+          new BardolierError(
             'INVALID_ARGUMENT',
             'Cannot ask for confirmation without a terminal. Re-run with --force if you mean it.',
           ),

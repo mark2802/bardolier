@@ -1,14 +1,14 @@
 {
-  "name": "bandolier",
+  "name": "bardolier",
   "version": "0.0.0",
   "private": true,
-  "description": "Container Project Manager — bandolier CLI + macOS menu-bar app",
+  "description": "Container Project Manager — bardolier CLI + macOS menu-bar app",
   "type": "module",
   "workspaces": [
     "cli"
   ],
   "scripts": {
-    "bandolier": "node cli/bin/bandolier.js",
+    "bardolier": "node cli/bin/bardolier.js",
     "test": "node --test 'test/**/*.test.ts'",
     "test:quiet": "node --test --test-reporter=dot 'test/**/*.test.ts'",
     "typecheck": "npm run typecheck --workspace cli",

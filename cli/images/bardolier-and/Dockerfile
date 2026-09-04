@@ -1,4 +1,4 @@
-# bandolier-and — base image for the `android` archetype (cli-spec.md §4.3).
+# bardolier-and — base image for the `android` archetype (cli-spec.md §4.3).
 #
 # GRADLE BUILDS AND UNIT TESTS RUN HERE. The emulator does not: an AVD needs
 # host virtualisation and a display, so instrumented tests are the human's job
@@ -6,10 +6,10 @@
 # the agent inside). `adb` is deliberately NOT installed — see platform-tools
 # below — so the boundary is a fact about the image, not just advice.
 #
-# Built by `bandolier build`, which passes HOST_UID/HOST_GID so that everything the
+# Built by `bardolier build`, which passes HOST_UID/HOST_GID so that everything the
 # container writes into the bind-mounted /work is owned by the Mac user.
 #
-# ARCHITECTURE: this image is pinned to linux/amd64 by `bandolier build` and by the
+# ARCHITECTURE: this image is pinned to linux/amd64 by `bardolier build` and by the
 # generated compose file (cli/src/images.ts). Google publishes the Linux SDK
 # build tools — aapt2 above all — for x86_64 ONLY; there is no linux-aarch64
 # aapt2 in the SDK or on maven.google.com. On Apple Silicon Docker therefore
@@ -21,7 +21,7 @@ ARG JAVA_VERSION=21
 FROM eclipse-temurin:${JAVA_VERSION}-jdk-noble
 
 # 501:20 is the macOS default (first user, `staff`) — the common case, and only
-# a default: `bandolier build` always passes the real values.
+# a default: `bardolier build` always passes the real values.
 ARG HOST_UID=501
 ARG HOST_GID=20
 ARG USERNAME=dev
@@ -29,7 +29,7 @@ ARG USERNAME=dev
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
 
-# The same working kit as bandolier-web, plus the archive tools the SDK needs.
+# The same working kit as bardolier-web, plus the archive tools the SDK needs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
@@ -55,10 +55,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # linux/amd64 for aapt2's sake (see the header), so the x64 build is the right
 # one and runs under the same emulation as everything else in here.
 #
-# `bandolier build` defaults CLAUDE_CODE_VERSION to `latest`, resolved at build
+# `bardolier build` defaults CLAUDE_CODE_VERSION to `latest`, resolved at build
 # time and still checksum-verified — unlike every other pin here.
 # `--claude-code-version <X.Y.Z>` pins an exact release when needed
-# (cli/images/bandolier-web/Dockerfile has the full case for why).
+# (cli/images/bardolier-web/Dockerfile has the full case for why).
 ARG CLAUDE_CODE_VERSION=2.1.247
 ARG TARGETARCH
 RUN set -eux; \
@@ -135,8 +135,8 @@ RUN set -eux; \
 # Gradle's caches are large, rebuildable, and identical across projects — the
 # Android Gradle Plugin and its transitive world are hundreds of megabytes that
 # every project would otherwise download for itself, onto the SSD, which is the
-# scarce disk. So /cache/gradle is a NAMED VOLUME shared by every bandolier-and
-# container (cli/src/images.ts, IMAGE_CACHE): `bandolier up` creates it, the
+# scarce disk. So /cache/gradle is a NAMED VOLUME shared by every bardolier-and
+# container (cli/src/images.ts, IMAGE_CACHE): `bardolier up` creates it, the
 # generated compose file mounts it, and nothing about it is the project's.
 #
 # It must exist in the image, owned by the host user: Docker seeds a new named
@@ -150,7 +150,7 @@ ENV GRADLE_USER_HOME=/cache/gradle
 
 # A PERSISTENT HOME, at a path the compose file can name (cli/src/images.ts,
 # CONTAINER_HOME) — the SAME argument as /cache/gradle above, but per project
-# rather than shared: `bandolier down` removes the container, so a home in the
+# rather than shared: `bardolier down` removes the container, so a home in the
 # container layer takes the shell history, the dotfiles and any `claude login`
 # with it, and the next `up` starts from nothing.
 #
