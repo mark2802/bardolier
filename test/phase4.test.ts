@@ -78,6 +78,29 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     assert.ok(validate('shell', output).valid)
   })
 
+  test('--root swaps to `docker exec -u root`, same container, same checks (phase 14)', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['cproj-alpha'] })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'alpha')
+
+    const output = await runShell(ctx, 'alpha', { root: true })
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-it', 'cproj-alpha', 'bash'])
+    assert.ok(validate('shell', output).valid)
+  })
+
+  test('a stopped project is PROJECT_STOPPED with --root too', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: [] })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'alpha')
+
+    await assert.rejects(
+      () => runShell(ctx, 'alpha', { root: true }),
+      (error: unknown) => error instanceof CprojError && error.code === 'PROJECT_STOPPED',
+    )
+  })
+
   test('spawns nothing — the daemon is only ever asked what is running', async () => {
     const box = sandbox()
     const docker = stubDocker({ running: ['cproj-alpha'] })

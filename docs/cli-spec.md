@@ -263,12 +263,17 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   container builds/runs from. Manifest-only, no daemon consulted.
 
 ### Shell
-- `cproj shell <name> [--print]`
+- `cproj shell <name> [--print] [--root]`
   For a running project, resolves the dev container and returns the exec
   invocation. With `--json`, returns `{ "container": "...", "exec": ["docker",
   "exec","-it","<c>","bash"] }`. The **app** spawns the terminal; the CLI names
   the command. `--print` (human mode) prints the command to run. Errors
   `PROJECT_STOPPED`.
+  `--root` swaps the invocation to `["docker","exec","-u","root","-it","<c>",
+  "bash"]` — same container, same checks, one argv difference. It is
+  ephemeral: nothing installed while root survives a `down` any more than any
+  other runtime change (§6 Deps). Anything meant to persist belongs in
+  `extra_packages`, not this shell.
 
 ### Volumes / disk
 - `cproj volumes orphaned` — array of `{ name, size_bytes, size_human,

@@ -435,15 +435,19 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['shell'],
     group: 'Shell',
-    usage: 'shell <name> [--print]',
+    usage: 'shell <name> [--print] [--root]',
     summary: 'Resolve the dev container and RETURN the exec invocation. The CLI spawns no terminal.',
-    flags: [{ name: '--print', description: 'Human mode: print the command to run.' }],
+    flags: [
+      { name: '--print', description: 'Human mode: print the command to run.' },
+      { name: '--root', description: 'Open as root (`docker exec -u root`) instead of the image user. Ephemeral.' },
+    ],
     errors: ['PROJECT_NOT_FOUND', 'PROJECT_STOPPED', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('shell'), 1)
       // Same payload either way; `--print` only chooses the human renderer, so
       // the machine contract cannot drift from the flag (§2).
-      return output(await runShell(createContext(), name), boolFlag(inv, '--print') ? renderShellPrint : renderShell)
+      const result = await runShell(createContext(), name, { root: boolFlag(inv, '--root') })
+      return output(result, boolFlag(inv, '--print') ? renderShellPrint : renderShell)
     },
   },
 

@@ -46,6 +46,10 @@ struct MenuBarRootView: View {
     @State private var expandedProject: String?
     @State private var confirmation: ConfirmationRequest?
 
+    // Option-held state for the root-shell alternate item (phase 14). Started
+    // and stopped with the menu, not a permanent global monitor.
+    @StateObject private var optionKey = OptionKeyObserver()
+
     var body: some View {
         VStack(spacing: 0) {
             if let confirmation {
@@ -70,8 +74,11 @@ struct MenuBarRootView: View {
             }
         }
         .frame(width: menuWidth)
+        .environmentObject(optionKey)
         // §4: refresh on every menu open, debounced by the store.
         .task { await store.appear() }
+        .onAppear { optionKey.start() }
+        .onDisappear { optionKey.stop() }
     }
 
     // MARK: - The menu itself (§5)
@@ -319,6 +326,7 @@ struct MenuBarRootView: View {
 struct ProjectRow: View {
     @EnvironmentObject private var store: CprojStore
     @EnvironmentObject private var preferences: AppPreferences
+    @EnvironmentObject private var optionKey: OptionKeyObserver
 
     var project: CprojProject
     var isExpanded: Bool
@@ -356,8 +364,16 @@ struct ProjectRow: View {
                         ) {
                             Task { await store.stop(project: project.name) }
                         }
-                        MenuTextRow(title: "Open shell", systemImage: "terminal", isDisabled: store.isBusy) {
-                            Task { await store.openShell(project: project.name) }
+                        // Option-held swaps to a root shell — same idiom as
+                        // Finder's Option-held Secure Empty Trash. The common
+                        // case says nothing about this; it's there for whoever
+                        // holds the key (phase 14).
+                        MenuTextRow(
+                            title: optionKey.isOptionHeld ? "Open root shell" : "Open shell",
+                            systemImage: optionKey.isOptionHeld ? "terminal.fill" : "terminal",
+                            isDisabled: store.isBusy
+                        ) {
+                            Task { await store.openShell(project: project.name, root: optionKey.isOptionHeld) }
                         }
                     } else {
                         // §7: the auto-shell preference is invisible until it

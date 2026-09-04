@@ -16,12 +16,13 @@
 # rather than seconds; --through 7 skips that. Phase 11 also rebuilds an image
 # (claude-web), but it's a fast Node build, not the emulated Android one. Phase
 # 13 builds a small derived image on top of it (one apt package) — also fast.
+# Phase 14 is a one-argv-difference `docker exec`, no image work.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-LAST=13
+LAST=14
 THROUGH="$LAST"
 
 while [ $# -gt 0 ]; do

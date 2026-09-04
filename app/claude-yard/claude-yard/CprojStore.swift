@@ -409,9 +409,9 @@ final class CprojStore: ObservableObject {
     /// Both halves can fail differently and are reported differently: `cproj
     /// shell` refusing (the project is stopped) is a CLI failure, while the
     /// terminal refusing is a Preferences problem and says so.
-    func openShell(project name: String) async {
+    func openShell(project name: String, root: Bool = false) async {
         do {
-            let invocation = try await client.shell(project: name)
+            let invocation = try await client.shell(project: name, root: root)
             // A note comes back when the shell opened by a lesser route — say
             // so, rather than letting a silent downgrade look like normal.
             if let note = try CprojTerminal.open(invocation, in: terminalName) {

@@ -116,8 +116,12 @@ nonisolated struct CprojClient: Sendable {
 
     /// The exec invocation for a running project's dev container. The app
     /// launches the user's terminal with `exec` verbatim.
-    func shell(project: String) async throws -> ShellInvocation {
-        try await run(["shell", project])
+    ///
+    /// `root: true` appends `--root` (Option-held "Open root shell" in the
+    /// menu, phase 14) — same seam as every other flag this client appends
+    /// itself; no caller may append `--root` any more than `--json`.
+    func shell(project: String, root: Bool = false) async throws -> ShellInvocation {
+        try await run(["shell", project] + (root ? ["--root"] : []))
     }
 
     func orphanedVolumes() async throws -> OrphanedVolumesOutput {

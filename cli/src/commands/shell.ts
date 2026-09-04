@@ -22,7 +22,11 @@ import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
 
-export async function runShell(ctx: Context, name: string | undefined): Promise<ShellOutput> {
+export async function runShell(
+  ctx: Context,
+  name: string | undefined,
+  options: { root?: boolean } = {},
+): Promise<ShellOutput> {
   const project = requireProject(ctx, name)
   const container = devContainerName(project.name)
 
@@ -47,7 +51,11 @@ export async function runShell(ctx: Context, name: string | undefined): Promise<
     container,
     // `-it` because this argv is handed to a terminal, where a shell without a
     // TTY is useless. The app runs it verbatim — no shell, no quoting.
-    exec: ['docker', 'exec', '-it', container, 'bash'],
+    // `-u root` (only when asked) is `docker exec` overriding the image's own
+    // USER for this one exec — ephemeral, same as any other runtime change.
+    exec: options.root
+      ? ['docker', 'exec', '-u', 'root', '-it', container, 'bash']
+      : ['docker', 'exec', '-it', container, 'bash'],
     workdir: WORKDIR,
   }
 }
