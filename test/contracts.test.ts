@@ -515,12 +515,16 @@ describe('command surface (cli-spec.md §6)', () => {
 
   /**
    * Every command §6 itself names. Phase 4 completed the original set; Phase
-   * 12 extended §6 with Ports (`port add/remove/list`), additively — the
-   * "declares nothing beyond §6" test below still holds because §6 itself grew.
+   * 12 extended §6 with Ports (`port add/remove/list`) and Phase 13 with Deps
+   * (`deps add/remove/list`), both additively — the "declares nothing beyond
+   * §6" test below still holds because §6 itself grew.
    */
   const SPEC_COMMANDS = [
     'build',
     'delete',
+    'deps add',
+    'deps list',
+    'deps remove',
     'doctor',
     'down',
     'down-all',

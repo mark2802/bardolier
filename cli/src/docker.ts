@@ -90,7 +90,7 @@ export type ContainerExec = {
 }
 
 export type BuildRequest = {
-  /** Image name, e.g. `claude-web`. Tagged `:latest`. */
+  /** Full image reference, e.g. `claude-web:latest` or `cproj-deps-claude-web:<hash>`. */
   readonly tag: string
   /** Absolute path to the build context directory. */
   readonly context: string
@@ -395,7 +395,7 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
     },
 
     async build(request) {
-      const args: string[] = ['build', '--tag', `${request.tag}:latest`, '--file', request.dockerfile]
+      const args: string[] = ['build', '--tag', request.tag, '--file', request.dockerfile]
       // Before the build args, so the argv reads the way the docs write it.
       if (request.platform) args.push('--platform', request.platform)
       // Sorted so the same build twice is the same argv — one less reason for a

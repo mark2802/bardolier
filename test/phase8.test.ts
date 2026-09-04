@@ -107,7 +107,7 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
 
       const call = docker.calls[0]
       assert.ok(call?.kind === 'build')
-      assert.equal(call.request.tag, image)
+      assert.equal(call.request.tag, `${image}:latest`)
       assert.ok(call.request.dockerfile.endsWith(join(image, 'Dockerfile')))
     }
   })

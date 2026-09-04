@@ -290,6 +290,20 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   reaches the LAN the same way the Mac does — but confirm reachability from
   inside the container once, after the first `up`, rather than assuming it.
 
+- **The project's toolchain needs OS-level packages the base image doesn't
+  ship** — Playwright's browser dependencies (`libnss3`, `libatk-bridge2.0-0`,
+  …) are the recurring case, but anything the old Dockerfile ran `apt-get
+  install` for beyond the base image's own kit qualifies. `cproj deps add
+  <project> <package...>` (stopped project only) declares one or more apt
+  package names; `cproj up` then builds a derived image with them installed
+  and switches the dev container to it — nothing to hand-edit, and nothing
+  installed at container-runtime (there's no root there, and `down` throws the
+  writable layer away regardless). `cproj deps remove <project> <package...>`
+  undeclares them; `cproj deps list <project>` shows what's declared and which
+  image the container currently resolves to. See `cli-spec.md` §6 (Deps),
+  §4.2, §9. This is for OS packages only — a genuinely new language/toolchain
+  is the different, bigger gap below.
+
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
   situational fix — it's the same shape of change Phase 11 made for Python.

@@ -41,6 +41,10 @@ const EXTENDED_ERROR_CODES = [
   'EXTRA_PORT_ATTACHED',
   /** `port remove` named something not declared. */
   'EXTRA_PORT_NOT_ATTACHED',
+  /** `deps add` reused a package name already declared on the project. */
+  'PACKAGE_ATTACHED',
+  /** `deps remove` named something not declared. */
+  'PACKAGE_NOT_ATTACHED',
   /** `eject` on an `ssd_volume` that isn't a removable volume — use `down-all` instead. */
   'EJECT_NOT_APPLICABLE',
   /** Anything that escaped as an unexpected exception. */

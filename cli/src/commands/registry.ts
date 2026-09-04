@@ -48,8 +48,9 @@ import {
   runServiceRemove,
 } from './service.ts'
 import { collectPortList, renderPortAdd, renderPortList, renderPortRemove, runPortAdd, runPortRemove } from './port.ts'
+import { collectDepsList, renderDepsAdd, renderDepsList, renderDepsRemove, runDepsAdd, runDepsRemove } from './deps.ts'
 
-export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
+export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Deps', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
 
 export type FlagSpec = {
@@ -122,6 +123,14 @@ function atMostOneArg(inv: Invocation, command: string, placeholder: string): st
 /** Exactly `count` positionals, or INVALID_ARGUMENT naming the usage. */
 function exactArgs(inv: Invocation, command: CommandNode, count: number): string[] {
   if (inv.args.length !== count) {
+    throw new CprojError('INVALID_ARGUMENT', `Usage: cproj ${command.usage}`)
+  }
+  return [...inv.args]
+}
+
+/** At least `count` positionals, or INVALID_ARGUMENT naming the usage — `deps add/remove`'s variadic package list. */
+function minArgs(inv: Invocation, command: CommandNode, count: number): string[] {
+  if (inv.args.length < count) {
     throw new CprojError('INVALID_ARGUMENT', `Usage: cproj ${command.usage}`)
   }
   return [...inv.args]
@@ -368,6 +377,55 @@ export const COMMANDS: readonly CommandNode[] = [
         run: (inv) => {
           const [project] = exactArgs(inv, byPath('port list'), 1)
           return output(collectPortList(createContext(), project), renderPortList)
+        },
+      },
+    ],
+  },
+
+  // ── Deps ───────────────────────────────────────────────────────────────────
+  {
+    path: ['deps'],
+    group: 'Deps',
+    usage: 'deps <add | remove | list>',
+    summary: 'OS packages a project\'s toolchain needs beyond its base image. Add/remove require the project stopped.',
+    flags: [],
+    errors: [],
+    run: group('deps'),
+    children: [
+      {
+        path: ['deps', 'add'],
+        group: 'Deps',
+        usage: 'deps add <project> <package...>',
+        summary: 'Declare one or more apt packages; built into a derived image on the next `up`.',
+        flags: [],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'PACKAGE_ATTACHED', 'INVALID_ARGUMENT'],
+        run: async (inv) => {
+          const [project, ...packages] = minArgs(inv, byPath('deps add'), 2)
+          return output(await runDepsAdd(createContext(), { project, packages }), renderDepsAdd)
+        },
+      },
+      {
+        path: ['deps', 'remove'],
+        group: 'Deps',
+        usage: 'deps remove <project> <package...>',
+        summary: 'Remove one or more declared packages.',
+        flags: [],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'PACKAGE_NOT_ATTACHED', 'INVALID_ARGUMENT'],
+        run: async (inv) => {
+          const [project, ...packages] = minArgs(inv, byPath('deps remove'), 2)
+          return output(await runDepsRemove(createContext(), { project, packages }), renderDepsRemove)
+        },
+      },
+      {
+        path: ['deps', 'list'],
+        group: 'Deps',
+        usage: 'deps list <project>',
+        summary: 'Declared packages and the image the dev container builds/runs from.',
+        flags: [],
+        errors: ['PROJECT_NOT_FOUND'],
+        run: (inv) => {
+          const [project] = exactArgs(inv, byPath('deps list'), 1)
+          return output(collectDepsList(createContext(), project), renderDepsList)
         },
       },
     ],

@@ -22,6 +22,15 @@
       "description": "Resolved from archetype per cli-spec.md §4.3.",
       "enum": ["claude-web", "claude-ios", "claude-and"]
     },
+    "extra_packages": {
+      "type": "array",
+      "description": "OS-level apt packages this project's toolchain needs beyond its base image (cli-spec.md §4.2, Phase 13), sorted and deduped. Absent or empty means the dev container runs the plain base image.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9+.-]*$"
+      }
+    },
     "services": {
       "type": "object",
       "description": "Attached services keyed by catalogue key. Absent or empty means none attached.",

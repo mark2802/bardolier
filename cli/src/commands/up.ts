@@ -1,19 +1,24 @@
 /**
  * `cproj up <name> [--no-shell]` — `cli-spec.md` §6 (Projects).
  *
- * Three things happen, in this order, and the order matters:
+ * Several things happen, in this order, and the order matters:
  *
  *   1. Regenerate the compose file from the manifest. The manifest is the truth
  *      (§4.2); starting from a stale or hand-edited compose file would start
  *      something the manifest does not describe.
- *   2. Validate every recorded host port is still bindable (§5). A port squatted
+ *   2. Build the derived image, when the project declares extra OS packages
+ *      (§4.2 `extra_packages`, `deps.ts`) — Compose references a local tag and
+ *      never builds it itself. Docker's own build cache makes a repeat `up`
+ *      with an unchanged package list cheap, so this runs unconditionally
+ *      rather than checking whether the image already exists.
+ *   3. Validate every recorded host port is still bindable (§5). A port squatted
  *      while the project was down fails PORT_UNAVAILABLE naming the port — never
  *      a silent remap, which would break saved connection strings.
- *   3. Create the base image's shared toolchain cache volume, if it has one.
+ *   4. Create the base image's shared toolchain cache volume, if it has one.
  *      The compose file declares it `external` precisely so that Compose does
  *      not claim a volume every android project shares (`images.ts`), which
  *      leaves someone having to make it — and `up` is the only starter.
- *   4. `docker compose up -d`.
+ *   5. `docker compose up -d`.
  *
  * Idempotent (§2): `up` on a running project is a no-op success. The CLI never
  * spawns a terminal — `open_shell` only tells the app what the user asked for.
@@ -24,7 +29,9 @@ import { CprojError } from '../errors.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../naming.ts'
 import { attachedKeys, CACHE_VOLUME_LABELS, cacheFor, PASSTHROUGH_ENV } from '../compose.ts'
 import { attachedExtraPorts, extraPortNames } from '../extraports.ts'
+import { attachedPackages, derivedImageTag, writeDerivedDockerfile } from '../deps.ts'
 import { ARCHETYPE_APP_PORT } from '../model/archetype.ts'
+import { IMAGE_PLATFORM } from '../images.ts'
 import { allocateAppPort } from '../allocator.ts'
 import { appUrl } from '../services.ts'
 import type { UpOutput, UpService } from '../model/lifecycle.ts'
@@ -125,6 +132,25 @@ async function composeEnv(ctx: Context): Promise<Record<string, string>> {
   return env
 }
 
+/**
+ * Build the derived image for this manifest's declared packages, if any —
+ * step 2 above. A no-op when `extra_packages` is empty; otherwise the
+ * Dockerfile is (re)written deterministically and built, so `composeUp` finds
+ * the local tag it references already there.
+ */
+async function ensureDepsImage(ctx: Context, manifest: ProjectManifest): Promise<void> {
+  const packages = attachedPackages(manifest)
+  if (packages.length === 0) return
+  const { context, dockerfile } = writeDerivedDockerfile(ctx.loaded.path, manifest.base_image, packages, ctx.host.uid, ctx.host.gid)
+  await ctx.docker.build({
+    tag: derivedImageTag(manifest.base_image, packages),
+    context,
+    dockerfile,
+    args: {},
+    platform: IMAGE_PLATFORM[manifest.base_image] ?? null,
+  })
+}
+
 export type UpRequest = {
   readonly name: string | undefined
   readonly noShell: boolean
@@ -159,6 +185,7 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
   const alreadyRunning = before.state === 'running'
 
   if (!alreadyRunning) {
+    await ensureDepsImage(ctx, manifest)
     await validatePorts(ctx, manifest, before.runningServices, before.devRunning)
     const cache = cacheFor(manifest)
     if (cache) await ctx.docker.ensureVolume(cache.volume, CACHE_VOLUME_LABELS)

@@ -46,6 +46,13 @@ export type ProjectManifest = {
    */
   extra_ports?: Record<string, ProjectExtraPort>
   /**
+   * OS-level apt packages this project's toolchain needs beyond its base
+   * image (Playwright's `libnss3`/`libatk`/… and the like) — sorted, deduped.
+   * Absent/empty means the dev container runs the plain base image;
+   * otherwise it runs a derived image built at `up` (`deps.ts`).
+   */
+  extra_packages?: string[]
+  /**
    * Host port published for the archetype's dev server (§9,
    * `ARCHETYPE_APP_PORT`), assigned once and stable exactly like a service's.
    *

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/deps-list.schema.json",
+  "title": "cproj deps list output",
+  "description": "Declared extra packages and the resolved image. cli-spec.md §6 (Deps). Manifest only — no daemon is consulted, so it answers with Docker down.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "extra_packages", "image"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "extra_packages": {
+      "type": "array",
+      "description": "Declared packages, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "image": {
+      "type": "string",
+      "description": "The image this project's dev container builds/runs from (deps.ts).",
+      "minLength": 1
+    }
+  }
+}

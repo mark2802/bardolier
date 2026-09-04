@@ -141,6 +141,9 @@ const MIRRORS: readonly (readonly [schema: string, path: string, swift: string])
   ['port-remove', '', 'PortRemoveOutput'],
   ['port-remove', 'properties/removed', 'RemovedExtraPort'],
   ['port-list', '', 'PortListOutput'],
+  ['deps-add', '', 'DepsAddOutput'],
+  ['deps-remove', '', 'DepsRemoveOutput'],
+  ['deps-list', '', 'DepsListOutput'],
   ['volumes-orphaned', '', 'OrphanedVolumesOutput'],
   ['volumes-orphaned', '$defs/orphanedVolume', 'OrphanedVolume'],
   ['volumes-rm', '', 'VolumeRemoveOutput'],
@@ -311,6 +314,41 @@ describe('the app can actually find the terminal (app-spec.md §7)', () => {
   test('a terminal that cannot be found still opens a shell', () => {
     // NSWorkspace.open(file) with no app named = whatever handles .command.
     assert.match(source, /NSWorkspace\.shared\.open\(file\)/)
+  })
+
+  // Terminal TYPES the command into a new login shell, before that shell's rc
+  // files have finished. An rc that reads a keystroke (oh-my-zsh's update
+  // prompt) ate the first character, and the shell ran a truncated command.
+  test('the typed command survives an rc file that reads a keystroke', () => {
+    assert.match(source, /func guarded\(_ command: String\) -> String \{\s*\n\s*":\\n" \+ command/)
+    assert.match(source, /do script \\\(literal\(guarded\(command\)\)\)/, 'Terminal is typed at, so it needs the guard line')
+    // iTerm runs the command as the session's process rather than typing it at
+    // a shell, so a guard line there would be a stray command, not a shield.
+    assert.match(source, /default profile command \\\(literal\(command\)\)/, 'iTerm must get the command unguarded')
+  })
+})
+
+describe('a downgraded shell says so and keeps saying so (app-spec.md §7)', () => {
+  const store = readFileSync(repo('app/claude-yard/claude-yard/CprojStore.swift'), 'utf8')
+  const menu = readFileSync(repo('app/claude-yard/claude-yard/Views/MenuBarRootView.swift'), 'utf8')
+
+  // Opening the menu refreshes, and a refresh clears `notice` — so the note
+  // explaining why a shell fell back to the .command route was wiped before
+  // anyone could read it. It needs its own state, like `ejectPhase`.
+  test('the note lands in shellDowngrade, not in notice', () => {
+    assert.match(store, /var shellDowngrade: String\?/)
+    assert.match(store, /CprojTerminal\.open\(invocation, in: terminalName\) \{\s*\n\s*shellDowngrade = note/)
+  })
+
+  test('only the user or a clean shell clears it', () => {
+    assert.match(store, /func clearShellDowngrade\(\) \{\s*\n\s*shellDowngrade = nil/)
+    // Twice: the success path of openShell, and the dismiss button's call.
+    // A third would mean something else — a refresh — is wiping it again.
+    assert.equal(store.match(/shellDowngrade = nil/g)?.length, 2)
+  })
+
+  test('the menu renders it', () => {
+    assert.match(menu, /WarningBanner\(text: downgrade\) \{ store\.clearShellDowngrade\(\) \}/)
   })
 })
 

@@ -43,6 +43,10 @@ export function orderManifest(manifest: ProjectManifest): Record<string, unknown
     archetype: manifest.archetype,
     base_image: manifest.base_image,
   }
+  // Right after base_image, because it's the same kind of thing — what the
+  // dev container actually runs (Phase 13, `deps.ts`) — before the ports.
+  const packages = manifest.extra_packages ?? []
+  if (packages.length > 0) ordered.extra_packages = [...packages].sort()
   const services = manifest.services ?? {}
   const keys = Object.keys(services).sort()
   if (keys.length > 0) {

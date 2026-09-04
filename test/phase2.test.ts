@@ -689,7 +689,7 @@ describe('build (cli-spec.md §6, Images)', () => {
 
     const call = docker.calls[0]
     assert.ok(call?.kind === 'build')
-    assert.equal(call.request.tag, 'claude-web')
+    assert.equal(call.request.tag, 'claude-web:latest')
     assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
     assert.ok(call.request.dockerfile.endsWith(join('claude-web', 'Dockerfile')))
   })

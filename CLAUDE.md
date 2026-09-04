@@ -247,6 +247,21 @@ publish nothing at all. Allocated like `app_port` — search starts at
 `--container-port` itself, no band to inherit from a catalogue that doesn't
 apply. `port add`/`remove` require the project stopped, same as `service`.
 
+**`deps add` is the same "declare, don't bake in or install live" shape, for OS
+packages.** `cproj deps add <project> <package...>` (§6 Deps, `cli/src/deps.ts`)
+persists apt package names under `extra_packages`; `up` builds a
+content-addressed derived image — `cproj-deps-<base_image>:<hash>` — from a
+generated Dockerfile that goes `USER root` for one `apt-get install` and back
+to the base image's own uid:gid, and Compose's `image:` switches to it. Never
+baked into the shared base image (every project would pay for packages it
+doesn't need) and never installed at runtime inside the container (no root
+there, and `down` throws the writable layer away regardless) — root is
+confined to image-build time, on the internal disk, like the base images
+themselves. Content-addressed rather than per-project so two projects on the
+same base image with the same package list share one image and one build, the
+same reasoning as `IMAGE_CACHE`. `deps add`/`remove` require the project
+stopped, same as `service`/`port`.
+
 **`down` writes down where you were.** `cli/src/handoff.ts` writes
 `.cproj/handoff.md` on every stop: repository state from `Git`, plus the agent's
 own account via `claude --print --continue` **inside the still-running dev

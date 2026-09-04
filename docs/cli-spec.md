@@ -34,10 +34,12 @@ grows to provide it.
   `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_RUNNING`, `PROJECT_STOPPED`,
   `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
   `EXTRA_PORT_ATTACHED`, `EXTRA_PORT_NOT_ATTACHED`,
+  `PACKAGE_ATTACHED`, `PACKAGE_NOT_ATTACHED`,
   `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
   `DOCKER_UNAVAILABLE`.
-- **No partial mutation of a running project:** service add/remove and port
-  add/remove require the project stopped and fail `PROJECT_RUNNING` otherwise.
+- **No partial mutation of a running project:** service add/remove, port
+  add/remove and deps add/remove require the project stopped and fail
+  `PROJECT_RUNNING` otherwise.
 - **Idempotency:** `up` on a running project is a no-op success; `down` on a
   stopped project is a no-op success.
 - **Read-only commands never mutate.** `status`, `list`, `volumes orphaned`.
@@ -103,6 +105,8 @@ Source of truth for one project. The compose file is derived from this.
 name: myapp
 archetype: web            # web | ios | android | library
 base_image: claude-web    # resolved from archetype
+extra_packages:            # OS packages beyond base_image (Phase 13); absent/empty = none
+  - libnss3
 services:
   postgres:
     host_port: 5433       # ASSIGNED at add-time, STABLE for life, persisted here
@@ -247,6 +251,16 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 - `cproj port remove <project> <name>` — remove it; regenerate compose;
   release the host port. Errors `PROJECT_RUNNING`, `EXTRA_PORT_NOT_ATTACHED`.
 - `cproj port list <project>` — declared extra ports + resolved host ports.
+
+### Deps
+- `cproj deps add <project> <package...>` — declare one or more apt package
+  names; the derived image (§9) is built at the next `up`. Errors
+  `PROJECT_RUNNING`, `PACKAGE_ATTACHED`, `INVALID_ARGUMENT`.
+- `cproj deps remove <project> <package...>` — undeclare them; the next `up`
+  reverts to the plain base image (or a smaller derived one) if it was the
+  last package. Errors `PROJECT_RUNNING`, `PACKAGE_NOT_ATTACHED`.
+- `cproj deps list <project>` — declared packages + the image the dev
+  container builds/runs from. Manifest-only, no daemon consulted.
 
 ### Shell
 - `cproj shell <name> [--print]`
@@ -401,6 +415,13 @@ Schema stability is the contract. Additive changes only once the app ships.
 - Generated file is deterministic and idempotent for a given manifest (stable
   ordering, so regeneration produces no spurious diffs).
 - One user-defined network per project; services + dev container attached.
+- **Image selection rule** (Phase 13): the dev container's `image:` is
+  `<base_image>:latest` when `extra_packages` is empty, or the content-addressed
+  derived image `cproj-deps-<base_image>:<hash>` otherwise — `hash` a short
+  sha256 of the base image plus the sorted package list, so two projects
+  declaring the same base image and packages resolve to the same tag and share
+  one build (`deps.ts`). `up` builds it (§6, Deps) before `docker compose up`,
+  since Compose references a local tag and never builds one itself.
 - Dev container: base image for the archetype, bind-mount project dir → `/work`,
   `sleep infinity`; plus `platform:` when the archetype's base image is pinned
   to one architecture (§4.3), so it starts the way `build` built it. The key is

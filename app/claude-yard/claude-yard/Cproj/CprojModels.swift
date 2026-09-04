@@ -396,6 +396,32 @@ nonisolated struct PortListOutput: Codable, Hashable, Sendable {
     let extraPorts: [AttachedExtraPort]
 }
 
+// MARK: - deps add / remove / list
+
+nonisolated struct DepsAddOutput: Codable, Hashable, Sendable {
+    let project: String
+    /// The package(s) just declared.
+    let added: [String]
+    /// Every package declared afterwards, sorted.
+    let extraPackages: [String]
+    /// The image this project's dev container now builds/runs from.
+    let image: String
+}
+
+nonisolated struct DepsRemoveOutput: Codable, Hashable, Sendable {
+    let project: String
+    let removed: [String]
+    /// Every package still declared, sorted.
+    let extraPackages: [String]
+    let image: String
+}
+
+nonisolated struct DepsListOutput: Codable, Hashable, Sendable {
+    let project: String
+    let extraPackages: [String]
+    let image: String
+}
+
 // MARK: - volumes
 
 nonisolated struct OrphanedVolumesOutput: Codable, Hashable, Sendable {

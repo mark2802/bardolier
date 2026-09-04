@@ -86,7 +86,7 @@ export async function runBuild(
     }
 
     await ctx.docker.build({
-      tag: definition.image,
+      tag: `${definition.image}:latest`,
       context: definition.context,
       dockerfile: definition.dockerfile,
       args,

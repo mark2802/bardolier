@@ -20,6 +20,7 @@ import { CprojError } from './errors.ts'
 import { CONTAINER_HOME, IMAGE_CACHE, IMAGE_PLATFORM } from './images.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import { extraPortNames } from './extraports.ts'
+import { selectedImage } from './deps.ts'
 import { composeProject, devContainerName, homeVolumeName, serviceContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
@@ -177,7 +178,9 @@ function devService(manifest: ProjectManifest): ComposeService {
 
   return {
     container_name: devContainerName(manifest.name),
-    image: `${manifest.base_image}:latest`,
+    // The plain base image, or a derived one built at `up` when the project
+    // declares extra OS packages (§9's image-selection rule; `deps.ts`).
+    image: selectedImage(manifest),
     ...(platform ? { platform } : {}),
     // The dev container is a place to exec into, not a process to supervise.
     // `up` starts it and it waits; the agent's work happens through `exec`.

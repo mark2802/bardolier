@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cproj.local/schema/deps-remove.schema.json",
+  "title": "cproj deps remove output",
+  "description": "What `cproj deps remove` released, and the image it resolves to. cli-spec.md §6 (Deps), §4.2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "removed", "extra_packages", "image"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "removed": {
+      "type": "array",
+      "description": "The package(s) just removed.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "extra_packages": {
+      "type": "array",
+      "description": "Every package still declared, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "image": {
+      "type": "string",
+      "description": "The image this project's dev container now builds/runs from (deps.ts).",
+      "minLength": 1
+    }
+  }
+}
