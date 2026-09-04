@@ -1,11 +1,11 @@
 //
-//  CprojClient.swift
-//  claude-yard
+//  BardolierClient.swift
+//  Bardolier
 //
 //  The single seam between the app and the engine (app-spec.md §4).
 //
 //  Everything the app knows about containers, ports, volumes and the SSD it
-//  learns by running `cproj … --json` through here and decoding the result.
+//  learns by running `bardolier … --json` through here and decoding the result.
 //  There is no second path: no `docker` invocation, no reading of manifests, no
 //  reimplementation of anything the CLI already decides. If a view seems to
 //  need something this file can't ask for, the answer is a new CLI command, not
@@ -16,7 +16,7 @@
 //  1. `--json` is appended by the client, never by a caller. Human output must
 //     never reach a parser (cli-spec.md §2).
 //  2. Exit status is not the contract — the `{"error":{"code"}}` envelope is.
-//     A non-zero exit is decoded into `CprojFailure.cli` so callers switch on a
+//     A non-zero exit is decoded into `BardolierFailure.cli` so callers switch on a
 //     stable code, and only a MALFORMED failure becomes `.unexpectedFailure`.
 //  3. Destructive commands are always given `--force`. The CLI refuses to
 //     prompt with no terminal, and under `--json` it refuses outright; the
@@ -26,12 +26,12 @@
 
 import Foundation
 
-nonisolated struct CprojClient: Sendable {
-    /// Resolved lazily per call so that installing `cproj`, or pointing the
+nonisolated struct BardolierClient: Sendable {
+    /// Resolved lazily per call so that installing `bardolier`, or pointing the
     /// preference at it, fixes a first-run failure without relaunching.
     private let locate: @Sendable () throws -> URL
 
-    init(locate: @escaping @Sendable () throws -> URL = CprojExecutable.resolve) {
+    init(locate: @escaping @Sendable () throws -> URL = BardolierExecutable.resolve) {
         self.locate = locate
     }
 
@@ -39,7 +39,7 @@ nonisolated struct CprojClient: Sendable {
 
     /// Full status object(s) — §7, the app's primary contract. `project: nil`
     /// means every project. Never fails except PROJECT_NOT_FOUND.
-    func status(project: String? = nil) async throws -> CprojStatus {
+    func status(project: String? = nil) async throws -> BardolierStatus {
         try await run(["status"] + (project.map { [$0] } ?? []))
     }
 
@@ -141,7 +141,7 @@ nonisolated struct CprojClient: Sendable {
     /// carries `holders` for the app to render (app-spec.md §10). Never forces.
     ///
     /// `stopDocker` is not a force and is not a default: it answers, up front,
-    /// the one question `cproj eject` would otherwise ask at a terminal the app
+    /// the one question `bardolier eject` would otherwise ask at a terminal the app
     /// does not have — whether it may stop the Docker ENGINE when that VM's
     /// file share is what holds the disk. The user answers it by pressing the
     /// button the blocked panel offers, never by the app deciding.
@@ -161,7 +161,7 @@ nonisolated struct CprojClient: Sendable {
     // MARK: - Invocation
 
     /// Decoder for every payload. Snake case is converted here, in one place,
-    /// so the models can read like the schema files (see CprojModels.swift).
+    /// so the models can read like the schema files (see BardolierModels.swift).
     /// Built per call rather than shared: a JSONDecoder is not Sendable, and
     /// commands run concurrently.
     static var decoder: JSONDecoder {
@@ -180,10 +180,10 @@ nonisolated struct CprojClient: Sendable {
         // The envelope, not the exit status, is the contract (§2). Decode a
         // failure first so a command that fails informatively stays informative.
         if result.exitCode != 0 {
-            if let envelope = try? Self.decoder.decode(CprojErrorEnvelope.self, from: result.stdout) {
-                throw CprojFailure.cli(envelope.error)
+            if let envelope = try? Self.decoder.decode(BardolierErrorEnvelope.self, from: result.stdout) {
+                throw BardolierFailure.cli(envelope.error)
             }
-            throw CprojFailure.unexpectedFailure(
+            throw BardolierFailure.unexpectedFailure(
                 exitCode: result.exitCode,
                 stdout: result.stdoutText,
                 stderr: result.stderrText
@@ -196,7 +196,7 @@ nonisolated struct CprojClient: Sendable {
             // Exit 0 with an unreadable payload means the frozen schema and
             // these models have diverged. Say so plainly rather than showing
             // the user a Swift decoding error.
-            throw CprojFailure.decodingFailed(
+            throw BardolierFailure.decodingFailed(
                 command: argv.joined(separator: " "),
                 underlying: String(describing: error),
                 stdout: result.stdoutText
@@ -225,10 +225,10 @@ nonisolated struct CprojClient: Sendable {
         process.arguments = arguments
 
         // A GUI app's PATH can't find node, docker or diskutil — see
-        // CprojExecutable. Everything else is inherited unchanged, so
-        // CPROJ_SSD_ROOT and friends still work when launched from a shell.
+        // BardolierExecutable. Everything else is inherited unchanged, so
+        // BARDOLIER_SSD_ROOT and friends still work when launched from a shell.
         var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = CprojExecutable.childSearchPath
+        environment["PATH"] = BardolierExecutable.childSearchPath
         process.environment = environment
 
         let stdoutPipe = Pipe()
@@ -250,7 +250,7 @@ nonisolated struct CprojClient: Sendable {
         } catch {
             process.terminationHandler = nil
             group.leave()
-            throw CprojFailure.launchFailed(path: executable.path, underlying: error.localizedDescription)
+            throw BardolierFailure.launchFailed(path: executable.path, underlying: error.localizedDescription)
         }
 
         group.enter()

@@ -1,16 +1,16 @@
 //
-//  CprojTerminal.swift
-//  claude-yard
+//  BardolierTerminal.swift
+//  Bardolier
 //
 //  Opening a shell (app-spec.md §7).
 //
-//  The division of labour is the whole point: `cproj shell <name> --json`
+//  The division of labour is the whole point: `bardolier shell <name> --json`
 //  RESOLVES the dev container and returns the exec argv; the CLI spawns no
 //  terminal. This file spawns the terminal and runs exactly that argv. It
 //  decides nothing about containers — it does not know what `docker exec` is,
 //  only that it was handed a command and told which app should run it.
 //
-//  It also launches no process of its own. `CprojClient` is the only thing in
+//  It also launches no process of its own. `BardolierClient` is the only thing in
 //  this app that may construct a `Process` (test/app-models.test.ts enforces
 //  it), and there is a good reason beyond tidiness: a helper process spawned
 //  here would inherit this app's environment and none of the terminal's, so
@@ -36,7 +36,7 @@ import AppKit
 import Foundation
 
 /// Something went wrong on this side of the seam — the CLI answered fine, the
-/// terminal is what wouldn't play. Kept apart from `CprojFailure` so a shell
+/// terminal is what wouldn't play. Kept apart from `BardolierFailure` so a shell
 /// that won't open is never mistaken for a container that won't start.
 nonisolated struct TerminalFailure: Error {
     let message: String
@@ -45,7 +45,7 @@ nonisolated struct TerminalFailure: Error {
     var isPermissionDenied = false
 }
 
-enum CprojTerminal {
+enum BardolierTerminal {
     /// Used when the CLI config names no terminal. Matches the CLI's own
     /// default (`DEFAULT_TERMINAL` in cli/src/config.ts) — both read §8.
     static let fallbackName = "Terminal"
@@ -215,10 +215,10 @@ enum CprojTerminal {
         // and a mystery.
         if number == -1743 {
             throw TerminalFailure(
-                message: "macOS is blocking claude-yard from controlling \(terminal). "
-                    + "Turn it on in System Settings → Privacy & Security → Automation → claude-yard. "
-                    + "If claude-yard isn’t listed there, the permission was denied before it could be "
-                    + "remembered: run `tccutil reset AppleEvents com.mw.claude-yard`, then try again.",
+                message: "macOS is blocking Bardolier from controlling \(terminal). "
+                    + "Turn it on in System Settings → Privacy & Security → Automation → Bardolier. "
+                    + "If Bardolier isn’t listed there, the permission was denied before it could be "
+                    + "remembered: run `tccutil reset AppleEvents com.mw.bardolier`, then try again.",
                 isPermissionDenied: true
             )
         }
@@ -232,10 +232,10 @@ enum CprojTerminal {
     private static func openViaCommandFile(_ command: String, project: String, terminal: String) throws -> String? {
         let script = """
         #!/bin/sh
-        # Written by claude-yard to open a shell in \(project) (app-spec.md §7).
+        # Written by Bardolier to open a shell in \(project) (app-spec.md §7).
         exec \(command)
         """
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("cproj-shell-\(project).command")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("bardolier-shell-\(project).command")
         do {
             try script.write(to: file, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
@@ -263,7 +263,7 @@ enum CprojTerminal {
             // already been given the file. A terminal that won't run a
             // `.command` is a Preferences problem, not a crash.
             if let error {
-                NSLog("claude-yard: %@ could not open %@: %@", terminal, file.path, error.localizedDescription)
+                NSLog("Bardolier: %@ could not open %@: %@", terminal, file.path, error.localizedDescription)
             }
         }
         return nil

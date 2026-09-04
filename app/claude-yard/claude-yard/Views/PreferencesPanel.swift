@@ -1,21 +1,21 @@
 //
 //  PreferencesPanel.swift
-//  claude-yard
+//  Bardolier
 //
 //  Preferences (app-spec.md §12).
 //
 //  Three settings, and only one of them is the app's. The SSD path and the
-//  terminal are written to the CLI CONFIG through `cproj config set`, so that
+//  terminal are written to the CLI CONFIG through `bardolier config set`, so that
 //  the CLI and the menu can never disagree about where the disk is or what a
 //  shell opens in (§12: "written to the CLI config so there is one source").
 //  The auto-shell toggle is genuinely local — the CLI has no opinion about
 //  whether starting a project should also open a window.
 //
-//  The `cproj` path is here too, because a GUI app inherits no shell PATH and
+//  The `bardolier` path is here too, because a GUI app inherits no shell PATH and
 //  a fresh install can otherwise leave the menu with nothing to talk to (§13,
 //  the first-run message).
 //
-//  When the environment overrides a key (`$CPROJ_SSD_ROOT`), the write still
+//  When the environment overrides a key (`$BARDOLIER_SSD_ROOT`), the write still
 //  happens but the panel says the environment wins — a preference that appears
 //  to save and then does nothing is worse than one that explains itself.
 //
@@ -23,14 +23,14 @@
 import SwiftUI
 
 struct PreferencesPanel: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
     @EnvironmentObject private var preferences: AppPreferences
 
     var back: () -> Void
 
     @State private var ssdVolume = ""
     @State private var ssdRoot = ""
-    @State private var terminal = CprojTerminal.fallbackName
+    @State private var terminal = BardolierTerminal.fallbackName
     @State private var customTerminal = ""
 
     var body: some View {
@@ -131,7 +131,7 @@ struct PreferencesPanel: View {
                 }
             }
 
-            if !CprojTerminal.isScriptable(effectiveTerminal) {
+            if !BardolierTerminal.isScriptable(effectiveTerminal) {
                 Text("\(effectiveTerminal) isn’t scriptable, so shells open through a `.command` file. "
                     + "Terminal and iTerm are driven directly.")
                     .font(.caption2)
@@ -148,11 +148,11 @@ struct PreferencesPanel: View {
 
     private var cliSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("cproj").font(.caption.weight(.semibold))
+            Text("bardolier").font(.caption.weight(.semibold))
 
             HStack(spacing: 6) {
                 Text("Path").font(.caption).frame(width: 60, alignment: .leading)
-                TextField(store.executablePath ?? "not found", text: $preferences.cprojPath)
+                TextField(store.executablePath ?? "not found", text: $preferences.bardolierPath)
                     .textFieldStyle(.roundedBorder)
                     .font(.caption)
                 Button("Recheck") {
@@ -191,7 +191,7 @@ struct PreferencesPanel: View {
     private var overrides: [String] { store.cliConfig?.overrides ?? [] }
 
     private var terminalChoices: [String] {
-        var names = CprojTerminal.suggested
+        var names = BardolierTerminal.suggested
         let current = store.terminalName
         if !names.contains(current) && current != Self.otherTerminal { names.append(current) }
         return names

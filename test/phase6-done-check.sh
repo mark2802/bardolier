@@ -138,13 +138,13 @@ fi
 head "3. Sources"
 
 for file in \
-  "$APP/Cproj/CprojModels.swift" \
-  "$APP/Cproj/CprojError.swift" \
-  "$APP/Cproj/CprojExecutable.swift" \
-  "$APP/Cproj/CprojClient.swift" \
-  "$APP/CprojStore.swift" \
+  "$APP/Bardolier/BardolierModels.swift" \
+  "$APP/Bardolier/BardolierError.swift" \
+  "$APP/Bardolier/BardolierExecutable.swift" \
+  "$APP/Bardolier/BardolierClient.swift" \
+  "$APP/BardolierStore.swift" \
   "$APP/Preferences/AppPreferences.swift" \
-  "$APP/Shell/CprojTerminal.swift" \
+  "$APP/Shell/BardolierTerminal.swift" \
   "$APP/Views/MenuChrome.swift" \
   "$APP/Views/MenuBarRootView.swift" \
   "$APP/Views/ServicesPanel.swift" \
@@ -152,7 +152,7 @@ for file in \
   "$APP/Views/ReclaimPanel.swift" \
   "$APP/Views/PreferencesPanel.swift" \
   "$APP/DebugStatusView.swift" \
-  "$APP/claude_yardApp.swift"
+  "$APP/BardolierApp.swift"
 do
   [ -f "$file" ] && ok "$file" || bad "$file is missing"
 done
@@ -163,10 +163,10 @@ else
   todo "the target has no synchronized folder group: add the new .swift files to it in Xcode"
 fi
 
-if grep -q "MenuBarRootView()" "$APP/claude_yardApp.swift"; then
+if grep -q "MenuBarRootView()" "$APP/BardolierApp.swift"; then
   ok "the MenuBarExtra shows the menu, not the Phase 5 debug dump"
 else
-  bad "claude_yardApp.swift still hosts the debug view"
+  bad "BardolierApp.swift still hosts the debug view"
 fi
 
 # ── 4. Build settings (the human's manual step) ───────────────────────────────

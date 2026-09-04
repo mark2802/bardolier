@@ -1,6 +1,6 @@
 //
 //  OptionKeyObserver.swift
-//  claude-yard
+//  Bardolier
 //
 //  Publishes whether Option is currently held, for the root-shell alternate
 //  item (phase 14, docs/phases/14-root-shell.md). SwiftUI's `MenuBarExtra`

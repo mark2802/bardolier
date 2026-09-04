@@ -34,10 +34,12 @@ OLD_IOS="claude-""ios"
 OLD_AND="claude-""and"
 
 # These test files read the app's *actual* Swift source as text (structs,
-# filenames, defaults keys) and must keep naming it correctly until phase 16
-# renames the Swift side — mirroring the app/ exclusion, not a missed rename.
-# CLAUDE.md's one paragraph on `app/.../Cproj/` is the same case (see there).
-# .claude/settings.local.json's hit is an unrelated harness scratch-path.
+# filenames, defaults keys) and must keep naming it correctly until the
+# human's Xcode rename (phase 16's MANUAL prerequisite) moves
+# app/claude-yard/claude-yard on disk — mirroring the app/ exclusion, not a
+# missed rename. phase16-done-check.sh names the old strings on purpose, to
+# check they're gone. .claude/settings.local.json's hit is an unrelated
+# harness scratch-path.
 HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_WEB}|${OLD_IOS}|${OLD_AND}" . \
   --include='*' -I 2>/dev/null \
   | grep -v '^\./node_modules/' \
@@ -46,8 +48,8 @@ HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_WEB}|${OLD_IOS}|${O
   | grep -v '^\./\.claude/' \
   | grep -v '^\./docs/phases/15-rename-cli\.md$' \
   | grep -v '^\./docs/phases/16-rename-app\.md$' \
-  | grep -v '^\./CLAUDE\.md$' \
   | grep -v '^\./test/phase15-done-check\.sh$' \
+  | grep -v '^\./test/phase16-done-check\.sh$' \
   | grep -v '^\./test/phase[5679]-done-check\.sh$' \
   | grep -v '^\./test/phase7\.test\.ts$' \
   | grep -v '^\./test/app-models\.test\.ts$' \

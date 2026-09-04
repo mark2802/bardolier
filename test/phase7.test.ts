@@ -536,7 +536,7 @@ describe('shell-open (app-spec.md §7)', () => {
 // ── The app half (read as text — Xcode is host-only) ─────────────────────────
 
 describe('the app renders the eject flow rather than re-deciding it', () => {
-  const store = readFileSync(repo(`${APP_DIR}/CprojStore.swift`), 'utf8')
+  const store = readFileSync(repo(`${APP_DIR}/BardolierStore.swift`), 'utf8')
   const panel = readFileSync(repo(`${APP_DIR}/Views/EjectPanel.swift`), 'utf8')
 
   test('a blocked eject is a state that survives, not a banner (§10)', () => {
@@ -584,7 +584,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     // a process with a window, about one that has none and that no retry
     // clears. The distinction comes from the CLI's own `details.reason`; the
     // app does not sniff holder names to work it out.
-    const error = readFileSync(repo(`${APP_DIR}/Cproj/CprojError.swift`), 'utf8')
+    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
     assert.match(error, /reason == "runtime-holds-volume"/)
     assert.match(store, /case blockedByDocker\(holders: \[SsdHolder\], message: String, engineStopped: Bool\)/)
     assert.match(store, /failure\.isRuntimeHold/)
@@ -596,7 +596,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     // The CLI stops the engine, waits for the VM to let go, and is refused
     // anyway: `reason` says so, and the panel must not answer it with the
     // button whose whole effect has already happened.
-    const error = readFileSync(repo(`${APP_DIR}/Cproj/CprojError.swift`), 'utf8')
+    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
     assert.match(error, /reason == "runtime-holds-volume-after-stop"/)
     assert.match(store, /isRuntimeHoldAfterStop/)
     assert.match(store, /engineStopped: failure\.isRuntimeHoldAfterStop/)
@@ -611,7 +611,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
   test('stopping the engine is consented to here, never assumed', () => {
     // The default has to stay "don't", or the menu's ordinary eject would take
     // down every container on the Mac — bardolier's and everyone else's.
-    const client = readFileSync(repo(`${APP_DIR}/Cproj/CprojClient.swift`), 'utf8')
+    const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
     assert.match(client, /func eject\(stopDocker: Bool = false\)/)
     assert.match(client, /stopDocker \? \["--stop-docker"\] : \[\]/)
     assert.match(store, /func closeAllAndEject\(stopDocker: Bool = false\)/)
@@ -628,7 +628,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
 describe('the auto-shell preference reaches the CLI (app-spec.md §7, §12)', () => {
   const preferences = readFileSync(repo(`${APP_DIR}/Preferences/AppPreferences.swift`), 'utf8')
   const menu = readFileSync(repo(`${APP_DIR}/Views/MenuBarRootView.swift`), 'utf8')
-  const client = readFileSync(repo(`${APP_DIR}/Cproj/CprojClient.swift`), 'utf8')
+  const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
 
   test('it defaults ON, and an unset key does not silently invert it', () => {
     assert.match(preferences, /object\(forKey: Self\.startOpensShellKey\) as\? Bool \?\? true/)
@@ -641,30 +641,30 @@ describe('the auto-shell preference reaches the CLI (app-spec.md §7, §12)', ()
   })
 
   test('a terminal that will not open is its own failure, with its own fix', () => {
-    const error = readFileSync(repo(`${APP_DIR}/Cproj/CprojError.swift`), 'utf8')
+    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
     assert.match(error, /case terminalFailed\(terminal: String, underlying: String\)/)
     assert.match(error, /Pick a different terminal in Preferences/)
   })
 })
 
 describe('a missing bardolier is a first-run state (app-spec.md §13)', () => {
-  const store = readFileSync(repo(`${APP_DIR}/CprojStore.swift`), 'utf8')
+  const store = readFileSync(repo(`${APP_DIR}/BardolierStore.swift`), 'utf8')
   const panel = readFileSync(repo(`${APP_DIR}/Views/FirstRunPanel.swift`), 'utf8')
   const menu = readFileSync(repo(`${APP_DIR}/Views/MenuBarRootView.swift`), 'utf8')
 
   test('the store records it instead of reporting one failed command', () => {
-    assert.match(store, /cprojMissing = true/)
-    assert.match(store, /cprojSearchedLocations = CprojExecutable\.searchedLocations/)
+    assert.match(store, /bardolierMissing = true/)
+    assert.match(store, /bardolierSearchedLocations = BardolierExecutable\.searchedLocations/)
   })
 
   test('the menu shows the message in place of items that cannot work', () => {
-    assert.match(menu, /if store\.cprojMissing \{[\s\S]*?FirstRunPanel\(\)/)
+    assert.match(menu, /if store\.bardolierMissing \{[\s\S]*?FirstRunPanel\(\)/)
   })
 
   test('it names an expected install location and the places actually searched', () => {
     assert.match(panel, /npm link/)
-    assert.match(panel, /bin\/cproj/)
-    assert.match(panel, /store\.cprojSearchedLocations/)
+    assert.match(panel, /bin\/bardolier/)
+    assert.match(panel, /store\.bardolierSearchedLocations/)
   })
 })
 

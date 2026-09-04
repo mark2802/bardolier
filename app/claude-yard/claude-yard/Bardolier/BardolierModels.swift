@@ -1,8 +1,8 @@
 //
-//  CprojModels.swift
-//  claude-yard
+//  BardolierModels.swift
+//  Bardolier
 //
-//  Codable mirrors of the frozen `cproj --json` schemas (cli/schema/*.json).
+//  Codable mirrors of the frozen `bardolier --json` schemas (cli/schema/*.json).
 //
 //  These types are the app's whole knowledge of the CLI. They are a MIRROR, not
 //  a second source of truth: every property here exists because a schema says
@@ -12,13 +12,13 @@
 //
 //  Two decisions worth stating once:
 //
-//  * Snake case is converted by the decoder (`CprojClient.decoder`), not by
+//  * Snake case is converted by the decoder (`BardolierClient.decoder`), not by
 //    hand-written CodingKeys. Every key in every schema is plain snake_case
 //    with no acronym oddities, so the mapping is mechanical and the models stay
 //    readable next to the schema files.
 //
 //  * Closed string enums in the schemas (`state`, `archetype`, …) are modelled
-//    as `CprojToken` structs rather than Swift enums. An enum would make an
+//    as `BardolierToken` structs rather than Swift enums. An enum would make an
 //    additive schema change — a fifth archetype, say — a DECODING FAILURE in an
 //    older build of the app, turning "additive only" into a breaking change.
 //    A token decodes anything and compares equal to the known constants.
@@ -30,7 +30,7 @@ import Foundation
 
 /// A string the schema constrains to a known set, decoded openly so an
 /// additively-added value cannot break an older build (see file comment).
-nonisolated protocol CprojToken: RawRepresentable, Codable, Hashable, CustomStringConvertible, Sendable
+nonisolated protocol BardolierToken: RawRepresentable, Codable, Hashable, CustomStringConvertible, Sendable
 where RawValue == String {
     init(rawValue: String)
 }
@@ -40,7 +40,7 @@ where RawValue == String {
 // requirements are nonisolated. Left unmarked, the target's default MainActor
 // isolation would put them on the main actor and the conformances would cross
 // actors — a warning today, an error in Swift 6 mode.
-nonisolated extension CprojToken {
+nonisolated extension BardolierToken {
     init(from decoder: any Decoder) throws {
         self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
     }
@@ -54,7 +54,7 @@ nonisolated extension CprojToken {
 }
 
 /// `web | ios | android | library` — cli-spec.md §4.3.
-nonisolated struct Archetype: CprojToken {
+nonisolated struct Archetype: BardolierToken {
     let rawValue: String
     static let web = Archetype(rawValue: "web")
     static let ios = Archetype(rawValue: "ios")
@@ -74,7 +74,7 @@ nonisolated struct Archetype: CprojToken {
 
 /// `running | stopped | partial` — partial means some but not all of the
 /// project's containers are up.
-nonisolated struct ProjectState: CprojToken {
+nonisolated struct ProjectState: BardolierToken {
     let rawValue: String
     static let running = ProjectState(rawValue: "running")
     static let stopped = ProjectState(rawValue: "stopped")
@@ -86,14 +86,14 @@ nonisolated struct ProjectState: CprojToken {
 }
 
 /// `running | stopped` for one service container.
-nonisolated struct ServiceState: CprojToken {
+nonisolated struct ServiceState: BardolierToken {
     let rawValue: String
     static let running = ServiceState(rawValue: "running")
     static let stopped = ServiceState(rawValue: "stopped")
 }
 
 /// `config | ssd | bundled` — which step of the §4.1 chain answered.
-nonisolated struct CatalogueOrigin: CprojToken {
+nonisolated struct CatalogueOrigin: BardolierToken {
     let rawValue: String
     static let config = CatalogueOrigin(rawValue: "config")
     static let ssd = CatalogueOrigin(rawValue: "ssd")
@@ -101,8 +101,8 @@ nonisolated struct CatalogueOrigin: CprojToken {
 }
 
 /// A settable key of the CLI config file (cli-spec.md §8) — what Preferences
-/// writes through `cproj config set` (app-spec.md §12).
-nonisolated struct ConfigKey: CprojToken {
+/// writes through `bardolier config set` (app-spec.md §12).
+nonisolated struct ConfigKey: BardolierToken {
     let rawValue: String
     static let ssdRoot = ConfigKey(rawValue: "ssd_root")
     static let ssdVolume = ConfigKey(rawValue: "ssd_volume")
@@ -111,7 +111,7 @@ nonisolated struct ConfigKey: CprojToken {
 }
 
 /// Stable `doctor` finding ids the app may key UI off.
-nonisolated struct DoctorFindingID: CprojToken {
+nonisolated struct DoctorFindingID: BardolierToken {
     let rawValue: String
     static let config = DoctorFindingID(rawValue: "config")
     static let ssd = DoctorFindingID(rawValue: "ssd")
@@ -122,7 +122,7 @@ nonisolated struct DoctorFindingID: CprojToken {
 }
 
 /// `built | unavailable` for a base image.
-nonisolated struct BaseImageStatus: CprojToken {
+nonisolated struct BaseImageStatus: BardolierToken {
     let rawValue: String
     static let built = BaseImageStatus(rawValue: "built")
     static let unavailable = BaseImageStatus(rawValue: "unavailable")
@@ -132,10 +132,10 @@ nonisolated struct BaseImageStatus: CprojToken {
 
 /// `status` with a project name narrows `projects` but returns the same
 /// envelope, so there is one type here, not two.
-nonisolated struct CprojStatus: Codable, Hashable, Sendable {
+nonisolated struct BardolierStatus: Codable, Hashable, Sendable {
     let ssd: SsdStatus
     let docker: DockerStatus
-    let projects: [CprojProject]
+    let projects: [BardolierProject]
     let orphanedVolumes: [OrphanedVolume]
 }
 
@@ -149,7 +149,7 @@ nonisolated struct DockerStatus: Codable, Hashable, Sendable {
     let available: Bool
 }
 
-nonisolated struct CprojProject: Codable, Hashable, Identifiable, Sendable {
+nonisolated struct BardolierProject: Codable, Hashable, Identifiable, Sendable {
     let name: String
     /// The project's directory (cli-spec.md §3), reported by the CLI rather
     /// than composed here — "Open folder in Finder" must not encode the layout.
@@ -195,7 +195,7 @@ nonisolated struct OrphanedVolume: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let sizeBytes: Int
     let sizeHuman: String
-    /// From the volume's `cproj.project` label, or nil when unattributable.
+    /// From the volume's `bardolier.project` label, or nil when unattributable.
     let lastProject: String?
 
     var id: String { name }
@@ -446,7 +446,7 @@ nonisolated struct DownAllOutput: Codable, Hashable, Sendable {
     let projects: [DownAllProject]
     /// Names of the projects actually stopped by this call.
     let stopped: [String]
-    /// `cproj-*` containers removed that no manifest claims.
+    /// `bardolier-*` containers removed that no manifest claims.
     let strayContainers: [String]
     /// False when the daemon was unreachable — a no-op success.
     let dockerAvailable: Bool

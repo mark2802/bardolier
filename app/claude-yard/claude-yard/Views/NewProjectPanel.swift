@@ -1,11 +1,11 @@
 //
 //  NewProjectPanel.swift
-//  claude-yard
+//  Bardolier
 //
 //  New project (app-spec.md §8).
 //
 //  Name, archetype, and a checkbox list of catalogue services — the same list
-//  the Services submenu ticks, read from `cproj catalogue` so there is one
+//  the Services submenu ticks, read from `bardolier catalogue` so there is one
 //  catalogue and not two (§6, §8).
 //
 //  The validation here is a COURTESY, not a rule. The CLI is what decides
@@ -20,7 +20,7 @@
 import SwiftUI
 
 struct NewProjectPanel: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
 
     var back: () -> Void
 

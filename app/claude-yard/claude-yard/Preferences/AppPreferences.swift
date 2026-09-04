@@ -1,18 +1,18 @@
 //
 //  AppPreferences.swift
-//  claude-yard
+//  Bardolier
 //
 //  The preferences that are genuinely the APP's (app-spec.md §12).
 //
 //  §12 lists three settings, and only one of them lives here. The SSD path and
 //  the terminal belong to the CLI config (`cli-spec.md` §8) so that the CLI and
 //  the app cannot disagree about them — Preferences edits those through
-//  `cproj config set` and reads them back from `cproj config get`. What is left
+//  `bardolier config set` and reads them back from `bardolier config get`. What is left
 //  is the one setting the CLI has no opinion about: whether starting a project
 //  should also open a shell, which is a fact about this menu, not about the
 //  engine.
 //
-//  The `cproj` path is here for the same reason — it is where THIS app looks
+//  The `bardolier` path is here for the same reason — it is where THIS app looks
 //  for the binary, which is not something the CLI could tell us.
 //
 
@@ -32,15 +32,15 @@ final class AppPreferences: ObservableObject {
         didSet { defaults.set(startOpensShell, forKey: Self.startOpensShellKey) }
     }
 
-    /// An explicit path to `cproj`, for installs the search can't guess. Empty
-    /// means "search the conventional locations" (CprojExecutable).
-    @Published var cprojPath: String {
+    /// An explicit path to `bardolier`, for installs the search can't guess. Empty
+    /// means "search the conventional locations" (BardolierExecutable).
+    @Published var bardolierPath: String {
         didSet {
-            let trimmed = cprojPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = bardolierPath.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                defaults.removeObject(forKey: CprojExecutable.pathDefaultsKey)
+                defaults.removeObject(forKey: BardolierExecutable.pathDefaultsKey)
             } else {
-                defaults.set(trimmed, forKey: CprojExecutable.pathDefaultsKey)
+                defaults.set(trimmed, forKey: BardolierExecutable.pathDefaultsKey)
             }
         }
     }
@@ -51,6 +51,6 @@ final class AppPreferences: ObservableObject {
         // false, which would silently invert a preference documented as
         // defaulting to ON.
         self.startOpensShell = defaults.object(forKey: Self.startOpensShellKey) as? Bool ?? true
-        self.cprojPath = defaults.string(forKey: CprojExecutable.pathDefaultsKey) ?? ""
+        self.bardolierPath = defaults.string(forKey: BardolierExecutable.pathDefaultsKey) ?? ""
     }
 }

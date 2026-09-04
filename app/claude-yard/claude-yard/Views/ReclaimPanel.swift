@@ -1,6 +1,6 @@
 //
 //  ReclaimPanel.swift
-//  claude-yard
+//  Bardolier
 //
 //  Reclaim disk (app-spec.md §9).
 //
@@ -19,7 +19,7 @@
 import SwiftUI
 
 struct ReclaimPanel: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
 
     /// The root menu's confirmation, so a destructive answer is asked the same
     /// way everywhere.
@@ -49,7 +49,7 @@ struct ReclaimPanel: View {
                 Divider().padding(.vertical, 4)
 
                 MenuTextRow(
-                    title: "Delete all (\(CprojFormat.bytes(totalBytes)))",
+                    title: "Delete all (\(BardolierFormat.bytes(totalBytes)))",
                     systemImage: "trash",
                     isDisabled: store.isBusy || store.isDegraded
                 ) {
@@ -115,7 +115,7 @@ struct ReclaimPanel: View {
         let volumes = store.orphanedVolumes
         return ConfirmationRequest(
             title: "Delete all \(volumes.count) orphaned volumes?",
-            detail: "\(CprojFormat.bytes(totalBytes)) of data is destroyed. "
+            detail: "\(BardolierFormat.bytes(totalBytes)) of data is destroyed. "
                 + "A volume that turns out to still be in use is skipped and reported.",
             confirmLabel: "Delete all",
             toggleLabel: nil,

@@ -1,11 +1,11 @@
 //
 //  ServicesPanel.swift
-//  claude-yard
+//  Bardolier
 //
 //  The Services submenu for one project (app-spec.md §6).
 //
 //  It lists EVERY service the catalogue defines, ticked where the project has
-//  it attached — which is why the app asks `cproj catalogue` rather than
+//  it attached — which is why the app asks `bardolier catalogue` rather than
 //  keeping a list of its own. Attached rows show the host port the allocator
 //  assigned and a click-to-copy connection string; that port is the debugging
 //  tap (cli-spec.md §5), and it is the reason this panel exists at all.
@@ -24,7 +24,7 @@
 import SwiftUI
 
 struct ServicesPanel: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
 
     var projectName: String
     var back: () -> Void
@@ -101,7 +101,7 @@ struct ServicesPanel: View {
 
     /// One catalogue row: ticked when attached, with the assigned port when it
     /// has one and the band it would be assigned from when it doesn't.
-    private func row(for service: CatalogueService, in project: CprojProject) -> some View {
+    private func row(for service: CatalogueService, in project: BardolierProject) -> some View {
         let attached = project.services.first { $0.key == service.key }
         let canChange = !store.isBusy && !project.state.isUp && !store.isDegraded
 

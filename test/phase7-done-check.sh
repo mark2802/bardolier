@@ -162,9 +162,9 @@ head "3. Sources"
 for file in \
   "$APP/Views/EjectPanel.swift" \
   "$APP/Views/FirstRunPanel.swift" \
-  "$APP/Shell/CprojTerminal.swift" \
+  "$APP/Shell/BardolierTerminal.swift" \
   "$APP/Views/MenuChrome.swift" \
-  "$APP/CprojStore.swift"
+  "$APP/BardolierStore.swift"
 do
   [ -f "$file" ] && ok "$file" || bad "$file is missing"
 done

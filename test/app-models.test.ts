@@ -18,7 +18,7 @@ import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
 import { CONFIG_KEYS } from '../cli/src/config.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
-const APP_MODEL_DIR = 'app/claude-yard/claude-yard/Cproj'
+const APP_MODEL_DIR = 'app/claude-yard/claude-yard/Bardolier'
 
 // ── Reading the Swift ────────────────────────────────────────────────────────
 
@@ -113,10 +113,10 @@ function camel(key: string): string {
  * one fails loudly instead of quietly matching nothing.
  */
 const MIRRORS: readonly (readonly [schema: string, path: string, swift: string])[] = [
-  ['status', '', 'CprojStatus'],
+  ['status', '', 'BardolierStatus'],
   ['status', 'properties/ssd', 'SsdStatus'],
   ['status', 'properties/docker', 'DockerStatus'],
-  ['status', '$defs/project', 'CprojProject'],
+  ['status', '$defs/project', 'BardolierProject'],
   ['status', '$defs/service', 'ProjectService'],
   ['status', '$defs/orphanedVolume', 'OrphanedVolume'],
   ['list', '', 'ProjectListOutput'],
@@ -158,8 +158,8 @@ const MIRRORS: readonly (readonly [schema: string, path: string, swift: string])
   ['config-get', '', 'ConfigGetOutput'],
   ['config-get', '$defs/effective_config', 'EffectiveConfig'],
   ['config-set', '', 'ConfigSetOutput'],
-  ['error', '', 'CprojErrorEnvelope'],
-  ['error', 'properties/error', 'CprojErrorBody'],
+  ['error', '', 'BardolierErrorEnvelope'],
+  ['error', 'properties/error', 'BardolierErrorBody'],
 ]
 
 describe('app models mirror the frozen schemas', () => {
@@ -200,14 +200,14 @@ describe('app models mirror the frozen schemas', () => {
 })
 
 describe('the app knows every error code', () => {
-  const source = readFileSync(repo(`${APP_MODEL_DIR}/CprojError.swift`), 'utf8')
+  const source = readFileSync(repo(`${APP_MODEL_DIR}/BardolierError.swift`), 'utf8')
   const declared = new Set(
-    [...source.matchAll(/CprojErrorCode\(rawValue:\s*"([A-Z_]+)"\)/g)].map((match) => match[1]),
+    [...source.matchAll(/BardolierErrorCode\(rawValue:\s*"([A-Z_]+)"\)/g)].map((match) => match[1]),
   )
 
-  test('every code in errors.ts has a CprojErrorCode constant', () => {
+  test('every code in errors.ts has a BardolierErrorCode constant', () => {
     for (const code of ERROR_CODES) {
-      assert.ok(declared.has(code), `CprojError.swift has no constant for \`${code}\``)
+      assert.ok(declared.has(code), `BardolierError.swift has no constant for \`${code}\``)
     }
   })
 
@@ -215,14 +215,14 @@ describe('the app knows every error code', () => {
     for (const code of declared) {
       assert.ok(
         (ERROR_CODES as readonly string[]).includes(code as string),
-        `CprojError.swift declares \`${code}\`, which errors.ts does not define`,
+        `BardolierError.swift declares \`${code}\`, which errors.ts does not define`,
       )
     }
   })
 })
 
 describe('the app knows the tokens the CLI can emit', () => {
-  const source = readFileSync(repo(`${APP_MODEL_DIR}/CprojModels.swift`), 'utf8')
+  const source = readFileSync(repo(`${APP_MODEL_DIR}/BardolierModels.swift`), 'utf8')
 
   /** `static let x = Token(rawValue: "…")` constants for one token type. */
   function constants(type: string): Set<string> {
@@ -233,19 +233,19 @@ describe('the app knows the tokens the CLI can emit', () => {
   test('every catalogue origin has a CatalogueOrigin constant', () => {
     const declared = constants('CatalogueOrigin')
     for (const origin of CATALOGUE_ORIGINS) {
-      assert.ok(declared.has(origin), `CprojModels.swift has no CatalogueOrigin for \`${origin}\``)
+      assert.ok(declared.has(origin), `BardolierModels.swift has no CatalogueOrigin for \`${origin}\``)
     }
   })
 
   test('every settable config key has a ConfigKey constant, and no others', () => {
     const declared = constants('ConfigKey')
     for (const key of CONFIG_KEYS) {
-      assert.ok(declared.has(key), `CprojModels.swift has no ConfigKey for \`${key}\``)
+      assert.ok(declared.has(key), `BardolierModels.swift has no ConfigKey for \`${key}\``)
     }
     for (const key of declared) {
       assert.ok(
         (CONFIG_KEYS as readonly string[]).includes(key as string),
-        `CprojModels.swift declares ConfigKey \`${key}\`, which \`bardolier config set\` would reject`,
+        `BardolierModels.swift declares ConfigKey \`${key}\`, which \`bardolier config set\` would reject`,
       )
     }
   })
@@ -295,7 +295,7 @@ describe('the app re-derives nothing the CLI reports', () => {
 })
 
 describe('the app can actually find the terminal (app-spec.md §7)', () => {
-  const source = readFileSync(repo('app/claude-yard/claude-yard/Shell/CprojTerminal.swift'), 'utf8')
+  const source = readFileSync(repo('app/claude-yard/claude-yard/Shell/BardolierTerminal.swift'), 'utf8')
 
   // Guessing where an app lives was a real bug: Terminal.app is in
   // /System/Applications/Utilities, so a search of the obvious folders found
@@ -329,7 +329,7 @@ describe('the app can actually find the terminal (app-spec.md §7)', () => {
 })
 
 describe('a downgraded shell says so and keeps saying so (app-spec.md §7)', () => {
-  const store = readFileSync(repo('app/claude-yard/claude-yard/CprojStore.swift'), 'utf8')
+  const store = readFileSync(repo('app/claude-yard/claude-yard/BardolierStore.swift'), 'utf8')
   const menu = readFileSync(repo('app/claude-yard/claude-yard/Views/MenuBarRootView.swift'), 'utf8')
 
   // Opening the menu refreshes, and a refresh clears `notice` — so the note
@@ -337,7 +337,7 @@ describe('a downgraded shell says so and keeps saying so (app-spec.md §7)', () 
   // anyone could read it. It needs its own state, like `ejectPhase`.
   test('the note lands in shellDowngrade, not in notice', () => {
     assert.match(store, /var shellDowngrade: String\?/)
-    assert.match(store, /CprojTerminal\.open\(invocation, in: terminalName\) \{\s*\n\s*shellDowngrade = note/)
+    assert.match(store, /BardolierTerminal\.open\(invocation, in: terminalName\) \{\s*\n\s*shellDowngrade = note/)
   })
 
   test('only the user or a clean shell clears it', () => {
@@ -353,11 +353,11 @@ describe('a downgraded shell says so and keeps saying so (app-spec.md §7)', () 
 })
 
 describe('the app calls the CLI the way the CLI expects', () => {
-  const client = readFileSync(repo(`${APP_MODEL_DIR}/CprojClient.swift`), 'utf8')
+  const client = readFileSync(repo(`${APP_MODEL_DIR}/BardolierClient.swift`), 'utf8')
 
   test('--json is appended by the client, not by callers (cli-spec.md §2)', () => {
     const appended = /let arguments = argv \+ \["--json"\]/.test(client)
-    assert.ok(appended, 'CprojClient.run must append --json itself')
+    assert.ok(appended, 'BardolierClient.run must append --json itself')
     const callerPassed = /"--json"/g
     assert.equal(client.match(callerPassed)?.length, 1, 'only one place may add --json')
   })
@@ -383,14 +383,14 @@ describe('the app spawns nothing but bardolier', () => {
 
   test('only the client constructs a Process', () => {
     for (const [file, source] of sources) {
-      if (file.endsWith('CprojClient.swift')) continue
-      assert.doesNotMatch(source, /\bProcess\(\)/, `${file} launches a process; only CprojClient may`)
+      if (file.endsWith('BardolierClient.swift')) continue
+      assert.doesNotMatch(source, /\bProcess\(\)/, `${file} launches a process; only BardolierClient may`)
     }
   })
 
   test('the client launches only the resolved bardolier executable', () => {
-    const client = sources.get('Cproj/CprojClient.swift')
-    assert.ok(client, 'CprojClient.swift is missing')
+    const client = sources.get('Bardolier/BardolierClient.swift')
+    assert.ok(client, 'BardolierClient.swift is missing')
     // One assignment, and it is the located binary — not a shell, not `docker`.
     assert.equal(client.match(/executableURL\s*=/g)?.length, 1)
     assert.match(client, /process\.executableURL = executable/)

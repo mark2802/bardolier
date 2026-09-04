@@ -30,13 +30,13 @@ head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 head "1. Sources (app-spec.md §4)"
 
 for file in \
-  "$APP/Cproj/CprojModels.swift" \
-  "$APP/Cproj/CprojError.swift" \
-  "$APP/Cproj/CprojExecutable.swift" \
-  "$APP/Cproj/CprojClient.swift" \
-  "$APP/CprojStore.swift" \
+  "$APP/Bardolier/BardolierModels.swift" \
+  "$APP/Bardolier/BardolierError.swift" \
+  "$APP/Bardolier/BardolierExecutable.swift" \
+  "$APP/Bardolier/BardolierClient.swift" \
+  "$APP/BardolierStore.swift" \
   "$APP/DebugStatusView.swift" \
-  "$APP/claude_yardApp.swift"
+  "$APP/BardolierApp.swift"
 do
   [ -f "$file" ] && ok "$file" || bad "$file is missing"
 done
@@ -47,10 +47,10 @@ else
   todo "the target has no synchronized folder group: add the new .swift files to it in Xcode"
 fi
 
-if grep -q "MenuBarExtra" "$APP/claude_yardApp.swift"; then
+if grep -q "MenuBarExtra" "$APP/BardolierApp.swift"; then
   ok "the scene is a MenuBarExtra (app-spec.md §1)"
 else
-  bad "claude_yardApp.swift declares no MenuBarExtra"
+  bad "BardolierApp.swift declares no MenuBarExtra"
 fi
 
 # ── 2. Build settings the spec requires (the human's manual step) ────────────
@@ -108,10 +108,10 @@ The half a terminal cannot check — on the Mac, in Xcode:
      target; confirm they compiled.
   3. Make `bardolier` reachable from a GUI app — a Finder-launched app inherits no
      shell PATH. Either point the app straight at this working copy:
-       defaults write com.mw.claude-yard CprojPath "$PWD/cli/bin/bardolier.js"
+       defaults write com.mw.bardolier BardolierPath "$PWD/cli/bin/bardolier.js"
      or install it once and let the search find it:
        ln -s "$PWD/cli/bin/bardolier.js" /usr/local/bin/bardolier
-     (Running from Xcode instead? Set CPROJ_BIN in the scheme's environment.)
+     (Running from Xcode instead? Set BARDOLIER_BIN in the scheme's environment.)
   4. Run. A box icon appears in the menu bar and no dock icon does.
   5. Click it. The debug view shows the SSD root, Docker, each project with its
      archetype and state, each service with `host → container` ports and its

@@ -1,8 +1,8 @@
 //
 //  DebugStatusView.swift
-//  claude-yard
+//  Bardolier
 //
-//  Phase 5's deliverable UI: a dump of the decoded `cproj status --json`.
+//  Phase 5's deliverable UI: a dump of the decoded `bardolier status --json`.
 //
 //  It exists to prove one thing before any real menu is built — that what the
 //  CLI emits is what the models decode, field for field, against a live SSD
@@ -13,7 +13,7 @@
 //
 //  Phase 6 moved the menu proper into MenuBarRootView; this view stayed, behind
 //  "Diagnostics…", because what it proves is still worth being able to check:
-//  the raw decode of every field, next to what `cproj status --json` prints in
+//  the raw decode of every field, next to what `bardolier status --json` prints in
 //  a terminal. The rendering helpers below deliberately hold no logic worth
 //  keeping — they only lay out values the CLI already decided.
 //
@@ -23,7 +23,7 @@ import Foundation
 import SwiftUI
 
 struct DebugStatusView: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
 
     /// Back to the menu (app-spec.md §5).
     var back: () -> Void
@@ -82,7 +82,7 @@ struct DebugStatusView: View {
     private var footer: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(store.executablePath ?? "cproj not found")
+                Text(store.executablePath ?? "bardolier not found")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -103,7 +103,7 @@ struct DebugStatusView: View {
 // MARK: - status
 
 struct StatusDumpView: View {
-    let status: CprojStatus
+    let status: BardolierStatus
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -135,7 +135,7 @@ struct StatusDumpView: View {
 }
 
 struct ProjectDumpView: View {
-    let project: CprojProject
+    let project: BardolierProject
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -200,11 +200,11 @@ struct DoctorDumpView: View {
 // MARK: - errors (app-spec.md §13)
 
 struct FailureBanner: View {
-    let failure: CprojFailure
+    let failure: BardolierFailure
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(failure.errorDescription ?? "cproj failed").font(.callout.bold())
+            Text(failure.errorDescription ?? "bardolier failed").font(.callout.bold())
             if let reason = failure.failureReason {
                 Text(reason).font(.caption).foregroundStyle(.secondary)
             }
@@ -271,12 +271,12 @@ struct Row: View {
 // MARK: - previews
 
 #if DEBUG
-/// Captured from a real `cproj … --json` run against a scratch SSD root, with
+/// Captured from a real `bardolier … --json` run against a scratch SSD root, with
 /// the paths shortened and `myapp` flipped to `running` so the preview shows
 /// both states. Decoding these is the cheapest check that the models still
 /// match the frozen schemas — paste a fresh capture in when a schema grows a
 /// field.
-enum CprojFixtures {
+enum BardolierFixtures {
     static let statusJSON = """
     {
       "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" },
@@ -304,7 +304,7 @@ enum CprojFixtures {
               "connection_hint": "redis://localhost:6379"
             }
           ],
-          "dev_container": "cproj-myapp"
+          "dev_container": "bardolier-myapp"
         },
         {
           "name": "otherapp",
@@ -330,14 +330,14 @@ enum CprojFixtures {
       "ok": false,
       "findings": [
         { "id": "config", "title": "Config", "ok": true,
-          "detail": "Loaded ~/.config/cproj/config.yml. ssd_root=/Volumes/ssd/claude-projects, ssd_volume=/Volumes/ssd, terminal=Terminal" },
+          "detail": "Loaded ~/.config/bardolier/config.yml. ssd_root=/Volumes/ssd/claude-projects, ssd_volume=/Volumes/ssd, terminal=Terminal" },
         { "id": "ssd", "title": "SSD mounted", "ok": true,
           "detail": "/Volumes/ssd/claude-projects is readable (volume /Volumes/ssd)." },
         { "id": "docker", "title": "Docker daemon", "ok": true,
           "detail": "The Docker daemon responded." },
         { "id": "base_images", "title": "Base images", "ok": false,
-          "detail": "Missing: claude-ios, claude-and.",
-          "remedy": "Run `cproj build` to build the missing base images." },
+          "detail": "Missing: bardolier-ios, bardolier-and.",
+          "remedy": "Run `bardolier build` to build the missing base images." },
         { "id": "catalogue", "title": "Service catalogue", "ok": true,
           "detail": "cli/defaults/services.yml (bundled) defines 3 services: mongo, postgres, redis." },
         { "id": "manifests", "title": "Project manifests", "ok": true,
@@ -349,18 +349,18 @@ enum CprojFixtures {
     static func decode<T: Decodable>(_ json: String, as type: T.Type = T.self) -> T {
         // A fixture that doesn't decode is a broken model, and a preview that
         // crashes says so louder than one that silently renders nothing.
-        try! CprojClient.decoder.decode(T.self, from: Data(json.utf8))
+        try! BardolierClient.decoder.decode(T.self, from: Data(json.utf8))
     }
 
-    static var status: CprojStatus { decode(statusJSON) }
+    static var status: BardolierStatus { decode(statusJSON) }
     static var doctor: DoctorOutput { decode(doctorJSON) }
 }
 
 #Preview("Status dump") {
     ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-            StatusDumpView(status: CprojFixtures.status)
-            DoctorDumpView(doctor: CprojFixtures.doctor)
+            StatusDumpView(status: BardolierFixtures.status)
+            DoctorDumpView(doctor: BardolierFixtures.doctor)
         }
         .padding(12)
     }
@@ -369,15 +369,15 @@ enum CprojFixtures {
 
 #Preview("Failure banner") {
     VStack(spacing: 8) {
-        FailureBanner(failure: .cli(CprojErrorBody(
+        FailureBanner(failure: .cli(BardolierErrorBody(
             code: .projectRunning,
             message: "`myapp` is running. Stop it before changing its services.",
             details: nil
         )))
-        FailureBanner(failure: .cli(CprojErrorBody(
+        FailureBanner(failure: .cli(BardolierErrorBody(
             code: .ejectBlocked,
             message: "/Volumes/ssd is still held by 2 process(es).",
-            details: CprojErrorDetails(
+            details: BardolierErrorDetails(
                 holders: [
                     SsdHolder(pid: 431, command: "Xcode", user: "mark", paths: ["/Volumes/ssd/claude-projects/myapp"]),
                     SsdHolder(pid: 902, command: "zsh", user: "mark", paths: ["/Volumes/ssd"]),
@@ -385,7 +385,7 @@ enum CprojFixtures {
                 reason: nil
             )
         )))
-        FailureBanner(failure: .executableNotFound(searched: CprojExecutable.searchedLocations))
+        FailureBanner(failure: .executableNotFound(searched: BardolierExecutable.searchedLocations))
     }
     .padding(12)
     .frame(width: 380)

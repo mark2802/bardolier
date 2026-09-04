@@ -1,11 +1,11 @@
 //
-//  CprojError.swift
-//  claude-yard
+//  BardolierError.swift
+//  Bardolier
 //
 //  The error contract: cli-spec.md §2 (stable codes) mapped to app-spec.md §13
 //  (short human messages, never a raw stack trace).
 //
-//  Every failing `cproj … --json` prints `{"error":{"code","message"}}` on
+//  Every failing `bardolier … --json` prints `{"error":{"code","message"}}` on
 //  stdout and exits non-zero. That envelope — not the exit status, not stderr —
 //  is what the app reacts to. Anything that comes back malformed is a bug in
 //  the pipe, not a business failure, and is reported as such so the two never
@@ -20,34 +20,34 @@ import Foundation
 
 /// A stable `error.code` from cli-spec.md §2. Open, like the other tokens, so a
 /// code added later still decodes and still renders (via `message`).
-nonisolated struct CprojErrorCode: CprojToken {
+nonisolated struct BardolierErrorCode: BardolierToken {
     let rawValue: String
 
     // Codes named in cli-spec.md §2.
-    static let ssdNotMounted = CprojErrorCode(rawValue: "SSD_NOT_MOUNTED")
-    static let projectExists = CprojErrorCode(rawValue: "PROJECT_EXISTS")
-    static let projectNotFound = CprojErrorCode(rawValue: "PROJECT_NOT_FOUND")
-    static let projectRunning = CprojErrorCode(rawValue: "PROJECT_RUNNING")
-    static let projectStopped = CprojErrorCode(rawValue: "PROJECT_STOPPED")
-    static let serviceUnknown = CprojErrorCode(rawValue: "SERVICE_UNKNOWN")
-    static let serviceAttached = CprojErrorCode(rawValue: "SERVICE_ATTACHED")
-    static let serviceNotAttached = CprojErrorCode(rawValue: "SERVICE_NOT_ATTACHED")
-    static let portUnavailable = CprojErrorCode(rawValue: "PORT_UNAVAILABLE")
-    static let volumeInUse = CprojErrorCode(rawValue: "VOLUME_IN_USE")
-    static let ejectBlocked = CprojErrorCode(rawValue: "EJECT_BLOCKED")
-    static let dockerUnavailable = CprojErrorCode(rawValue: "DOCKER_UNAVAILABLE")
+    static let ssdNotMounted = BardolierErrorCode(rawValue: "SSD_NOT_MOUNTED")
+    static let projectExists = BardolierErrorCode(rawValue: "PROJECT_EXISTS")
+    static let projectNotFound = BardolierErrorCode(rawValue: "PROJECT_NOT_FOUND")
+    static let projectRunning = BardolierErrorCode(rawValue: "PROJECT_RUNNING")
+    static let projectStopped = BardolierErrorCode(rawValue: "PROJECT_STOPPED")
+    static let serviceUnknown = BardolierErrorCode(rawValue: "SERVICE_UNKNOWN")
+    static let serviceAttached = BardolierErrorCode(rawValue: "SERVICE_ATTACHED")
+    static let serviceNotAttached = BardolierErrorCode(rawValue: "SERVICE_NOT_ATTACHED")
+    static let portUnavailable = BardolierErrorCode(rawValue: "PORT_UNAVAILABLE")
+    static let volumeInUse = BardolierErrorCode(rawValue: "VOLUME_IN_USE")
+    static let ejectBlocked = BardolierErrorCode(rawValue: "EJECT_BLOCKED")
+    static let dockerUnavailable = BardolierErrorCode(rawValue: "DOCKER_UNAVAILABLE")
 
     // Codes the implementation adds under §2's "not exhaustive" allowance.
-    static let invalidArgument = CprojErrorCode(rawValue: "INVALID_ARGUMENT")
-    static let notImplemented = CprojErrorCode(rawValue: "NOT_IMPLEMENTED")
-    static let configInvalid = CprojErrorCode(rawValue: "CONFIG_INVALID")
-    static let volumeNotFound = CprojErrorCode(rawValue: "VOLUME_NOT_FOUND")
-    static let extraPortAttached = CprojErrorCode(rawValue: "EXTRA_PORT_ATTACHED")
-    static let extraPortNotAttached = CprojErrorCode(rawValue: "EXTRA_PORT_NOT_ATTACHED")
-    static let packageAttached = CprojErrorCode(rawValue: "PACKAGE_ATTACHED")
-    static let packageNotAttached = CprojErrorCode(rawValue: "PACKAGE_NOT_ATTACHED")
-    static let ejectNotApplicable = CprojErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
-    static let internalError = CprojErrorCode(rawValue: "INTERNAL_ERROR")
+    static let invalidArgument = BardolierErrorCode(rawValue: "INVALID_ARGUMENT")
+    static let notImplemented = BardolierErrorCode(rawValue: "NOT_IMPLEMENTED")
+    static let configInvalid = BardolierErrorCode(rawValue: "CONFIG_INVALID")
+    static let volumeNotFound = BardolierErrorCode(rawValue: "VOLUME_NOT_FOUND")
+    static let extraPortAttached = BardolierErrorCode(rawValue: "EXTRA_PORT_ATTACHED")
+    static let extraPortNotAttached = BardolierErrorCode(rawValue: "EXTRA_PORT_NOT_ATTACHED")
+    static let packageAttached = BardolierErrorCode(rawValue: "PACKAGE_ATTACHED")
+    static let packageNotAttached = BardolierErrorCode(rawValue: "PACKAGE_NOT_ATTACHED")
+    static let ejectNotApplicable = BardolierErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
+    static let internalError = BardolierErrorCode(rawValue: "INTERNAL_ERROR")
 
     /// A short line for the UI, or nil when only the CLI's own message will do.
     /// app-spec.md §13: known codes get a human sentence, unknown ones fall
@@ -66,7 +66,7 @@ nonisolated struct CprojErrorCode: CprojToken {
         case .volumeInUse: return "That volume is still in use."
         case .ejectBlocked: return "Something is still holding the SSD."
         case .dockerUnavailable: return "Docker isn’t running."
-        case .configInvalid: return "The cproj config or service catalogue is invalid."
+        case .configInvalid: return "The bardolier config or service catalogue is invalid."
         case .volumeNotFound: return "Docker doesn’t have a volume with that name."
         case .ejectNotApplicable: return "This isn’t a removable volume, so there’s nothing to eject."
         // INVALID_ARGUMENT, NOT_IMPLEMENTED and INTERNAL_ERROR are bugs in the
@@ -78,21 +78,21 @@ nonisolated struct CprojErrorCode: CprojToken {
 }
 
 /// The wire shape of a failure under `--json`.
-nonisolated struct CprojErrorEnvelope: Codable, Hashable, Sendable {
-    let error: CprojErrorBody
+nonisolated struct BardolierErrorEnvelope: Codable, Hashable, Sendable {
+    let error: BardolierErrorBody
 }
 
-nonisolated struct CprojErrorBody: Codable, Hashable, Sendable {
-    let code: CprojErrorCode
+nonisolated struct BardolierErrorBody: Codable, Hashable, Sendable {
+    let code: BardolierErrorCode
     let message: String
     /// Code-specific detail; today only EJECT_BLOCKED carries any.
-    let details: CprojErrorDetails?
+    let details: BardolierErrorDetails?
 }
 
 /// Optional, additive detail. `details` is a free-form object in the schema, so
 /// every field here is optional and unknown keys are ignored — a new detail on
 /// an existing code can never break decoding, and a missing one is normal.
-nonisolated struct CprojErrorDetails: Codable, Hashable, Sendable {
+nonisolated struct BardolierErrorDetails: Codable, Hashable, Sendable {
     /// EJECT_BLOCKED: who still holds the volume (app-spec.md §10).
     let holders: [SsdHolder]?
     /// EJECT_BLOCKED: why the check failed when `holders` is empty.
@@ -142,17 +142,17 @@ nonisolated struct CprojErrorDetails: Codable, Hashable, Sendable {
 
 /// Everything that can go wrong between "the app wants to run a command" and
 /// "the app has a decoded payload".
-nonisolated enum CprojFailure: Error, Sendable {
+nonisolated enum BardolierFailure: Error, Sendable {
     /// The CLI ran and reported a business failure in the documented envelope.
-    case cli(CprojErrorBody)
-    /// `cproj` could not be found. Carries the places that were searched
+    case cli(BardolierErrorBody)
+    /// `bardolier` could not be found. Carries the places that were searched
     /// (app-spec.md §13, the first-run message).
     case executableNotFound(searched: [String])
     /// The process could not be launched at all.
     case launchFailed(path: String, underlying: String)
     /// The CLI answered fine and the terminal is what wouldn't open (§7).
     /// Kept apart from `launchFailed` because the fix is different: nothing is
-    /// wrong with `cproj`, and Preferences is where the terminal is chosen.
+    /// wrong with `bardolier`, and Preferences is where the terminal is chosen.
     case terminalFailed(terminal: String, underlying: String)
     /// Exit status said failure but stdout held no `{"error":…}` envelope —
     /// a crash, or something that wrote to stdout that shouldn't have.
@@ -162,7 +162,7 @@ nonisolated enum CprojFailure: Error, Sendable {
     case decodingFailed(command: String, underlying: String, stdout: String)
 
     /// The error code, when this failure came from the CLI's own envelope.
-    var code: CprojErrorCode? {
+    var code: BardolierErrorCode? {
         if case .cli(let body) = self { return body.code }
         return nil
     }
@@ -191,16 +191,16 @@ nonisolated enum CprojFailure: Error, Sendable {
     var isRuntimeHoldAfterStop: Bool { code == .ejectBlocked && reason == "runtime-holds-volume-after-stop" }
 }
 
-// Nonisolated for the same reason as CprojToken's extension: LocalizedError's
+// Nonisolated for the same reason as BardolierToken's extension: LocalizedError's
 // requirements are nonisolated, and the target defaults to MainActor.
-nonisolated extension CprojFailure: LocalizedError {
+nonisolated extension BardolierFailure: LocalizedError {
     /// The one place a failure becomes words on screen. Never a stack trace.
     var errorDescription: String? {
         switch self {
         case .cli(let body):
             return body.code.shortMessage ?? body.message
         case .executableNotFound(let searched):
-            return "Can’t find the `cproj` command. Looked in: \(searched.joined(separator: ", "))."
+            return "Can’t find the `bardolier` command. Looked in: \(searched.joined(separator: ", "))."
         case .launchFailed(let path, let underlying):
             return "Couldn’t run \(path): \(underlying)"
         case .terminalFailed(let terminal, let underlying):
@@ -208,10 +208,10 @@ nonisolated extension CprojFailure: LocalizedError {
         case .unexpectedFailure(let exitCode, _, let stderr):
             let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty
-                ? "cproj exited \(exitCode) without saying why."
-                : "cproj exited \(exitCode): \(detail)"
+                ? "bardolier exited \(exitCode) without saying why."
+                : "bardolier exited \(exitCode): \(detail)"
         case .decodingFailed(let command, let underlying, _):
-            return "Couldn’t read the output of `cproj \(command)`: \(underlying)"
+            return "Couldn’t read the output of `bardolier \(command)`: \(underlying)"
         }
     }
 
@@ -230,7 +230,7 @@ nonisolated extension CprojFailure: LocalizedError {
             return "Plug the SSD in, or set its path in Preferences."
         case .executableNotFound:
             return "Install it with `npm link` in the repo’s cli/ directory, or set its path with:\n"
-                + "defaults write \(CprojExecutable.defaultsSuite) \(CprojExecutable.pathDefaultsKey) /path/to/cproj"
+                + "defaults write \(BardolierExecutable.defaultsSuite) \(BardolierExecutable.pathDefaultsKey) /path/to/bardolier"
         case .terminalFailed:
             return "Pick a different terminal in Preferences. Terminal and iTerm are driven directly; "
                 + "anything else opens through a .command file."

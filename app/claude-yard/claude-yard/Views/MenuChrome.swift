@@ -1,6 +1,6 @@
 //
 //  MenuChrome.swift
-//  claude-yard
+//  Bardolier
 //
 //  The parts every panel of the menu is built from (app-spec.md §5).
 //
@@ -192,7 +192,7 @@ struct NoticeBanner: View {
 
 /// A degraded-but-working state: the thing the user asked for happened, by a
 /// worse route they can fix. Dismissible like a notice, but nothing clears it
-/// on their behalf — see `CprojStore.shellDowngrade`.
+/// on their behalf — see `BardolierStore.shellDowngrade`.
 struct WarningBanner: View {
     var text: String
     var dismiss: () -> Void
@@ -218,7 +218,7 @@ struct WarningBanner: View {
 /// CLI's own sentence underneath, and a recovery line when there is one. Never
 /// a stack trace, never a raw decoding error.
 struct ErrorBanner: View {
-    var failure: CprojFailure
+    var failure: BardolierFailure
     var dismiss: () -> Void
 
     var body: some View {
@@ -345,7 +345,7 @@ struct CopyButton: View {
 ///
 /// The CLI's answer, rendered and not interpreted: `lsof` named a command, a
 /// pid, the user and the paths, and the app's whole job is to make "quit Xcode"
-/// the obvious next move. It never offers to kill anything — cproj will not
+/// the obvious next move. It never offers to kill anything — bardolier will not
 /// force an unmount, and neither will the menu that drives it.
 struct HolderList: View {
     var holders: [SsdHolder]

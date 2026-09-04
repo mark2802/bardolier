@@ -1,19 +1,19 @@
 //
 //  EjectPanel.swift
-//  claude-yard
+//  Bardolier
 //
 //  Close all & eject (app-spec.md §10).
 //
 //  The flow §10 describes has three answers, and only one of them is "done":
 //
-//    1. `cproj eject --json` — which is itself down-all, then a holder check,
+//    1. `bardolier eject --json` — which is itself down-all, then a holder check,
 //       then `diskutil` (cli-spec.md §6). The app calls one command; it does
 //       not stop projects itself and then unmount, because ordering that
 //       sequence is the CLI's job and doing it twice is how the two get out of
 //       step.
 //    2. EJECT_BLOCKED — the holders are rendered by name and the user is
 //       offered RETRY. Nothing here forces, and nothing here offers to kill a
-//       holder: `cproj` deliberately has no `--force` to pass, because forcing
+//       holder: `bardolier` deliberately has no `--force` to pass, because forcing
 //       an unmount out from under a running editor is the data loss the command
 //       exists to prevent (CLAUDE.md, safety over convenience).
 //    2b. EJECT_BLOCKED by Docker's own VM — the same refusal with a different
@@ -34,7 +34,7 @@
 import SwiftUI
 
 struct EjectPanel: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
 
     var back: () -> Void
 
@@ -79,7 +79,7 @@ struct EjectPanel: View {
         } else {
             Text("Every running project is stopped, then the disk is unmounted.")
                 .font(.caption)
-            Text("If something still has files open on it, cproj says what — and never forces the unmount.")
+            Text("If something still has files open on it, bardolier says what — and never forces the unmount.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -133,7 +133,7 @@ struct EjectPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             HolderList(holders: holders)
-            Text("Quit them, then Retry. cproj will not force an unmount.")
+            Text("Quit them, then Retry. bardolier will not force an unmount.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -162,7 +162,7 @@ struct EjectPanel: View {
     /// blocked state above tells the user to go and do. What clears it is
     /// stopping the ENGINE, so that is the button, and it is a button rather
     /// than something the eject did on its own because it stops any container
-    /// on this Mac, cproj's or not.
+    /// on this Mac, bardolier's or not.
     @ViewBuilder
     private func dockerHoldState(holders: [SsdHolder], message: String, engineStopped: Bool) -> some View {
         HStack(alignment: .top, spacing: 6) {
@@ -320,7 +320,7 @@ struct EjectPanel: View {
 
     // MARK: - Plumbing
 
-    private var runningProjects: [CprojProject] {
+    private var runningProjects: [BardolierProject] {
         store.projects.filter { $0.state.isUp }
     }
 

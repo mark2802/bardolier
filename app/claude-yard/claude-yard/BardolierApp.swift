@@ -1,12 +1,12 @@
 //
-//  claude_yardApp.swift
-//  claude-yard
+//  BardolierApp.swift
+//  Bardolier
 //
 //  Created by Mark Williams on 24/08/2026.
 //
 //  A menu-bar-only app (app-spec.md §1): `MenuBarExtra`, no dock icon, no
 //  window. `LSUIElement` = YES and App Sandbox OFF are BUILD SETTINGS, not
-//  code — the sandbox would block shelling out to `cproj`, which is the app's
+//  code — the sandbox would block shelling out to `bardolier`, which is the app's
 //  only way of doing anything. See app/README.md.
 //
 //  `.window` style rather than `.menu`: the menu needs a refresh on open, a
@@ -22,8 +22,8 @@
 import SwiftUI
 
 @main
-struct claude_yardApp: App {
-    @StateObject private var store = CprojStore()
+struct BardolierApp: App {
+    @StateObject private var store = BardolierStore()
     @StateObject private var preferences = AppPreferences()
 
     var body: some Scene {

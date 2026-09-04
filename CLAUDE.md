@@ -279,19 +279,19 @@ gained `dir` the same way, so the app never composes a path from `ssd.root`.
 
 ## The app
 
-**It reads the contract; it never re-derives it.** `app/claude-yard/claude-yard/Cproj/`
+**It reads the contract; it never re-derives it.** `app/Bardolier/Bardolier/Bardolier/`
 (renamed in phase 16, along with everything below in this section):
-`CprojClient` builds argv, appends `--json` itself (no caller may), and turns a
-non-zero exit into `CprojFailure.cli` with the §2 code. `CprojModels.swift`
+`BardolierClient` builds argv, appends `--json` itself (no caller may), and turns a
+non-zero exit into `BardolierFailure.cli` with the §2 code. `BardolierModels.swift`
 mirrors `cli/schema/*.json`, one struct per schema object; closed string enums
 decode as open tokens so additive changes can't break an older build.
 `test/app-models.test.ts` checks it as text in both directions — a missed field,
 an invented one, an impossible error code, or a `Process` spawned outside the
 client fails there. A GUI app inherits no shell `PATH`, so
-`CprojExecutable.swift` locates `cproj` and hands the child a `PATH` reaching
+`BardolierExecutable.swift` locates `bardolier` and hands the child a `PATH` reaching
 `node`, `docker`, `lsof`, `diskutil` — the only environment knowledge in Swift.
 
-- **A blocked eject is a place to come back to.** `CprojStore.ejectPhase` holds
+- **A blocked eject is a place to come back to.** `BardolierStore.ejectPhase` holds
   blocked/working/ejected/failed (not `lastError`, which the next refresh
   clears); `EjectPanel` renders it, offers **Retry** (the same call again), and
   the menu row says where the flow got to. Nothing in Swift can force an unmount
@@ -299,16 +299,16 @@ client fails there. A GUI app inherits no shell `PATH`, so
 - **A dimmed row and an absent row look the same.** `MenuRow` takes a
   `disabledReason` and serves it as help; `DisabledNotice` says it once per
   group — with Docker down, every mutating item is disabled for one reason.
-- **A missing `cproj` is the state of the whole menu.** `CprojStore.cprojMissing`
-  shows `FirstRunPanel` — listing the paths `CprojExecutable` actually searched
+- **A missing `bardolier` is the state of the whole menu.** `BardolierStore.bardolierMissing`
+  shows `FirstRunPanel` — listing the paths `BardolierExecutable` actually searched
   — instead of letting each item fail its own way (§13).
-- **One operation at a time, then ask.** `CprojStore.activity` names it; while
+- **One operation at a time, then ask.** `BardolierStore.activity` names it; while
   set, mutating items are disabled, and every mutation is followed by a forced
   `status` refresh rather than a local patch (§4). Refusals are relayed verbatim
   — `PROJECT_RUNNING` becomes "Stop the project to change its services", never
   an unrequested stop-change-start. Destructive confirmation happens in the view
   before the call, because the client passes `--force` and the CLI cannot prompt.
-  `CprojTerminal` runs `cproj shell`'s argv via AppleScript or a `.command` file
+  `BardolierTerminal` runs `bardolier shell`'s argv via AppleScript or a `.command` file
   and launches no process itself.
 - Build settings the human sets in Xcode (`app/README.md`): SwiftUI
   `MenuBarExtra`, `LSUIElement` YES, App Sandbox off for v1,

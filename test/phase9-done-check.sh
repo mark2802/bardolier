@@ -262,9 +262,9 @@ grep -q 'mutationBlockedReason' "$APP/Views/MenuBarRootView.swift" \
   && ok "the menu computes it beside the rule it explains" \
   || bad "MenuBarRootView does not compute a reason"
 
-grep -q 'appUrl' "$APP/Cproj/CprojModels.swift" \
+grep -q 'appUrl' "$APP/Bardolier/BardolierModels.swift" \
   && ok "the app reads the dev-server URL rather than composing one" \
-  || bad "CprojProject does not decode app_url"
+  || bad "BardolierProject does not decode app_url"
 
 SDK="$(xcrun --show-sdk-path 2>/dev/null || true)"
 if command -v swiftc >/dev/null 2>&1 && [ -n "$SDK" ]; then

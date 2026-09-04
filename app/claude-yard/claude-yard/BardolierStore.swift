@@ -1,13 +1,13 @@
 //
-//  CprojStore.swift
-//  claude-yard
+//  BardolierStore.swift
+//  Bardolier
 //
 //  What the menu bar is currently looking at, and the one place an action runs.
 //
 //  The store holds NO truth of its own: it holds the last answer the CLI gave
 //  and the fact that a call is in flight. Nothing here computes a project's
 //  state, a port, or whether a volume is reclaimable — those are answers, and
-//  answers come from `cproj` (CLAUDE.md, app-spec.md §4).
+//  answers come from `bardolier` (CLAUDE.md, app-spec.md §4).
 //
 //  Phase 6 turns it from a reader into the app's action surface, under three
 //  rules that keep a thin client thin:
@@ -23,12 +23,12 @@
 //     does not become a stop-change-start sequence the user didn't ask for.
 //
 //  Confirmation for destructive actions happens in the VIEW, before the call —
-//  `CprojClient` passes `--force`, because the CLI cannot prompt with no
+//  `BardolierClient` passes `--force`, because the CLI cannot prompt with no
 //  terminal (app-spec.md §6, §9).
 //
 //  Phase 7 adds the two states that outlive a command: `ejectPhase`, because a
 //  blocked eject is something the user goes away and fixes before retrying
-//  (§10), and `cprojMissing`, because an app that cannot find its CLI has
+//  (§10), and `bardolierMissing`, because an app that cannot find its CLI has
 //  nothing to say about anything else and should say THAT once (§13).
 //
 
@@ -51,7 +51,7 @@ import SwiftUI
 nonisolated enum EjectPhase: Equatable, Sendable {
     /// Nothing attempted yet, or the SSD came back.
     case ready
-    /// `cproj eject` is running: down-all, then the holder check, then diskutil.
+    /// `bardolier eject` is running: down-all, then the holder check, then diskutil.
     case working
     /// EJECT_BLOCKED. `holders` is the CLI's answer, rendered verbatim; the app
     /// never forces and offers Retry instead (§10).
@@ -88,17 +88,17 @@ nonisolated enum EjectPhase: Equatable, Sendable {
 }
 
 @MainActor
-final class CprojStore: ObservableObject {
-    /// The last `cproj status --json`, or nil before the first successful call.
-    @Published private(set) var status: CprojStatus?
-    /// The last `cproj doctor --json` — the launch check (app-spec.md §4).
+final class BardolierStore: ObservableObject {
+    /// The last `bardolier status --json`, or nil before the first successful call.
+    @Published private(set) var status: BardolierStatus?
+    /// The last `bardolier doctor --json` — the launch check (app-spec.md §4).
     @Published private(set) var doctor: DoctorOutput?
     /// Every service the catalogue defines (§6, §8). Loaded once, on demand.
     @Published private(set) var catalogue: CatalogueOutput?
     /// The effective CLI config — what Preferences edits (§12).
     @Published private(set) var cliConfig: ConfigGetOutput?
     /// The most recent failure, already reduced to a human sentence (§13).
-    @Published private(set) var lastError: CprojFailure?
+    @Published private(set) var lastError: BardolierFailure?
     /// The result of the last action worth reporting — an assigned host port,
     /// a kept volume, reclaimed bytes (§6, §9).
     @Published private(set) var notice: String?
@@ -111,7 +111,7 @@ final class CprojStore: ObservableObject {
     /// What is running right now, or nil when idle. Drives the activity icon
     /// (§11) and disables conflicting actions (§4).
     @Published private(set) var activity: String?
-    /// Where `cproj` was found, for Preferences and the first-run message.
+    /// Where `bardolier` was found, for Preferences and the first-run message.
     @Published private(set) var executablePath: String?
     /// When the current `status` was taken.
     @Published private(set) var lastRefresh: Date?
@@ -121,22 +121,22 @@ final class CprojStore: ObservableObject {
     /// Where Close all & eject has got to (§10). Survives a refresh so the
     /// holder list is still there when the user comes back from quitting Xcode.
     @Published private(set) var ejectPhase: EjectPhase = .ready
-    /// True when `cproj` could not be found at all — the first-run state (§13).
+    /// True when `bardolier` could not be found at all — the first-run state (§13).
     /// Nothing the menu offers can work until it is false, so the menu says so
     /// instead of failing one command at a time.
-    @Published private(set) var cprojMissing = false
-    /// Everywhere `cproj` was looked for, in order — shown by the first-run
+    @Published private(set) var bardolierMissing = false
+    /// Everywhere `bardolier` was looked for, in order — shown by the first-run
     /// message so what the user is told matches what was actually tried (§13).
-    @Published private(set) var cprojSearchedLocations: [String] = []
+    @Published private(set) var bardolierSearchedLocations: [String] = []
 
-    private let client: CprojClient
+    private let client: BardolierClient
     private var refreshTask: Task<Void, Never>?
 
     /// §4 asks for a refresh on every menu open; reopening the menu twice in a
     /// second shouldn't queue two subprocesses behind each other.
     private let minimumInterval: TimeInterval = 0.5
 
-    init(client: CprojClient = CprojClient()) {
+    init(client: BardolierClient = BardolierClient()) {
         self.client = client
     }
 
@@ -180,15 +180,15 @@ final class CprojStore: ObservableObject {
         return nil
     }
 
-    var projects: [CprojProject] { status?.projects ?? [] }
+    var projects: [BardolierProject] { status?.projects ?? [] }
     var orphanedVolumes: [OrphanedVolume] { status?.orphanedVolumes ?? [] }
 
-    func project(named name: String) -> CprojProject? {
+    func project(named name: String) -> BardolierProject? {
         projects.first { $0.name == name }
     }
 
     /// The terminal the CLI config names — the single source for it (§8, §12).
-    var terminalName: String { cliConfig?.config.terminal ?? CprojTerminal.fallbackName }
+    var terminalName: String { cliConfig?.config.terminal ?? BardolierTerminal.fallbackName }
 
     // MARK: - Reading
 
@@ -228,19 +228,19 @@ final class CprojStore: ObservableObject {
             if owned { activity = "Refreshing" }
             defer { if owned { activity = nil } }
 
-            // Re-resolved every time, like the client does: installing `cproj`
+            // Re-resolved every time, like the client does: installing `bardolier`
             // or setting the preference then fixes a first-run failure on the
             // next menu open rather than on the next launch.
             do {
-                executablePath = try CprojExecutable.resolve().path
-                cprojMissing = false
+                executablePath = try BardolierExecutable.resolve().path
+                bardolierMissing = false
             } catch {
                 // Not `lastError`: a missing binary is not a failed command,
                 // it is the app having nothing to talk to (§13). The menu
                 // renders the first-run message instead of a banner.
                 executablePath = nil
-                cprojMissing = true
-                cprojSearchedLocations = CprojExecutable.searchedLocations
+                bardolierMissing = true
+                bardolierSearchedLocations = BardolierExecutable.searchedLocations
             }
             do {
                 let fresh = try await client.status()
@@ -260,7 +260,7 @@ final class CprojStore: ObservableObject {
                 }
                 lastRefresh = Date()
                 lastError = nil
-            } catch let failure as CprojFailure {
+            } catch let failure as BardolierFailure {
                 lastError = failure
             } catch {
                 lastError = .unexpectedFailure(exitCode: -1, stdout: "", stderr: String(describing: error))
@@ -276,7 +276,7 @@ final class CprojStore: ObservableObject {
     func loadDoctor() async {
         do {
             doctor = try await client.doctor()
-        } catch let failure as CprojFailure {
+        } catch let failure as BardolierFailure {
             lastError = failure
         } catch {
             lastError = .unexpectedFailure(exitCode: -1, stdout: "", stderr: String(describing: error))
@@ -290,7 +290,7 @@ final class CprojStore: ObservableObject {
         if catalogue != nil && !force { return }
         do {
             catalogue = try await client.catalogue()
-        } catch let failure as CprojFailure {
+        } catch let failure as BardolierFailure {
             // A broken catalogue must not take the menu down with it: the
             // Services submenu says it can't list services and everything else
             // keeps working.
@@ -306,7 +306,7 @@ final class CprojStore: ObservableObject {
     func projectNames() async -> [String] {
         do {
             return try await client.list().projects.map(\.name)
-        } catch let failure as CprojFailure {
+        } catch let failure as BardolierFailure {
             // A failure here is not worth blocking creation over: the CLI
             // checks for a collision itself and answers PROJECT_EXISTS.
             lastError = failure
@@ -319,7 +319,7 @@ final class CprojStore: ObservableObject {
     func loadConfig() async {
         do {
             cliConfig = try await client.configGet()
-        } catch let failure as CprojFailure {
+        } catch let failure as BardolierFailure {
             lastError = failure
         } catch {
             lastError = .unexpectedFailure(exitCode: -1, stdout: "", stderr: String(describing: error))
@@ -406,7 +406,7 @@ final class CprojStore: ObservableObject {
     /// Open a shell in the configured terminal (§7). The CLI names the command;
     /// the app is what runs it.
     ///
-    /// Both halves can fail differently and are reported differently: `cproj
+    /// Both halves can fail differently and are reported differently: `bardolier
     /// shell` refusing (the project is stopped) is a CLI failure, while the
     /// terminal refusing is a Preferences problem and says so.
     func openShell(project name: String, root: Bool = false) async {
@@ -414,14 +414,14 @@ final class CprojStore: ObservableObject {
             let invocation = try await client.shell(project: name, root: root)
             // A note comes back when the shell opened by a lesser route — say
             // so, rather than letting a silent downgrade look like normal.
-            if let note = try CprojTerminal.open(invocation, in: terminalName) {
+            if let note = try BardolierTerminal.open(invocation, in: terminalName) {
                 shellDowngrade = note
             } else {
                 // The good route worked, so whatever the banner still claims
                 // about a downgrade has stopped being true.
                 shellDowngrade = nil
             }
-        } catch let failure as CprojFailure {
+        } catch let failure as BardolierFailure {
             lastError = failure
         } catch let failure as TerminalFailure {
             lastError = .terminalFailed(terminal: terminalName, underlying: failure.message)
@@ -444,7 +444,7 @@ final class CprojStore: ObservableObject {
     func reclaimAll(volumes: [OrphanedVolume]) async {
         guard !isBusy else { return }
         var reclaimed = 0
-        var failure: CprojFailure?
+        var failure: BardolierFailure?
 
         activity = "Reclaiming \(volumes.count) volume\(volumes.count == 1 ? "" : "s")"
         lastError = nil
@@ -453,7 +453,7 @@ final class CprojStore: ObservableObject {
             do {
                 let result = try await client.removeVolume(name: volume.name)
                 if result.removed { reclaimed += result.sizeBytes }
-            } catch let error as CprojFailure {
+            } catch let error as BardolierFailure {
                 // Keep going: one volume still held by a container must not
                 // strand the others.
                 failure = error
@@ -462,7 +462,7 @@ final class CprojStore: ObservableObject {
             }
         }
         activity = nil
-        notice = "Reclaimed \(CprojFormat.bytes(reclaimed))."
+        notice = "Reclaimed \(BardolierFormat.bytes(reclaimed))."
         await refresh(force: true)
         // After the refresh, for the reason `perform` explains.
         if let failure {
@@ -474,7 +474,7 @@ final class CprojStore: ObservableObject {
     /// carries `holders`, which the view renders — and the flow stays on that
     /// state so Retry is a click rather than a fresh start.
     ///
-    /// Retry IS this method: `cproj eject` is idempotent in the way that
+    /// Retry IS this method: `bardolier eject` is idempotent in the way that
     /// matters (it stops what is up, checks again, unmounts), so a second call
     /// after the user quits Xcode is the whole recovery.
     ///
@@ -542,8 +542,8 @@ final class CprojStore: ObservableObject {
         }
         guard let result else { return }
         cliConfig = ConfigGetOutput(path: result.path, exists: true, config: result.config, overrides: result.overrides)
-        if result.overrides.contains("CPROJ_\(key.rawValue.uppercased())") {
-            notice = "Saved, but $CPROJ_\(key.rawValue.uppercased()) still wins for this one."
+        if result.overrides.contains("BARDOLIER_\(key.rawValue.uppercased())") {
+            notice = "Saved, but $BARDOLIER_\(key.rawValue.uppercased()) still wins for this one."
         } else if result.changed.isEmpty {
             notice = "No change."
         } else {
@@ -577,7 +577,7 @@ final class CprojStore: ObservableObject {
     private func perform<T: Sendable>(
         _ label: String,
         refresh shouldRefresh: Bool = true,
-        _ work: @Sendable (CprojClient) async throws -> T
+        _ work: @Sendable (BardolierClient) async throws -> T
     ) async -> T? {
         guard !isBusy else { return nil }
         activity = label
@@ -585,10 +585,10 @@ final class CprojStore: ObservableObject {
         notice = nil
 
         var value: T?
-        var failure: CprojFailure?
+        var failure: BardolierFailure?
         do {
             value = try await work(client)
-        } catch let error as CprojFailure {
+        } catch let error as BardolierFailure {
             failure = error
         } catch {
             failure = .unexpectedFailure(exitCode: -1, stdout: "", stderr: String(describing: error))
@@ -612,7 +612,7 @@ final class CprojStore: ObservableObject {
 
 /// Byte formatting for the one number the app computes rather than reads: the
 /// total of several `size_bytes` the CLI reported individually.
-nonisolated enum CprojFormat {
+nonisolated enum BardolierFormat {
     static func bytes(_ count: Int) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file

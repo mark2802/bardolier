@@ -1,6 +1,6 @@
 //
 //  MenuBarRootView.swift
-//  claude-yard
+//  Bardolier
 //
 //  The menu (app-spec.md §5), and the panels it opens.
 //
@@ -35,7 +35,7 @@ enum MenuPanel: Equatable {
 }
 
 struct MenuBarRootView: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
     @EnvironmentObject private var preferences: AppPreferences
 
     @State private var panel: MenuPanel = .root
@@ -88,9 +88,9 @@ struct MenuBarRootView: View {
             statusLine
             Divider().padding(.vertical, 4)
 
-            // §13: with no `cproj` there is nothing to show and nothing to
+            // §13: with no `bardolier` there is nothing to show and nothing to
             // offer, so the menu says THAT rather than failing item by item.
-            if store.cprojMissing {
+            if store.bardolierMissing {
                 FirstRunPanel()
                 Divider().padding(.vertical, 4)
                 MenuTextRow(title: "Preferences…", systemImage: "gearshape") { panel = .preferences }
@@ -324,11 +324,11 @@ struct MenuBarRootView: View {
 /// shows Start. The attached services and their host ports are shown inline —
 /// the port is the debugging payoff, so it should not need a click to see.
 struct ProjectRow: View {
-    @EnvironmentObject private var store: CprojStore
+    @EnvironmentObject private var store: BardolierStore
     @EnvironmentObject private var preferences: AppPreferences
     @EnvironmentObject private var optionKey: OptionKeyObserver
 
-    var project: CprojProject
+    var project: BardolierProject
     var isExpanded: Bool
     var canMutate: Bool
     /// Why this row's actions are inert, or nil when they are not (§11).
