@@ -408,7 +408,6 @@ describe('config contract (cli-spec.md §8)', () => {
     assert.ok(
       validate('config', {
         ssd_root: '/Volumes/ssd/claude-projects',
-        ssd_volume: '/Volumes/ssd',
         catalogue_path: '/Volumes/ssd/services.yml',
         terminal: 'Terminal',
       }).valid,
@@ -450,7 +449,7 @@ describe('catalogue + config commands (app-spec.md §6, §8, §12)', () => {
     const valid = {
       path: '/home/me/.config/bardolier/config.yml',
       exists: false,
-      config: { ssd_root: '/Volumes/ssd/claude-projects', ssd_volume: '/Volumes/ssd', catalogue_path: null, terminal: 'Terminal' },
+      config: { ssd_root: '/Volumes/ssd/claude-projects', catalogue_path: null, terminal: 'Terminal' },
       overrides: [],
     }
     assert.ok(validate('config-get', valid).valid, validate('config-get', valid).errors.join('\n'))

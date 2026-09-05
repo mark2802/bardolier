@@ -3,10 +3,9 @@
  *
  * §8 defines the config FILE; these are the shapes the app reads and writes it
  * through. Preferences (`app-spec.md` §12) must not edit `config.yml` itself:
- * the CLI owns precedence (defaults → file → environment), path expansion, and
- * the `ssd_root`-defaults-inside-`ssd_volume` rule, and a second writer that
- * knew only some of that would produce a file the CLI reads differently from
- * the app that wrote it.
+ * the CLI owns precedence (defaults → file → environment) and path expansion,
+ * and a second writer that knew only some of that would produce a file the
+ * CLI reads differently from the app that wrote it.
  */
 
 import type { ConfigKey } from '../config.ts'
@@ -14,7 +13,6 @@ import type { ConfigKey } from '../config.ts'
 /** Every §8 key, resolved. Paths absolute and tilde-expanded. */
 export type EffectiveConfig = {
   ssd_root: string
-  ssd_volume: string
   /** null when unset — the §4.1 fallback chain applies. */
   catalogue_path: string | null
   terminal: string

@@ -551,7 +551,7 @@ final class BardolierStore: ObservableObject {
         }
         // The SSD path changing means everything the menu shows is about a
         // different disk; the catalogue may move with it (§4.1).
-        if key == .ssdRoot || key == .ssdVolume || key == .cataloguePath {
+        if key == .ssdRoot || key == .cataloguePath {
             await loadCatalogue(force: true)
             await loadDoctor()
         }

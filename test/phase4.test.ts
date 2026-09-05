@@ -26,6 +26,7 @@ import { collectStatus } from '../cli/src/commands/status.ts'
 import { runShell } from '../cli/src/commands/shell.ts'
 import { collectOrphanedVolumes, runVolumeRemove } from '../cli/src/commands/volumes.ts'
 import { runDownAll, runEject } from '../cli/src/commands/ssd.ts'
+import { containingVolume } from '../cli/src/projects.ts'
 import type { Context } from '../cli/src/context.ts'
 import {
   holder,
@@ -463,9 +464,9 @@ describe('down-all (cli-spec.md §6)', () => {
 // ── eject (§6, Lifecycle / SSD) ───────────────────────────────────────────────
 
 describe('eject (cli-spec.md §6)', () => {
-  /** A sandbox whose SSD_VOLUME is the temp dir standing in for the mount. */
+  /** The mount point is whatever `containingVolume` derives from `box.root` on this machine (phase 17) — not a settable value. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: StubDevice): Context {
-    return makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } })
+    return makeContext(box, docker, { device })
   }
 
   test('stops everything, finds nothing holding it, and ejects', async () => {
@@ -479,7 +480,7 @@ describe('eject (cli-spec.md §6)', () => {
     assert.deepEqual(output.stopped, ['alpha'])
     assert.equal(output.ejected, true)
     assert.deepEqual(output.holders, [])
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
     assert.ok(validate('eject', output).valid)
   })
 
@@ -515,7 +516,7 @@ describe('eject (cli-spec.md §6)', () => {
     device.setHolders([])
     const output = await runEject(ctx)
     assert.equal(output.ejected, true)
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
   })
 
   test('containers come down BEFORE holders are checked — they are holders too', async () => {
@@ -550,18 +551,18 @@ describe('eject (cli-spec.md §6)', () => {
         await docker.composeDown(target)
       },
     }
-    const ctx = makeContext(box, recording, { device, env: { BDLR_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, recording, { device })
     await project(ctx, 'alpha')
 
     await runEject(ctx)
     assert.deepEqual(order, ['down', 'holders', 'eject'])
   })
 
-  test('an absent volume is SSD_NOT_MOUNTED and stops nothing', async () => {
+  test('an absent root is SSD_NOT_MOUNTED and stops nothing', async () => {
     const box = sandbox()
     const docker = stubDocker({ running: ['bardolier-alpha'] })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { device, env: { BDLR_SSD_ROOT: `${box.root}-gone` } })
 
     await assert.rejects(
       () => runEject(ctx),
@@ -635,7 +636,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
       volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }],
     })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })
+    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true) })
 
     await project(ctx, 'alpha', 'postgres')
     const up = await runUp(ctx, { name: 'alpha', noShell: false })
@@ -669,7 +670,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
     )
     device.setHolders([])
     assert.equal((await runEject(ctx)).ejected, true)
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
   })
 })
 

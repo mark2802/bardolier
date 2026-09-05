@@ -105,7 +105,6 @@ nonisolated struct CatalogueOrigin: BardolierToken {
 nonisolated struct ConfigKey: BardolierToken {
     let rawValue: String
     static let ssdRoot = ConfigKey(rawValue: "ssd_root")
-    static let ssdVolume = ConfigKey(rawValue: "ssd_volume")
     static let cataloguePath = ConfigKey(rawValue: "catalogue_path")
     static let terminal = ConfigKey(rawValue: "terminal")
 }
@@ -542,7 +541,6 @@ nonisolated struct CatalogueService: Codable, Hashable, Identifiable, Sendable {
 /// Every §8 key, resolved: defaults, then the file, then the environment.
 nonisolated struct EffectiveConfig: Codable, Hashable, Sendable {
     let ssdRoot: String
-    let ssdVolume: String
     /// nil when unset — the §4.1 fallback chain applies.
     let cataloguePath: String?
     let terminal: String

@@ -330,7 +330,7 @@ enum BardolierFixtures {
       "ok": false,
       "findings": [
         { "id": "config", "title": "Config", "ok": true,
-          "detail": "Loaded ~/.config/bardolier/config.yml. ssd_root=/Volumes/ssd/claude-projects, ssd_volume=/Volumes/ssd, terminal=Terminal" },
+          "detail": "Loaded ~/.config/bardolier/config.yml. ssd_root=/Volumes/ssd/claude-projects, terminal=Terminal" },
         { "id": "ssd", "title": "SSD mounted", "ok": true,
           "detail": "/Volumes/ssd/claude-projects is readable (volume /Volumes/ssd)." },
         { "id": "docker", "title": "Docker daemon", "ok": true,

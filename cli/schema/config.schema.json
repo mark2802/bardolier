@@ -8,12 +8,7 @@
   "properties": {
     "ssd_root": {
       "type": "string",
-      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to <ssd_volume>/claude-projects. Overridden by $BDLR_SSD_ROOT.",
-      "minLength": 1
-    },
-    "ssd_volume": {
-      "type": "string",
-      "description": "Mount point of the SSD itself, e.g. /Volumes/ssd — what `eject` unmounts. Overridden by $BDLR_SSD_VOLUME.",
+      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to /Volumes/ssd/claude-projects. Overridden by $BDLR_SSD_ROOT. The mount point `eject` unmounts is derived from this path, not a separate key.",
       "minLength": 1
     },
     "catalogue_path": {

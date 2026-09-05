@@ -24,16 +24,16 @@ function configFinding(ctx: Context): DoctorFinding {
     title: 'Config',
     ok: true,
     detail: exists
-      ? `Loaded ${path}${envNote}. ssd_root=${ctx.config.ssd_root}, ssd_volume=${ctx.config.ssd_volume}, terminal=${ctx.config.terminal}`
+      ? `Loaded ${path}${envNote}. ssd_root=${ctx.config.ssd_root}, terminal=${ctx.config.terminal}`
       // A missing config file is a supported state, not a fault: the defaults
       // are usable and `doctor` runs before the user has written anything.
-      : `No config file at ${path}; using defaults${envNote}. ssd_root=${ctx.config.ssd_root}, ssd_volume=${ctx.config.ssd_volume}`,
+      : `No config file at ${path}; using defaults${envNote}. ssd_root=${ctx.config.ssd_root}`,
   }
 }
 
 async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
   const ssd = probeSsd(ctx.config)
-  if (ssd.mounted) {
+  if (ssd.mounted && ssd.volume) {
     if (await ctx.device.removable(ssd.volume)) {
       return { id: 'ssd', title: 'SSD mounted', ok: true, detail: `${ssd.root} is readable (volume ${ssd.volume}).` }
     }
@@ -46,16 +46,14 @@ async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
       detail: `${ssd.root} is readable, on the internal disk rather than a removable volume — \`bardolier eject\` does not apply; use \`bardolier down-all\` to stop everything instead.`,
     }
   }
+  // With the volume derived from the root (phase 17) there is only one way
+  // this can fail: the root itself isn't readable.
   return {
     id: 'ssd',
     title: 'SSD mounted',
     ok: false,
-    detail: ssd.volumePresent
-      ? `Volume ${ssd.volume} is present but ${ssd.root} does not exist.`
-      : `Nothing mounted at ${ssd.volume}; ${ssd.root} is unreachable.`,
-    remedy: ssd.volumePresent
-      ? `Create ${ssd.root}, or point ssd_root at the right directory in ${ctx.loaded.path}.`
-      : 'Plug in the SSD, or set ssd_volume / BDLR_SSD_VOLUME to where it mounts.',
+    detail: `${ssd.root} is not readable.`,
+    remedy: `Plug in the disk that holds ${ssd.root}, or point ssd_root somewhere else in ${ctx.loaded.path}.`,
   }
 }
 

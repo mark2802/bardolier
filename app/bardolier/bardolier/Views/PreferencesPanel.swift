@@ -28,7 +28,6 @@ struct PreferencesPanel: View {
 
     var back: () -> Void
 
-    @State private var ssdVolume = ""
     @State private var ssdRoot = ""
     @State private var terminal = BardolierTerminal.fallbackName
     @State private var customTerminal = ""
@@ -69,12 +68,8 @@ struct PreferencesPanel: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("SSD").font(.caption.weight(.semibold))
 
-            field("Volume", text: $ssdVolume, placeholder: "/Volumes/ssd", key: .ssdVolume)
-            Text("The disk itself — what Close all & eject unmounts.")
-                .font(.caption2).foregroundStyle(.tertiary)
-
-            field("Projects", text: $ssdRoot, placeholder: "/Volumes/ssd/claude-projects", key: .ssdRoot)
-            Text("Where project folders live. Leave it matching the volume unless you moved them.")
+            field("Path", text: $ssdRoot, placeholder: "/Volumes/ssd/claude-projects", key: .ssdRoot)
+            Text("Where project folders live. The volume Close all & eject unmounts is derived from this path.")
                 .font(.caption2).foregroundStyle(.tertiary)
 
             if !overrides.isEmpty {
@@ -203,7 +198,6 @@ struct PreferencesPanel: View {
 
     private func syncFromConfig() {
         guard let config = store.cliConfig?.config else { return }
-        ssdVolume = config.ssdVolume
         ssdRoot = config.ssdRoot
         terminal = config.terminal
         customTerminal = config.terminal

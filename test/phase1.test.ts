@@ -12,7 +12,7 @@ import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { DEFAULT_SSD_VOLUME, DEFAULT_TERMINAL, defaultConfigPath, loadConfig } from '../cli/src/config.ts'
+import { DEFAULT_SSD_ROOT, DEFAULT_TERMINAL, defaultConfigPath, loadConfig } from '../cli/src/config.ts'
 import { createDocker, type DockerRunner } from '../cli/src/docker.ts'
 import { connectionHint, resolveCatalogue } from '../cli/src/catalogue.ts'
 import { discoverProjects, probeSsd } from '../cli/src/projects.ts'
@@ -44,8 +44,7 @@ describe('config (cli-spec.md §8)', () => {
     const box = sandbox()
     const loaded = loadConfig({ path: join(box.home, 'nope', 'config.yml'), home: box.home, env: {} })
     assert.equal(loaded.exists, false)
-    assert.equal(loaded.config.ssd_volume, DEFAULT_SSD_VOLUME)
-    assert.equal(loaded.config.ssd_root, join(DEFAULT_SSD_VOLUME, 'claude-projects'))
+    assert.equal(loaded.config.ssd_root, DEFAULT_SSD_ROOT)
     assert.equal(loaded.config.terminal, DEFAULT_TERMINAL)
     assert.equal(loaded.config.catalogue_path, null)
   })
@@ -54,35 +53,31 @@ describe('config (cli-spec.md §8)', () => {
     const box = sandbox()
     box.writeConfig({
       ssd_root: '/mnt/disk/projects',
-      ssd_volume: '/mnt/disk',
       catalogue_path: '/mnt/disk/services.yml',
       terminal: 'Ghostty',
     })
     const { config } = loadConfig({ path: box.configPath, home: box.home, env: {} })
     assert.equal(config.ssd_root, '/mnt/disk/projects')
-    assert.equal(config.ssd_volume, '/mnt/disk')
     assert.equal(config.catalogue_path, '/mnt/disk/services.yml')
     assert.equal(config.terminal, 'Ghostty')
   })
 
   test('env overrides beat the file and are reported', () => {
     const box = sandbox()
-    box.writeConfig({ ssd_root: '/mnt/disk/projects', ssd_volume: '/mnt/disk' })
+    box.writeConfig({ ssd_root: '/mnt/disk/projects' })
     const loaded = loadConfig({
       path: box.configPath,
       home: box.home,
-      env: { BDLR_SSD_ROOT: '/elsewhere/projects', BDLR_SSD_VOLUME: '/elsewhere' },
+      env: { BDLR_SSD_ROOT: '/elsewhere/projects' },
     })
     assert.equal(loaded.config.ssd_root, '/elsewhere/projects')
-    assert.equal(loaded.config.ssd_volume, '/elsewhere')
-    assert.deepEqual([...loaded.overrides], ['BDLR_SSD_ROOT', 'BDLR_SSD_VOLUME'])
+    assert.deepEqual([...loaded.overrides], ['BDLR_SSD_ROOT'])
   })
 
-  test('the root defaults inside the configured volume, so the two cannot diverge', () => {
+  test('$BDLR_SSD_VOLUME is ignored — there is no ssd_volume key left to override (phase 17)', () => {
     const box = sandbox()
-    box.writeConfig({ ssd_volume: '/mnt/other' })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: {} })
-    assert.equal(config.ssd_root, '/mnt/other/claude-projects')
+    const loaded = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_VOLUME: '/elsewhere' } })
+    assert.deepEqual([...loaded.overrides], [])
   })
 
   test('expands ~ against the resolved home', () => {
@@ -96,7 +91,7 @@ describe('config (cli-spec.md §8)', () => {
     const box = sandbox()
     box.writeFile('empty.yml', '')
     const { config } = loadConfig({ path: join(box.home, '..', 'empty.yml'), home: box.home, env: {} })
-    assert.equal(config.ssd_volume, DEFAULT_SSD_VOLUME)
+    assert.equal(config.ssd_root, DEFAULT_SSD_ROOT)
   })
 
   test('rejects an unknown key rather than ignoring a typo', () => {

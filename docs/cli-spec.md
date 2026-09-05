@@ -283,7 +283,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Lifecycle / SSD
 - `bardolier down-all` — stop + remove all bardolier containers.
-- `bardolier eject` — first checks that `ssd_volume` is actually a removable
+- `bardolier eject` — derives the volume from `ssd_root` (the last ancestor
+  directory sharing its `st_dev`, phase 17 — there is no separate `ssd_volume`
+  key to disagree with it) and first checks that it's actually a removable
   volume (`diskutil info -plist`). It may not be: `ssd_root` is a fully
   supported, first-class mode when it's an ordinary directory on the internal
   disk (§8), and `diskutil eject`-ing `/` or another non-removable mount is
@@ -403,17 +405,19 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 - Config file `~/.config/bardolier/config.yml` (internal disk — must be readable when
   SSD is absent, so `doctor`/`status` can report "SSD not mounted").
-  Keys: `ssd_root`, `ssd_volume`, `catalogue_path`, `terminal` (for the app's
-  shell-open preference, surfaced here for a single source).
-- CLI reads env overrides `BDLR_SSD_ROOT`, `BDLR_SSD_VOLUME`.
+  Keys: `ssd_root`, `catalogue_path`, `terminal` (for the app's shell-open
+  preference, surfaced here for a single source). There is no `ssd_volume`
+  key (phase 17): the mount point `eject` unmounts is derived from `ssd_root`
+  by walking `st_dev` boundaries, so the two can never disagree.
+- CLI reads env override `BDLR_SSD_ROOT`.
 - The app never edits this file itself: it reads it with `bardolier config get` and
-  writes it with `bardolier config set`, so precedence, path expansion and the
-  "`ssd_root` defaults inside `ssd_volume`" rule have one implementation.
+  writes it with `bardolier config set`, so precedence and path expansion have
+  one implementation.
 - `ssd_root` may be any local directory — an external SSD is not required. The
   project lifecycle (`new`/`up`/`down`/services/volumes) never assumes a
   removable volume; only `eject` does, and it is simply unavailable
-  (`EJECT_NOT_APPLICABLE`) when `ssd_volume` isn't one. Use `bardolier down-all` to
-  stop everything in that mode.
+  (`EJECT_NOT_APPLICABLE`) when the derived volume isn't one. Use
+  `bardolier down-all` to stop everything in that mode.
 
 ## 9. Compose generation rules
 

@@ -25,7 +25,6 @@ import type { ConfigGetOutput, ConfigSetOutput, EffectiveConfig } from '../model
 function effective(ctx: Context): EffectiveConfig {
   return {
     ssd_root: ctx.config.ssd_root,
-    ssd_volume: ctx.config.ssd_volume,
     catalogue_path: ctx.config.catalogue_path,
     terminal: ctx.config.terminal,
   }
@@ -86,7 +85,6 @@ export function runConfigSet(ctx: Context, request: ConfigSetRequest): ConfigSet
     changed: [...write.changed],
     config: {
       ssd_root: reloaded.config.ssd_root,
-      ssd_volume: reloaded.config.ssd_volume,
       catalogue_path: reloaded.config.catalogue_path,
       terminal: reloaded.config.terminal,
     },

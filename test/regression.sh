@@ -18,13 +18,14 @@
 # 13 builds a small derived image on top of it (one apt package) — also fast.
 # Phase 14 is a one-argv-difference `docker exec`, no image work. Phase 15 is
 # the rename; its check rebuilds bardolier-web too, same reason as 11/13.
-# Phase 16 is the Swift half of the rename — no Docker at all.
+# Phase 16 is the Swift half of the rename — no Docker at all. Phase 17 is a
+# config/eject reshape, real diskutil but no image work either.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-LAST=16
+LAST=17
 THROUGH="$LAST"
 
 while [ $# -gt 0 ]; do

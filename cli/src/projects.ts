@@ -11,7 +11,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { Config } from './config.ts'
 import { validate } from './schema.ts'
@@ -27,9 +27,8 @@ export type SsdProbe = {
    */
   readonly mounted: boolean
   readonly root: string
-  readonly volume: string
-  /** Whether the volume mount point itself exists — `doctor` distinguishes the two. */
-  readonly volumePresent: boolean
+  /** The mount point containing `root` (phase 17). Null only when `root` isn't readable. */
+  readonly volume: string | null
 }
 
 function isDirectory(path: string): boolean {
@@ -40,12 +39,43 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/**
+ * Walk from `path` up to the last ancestor sharing its `st_dev` — a mount
+ * boundary is a change of device number, so that ancestor IS the mount point.
+ * Pure `stat`, no spawn, so `probeSsd` stays a filesystem check that never
+ * throws and works with the disk absent. `null` when `path` itself can't be
+ * stat'd; a stat failure higher up just stops the walk there.
+ */
+export function containingVolume(path: string): string | null {
+  let dev: number
+  try {
+    dev = statSync(path).dev
+  } catch {
+    return null
+  }
+
+  let mount = path
+  let parent = dirname(mount)
+  while (parent !== mount) {
+    let parentDev: number
+    try {
+      parentDev = statSync(parent).dev
+    } catch {
+      break
+    }
+    if (parentDev !== dev) break
+    mount = parent
+    parent = dirname(mount)
+  }
+  return mount
+}
+
 export function probeSsd(config: Config): SsdProbe {
+  const mounted = isDirectory(config.ssd_root)
   return {
-    mounted: isDirectory(config.ssd_root),
+    mounted,
     root: config.ssd_root,
-    volume: config.ssd_volume,
-    volumePresent: isDirectory(config.ssd_volume),
+    volume: mounted ? containingVolume(config.ssd_root) : null,
   }
 }
 

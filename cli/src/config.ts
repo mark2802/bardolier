@@ -7,9 +7,13 @@
  * touches the SSD; loading never throws SSD_NOT_MOUNTED.
  *
  * Precedence, lowest to highest: built-in defaults → config file → environment.
- * §8 names `BDLR_SSD_ROOT` and `BDLR_SSD_VOLUME`; `BARDOLIER_CONFIG` is an
- * implementation addition that relocates the file itself, which is what keeps
- * tests and the done-check hermetic on a machine that has a real config.
+ * §8 names `BDLR_SSD_ROOT`; `BARDOLIER_CONFIG` is an implementation addition
+ * that relocates the file itself, which is what keeps tests and the
+ * done-check hermetic on a machine that has a real config.
+ *
+ * There is no `ssd_volume` key (phase 17): the mount point is derived from
+ * `ssd_root` by `containingVolume` in `projects.ts`, so the two can never
+ * disagree.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -22,8 +26,6 @@ import { assertValid, validate } from './schema.ts'
 export type Config = {
   /** Directory holding project dirs. Read for discovery; never created here. */
   readonly ssd_root: string
-  /** Mount point of the SSD itself — what `eject` unmounts (Phase 4). */
-  readonly ssd_volume: string
   /** Explicit catalogue location, or null to use the §4.1 fallback chain. */
   readonly catalogue_path: string | null
   /** Terminal the APP uses for shell-open. The CLI never spawns one. */
@@ -33,7 +35,6 @@ export type Config = {
 /** The file's shape: every key optional, since a missing file is legal. */
 export type ConfigFile = Partial<{
   ssd_root: string
-  ssd_volume: string
   catalogue_path: string
   terminal: string
 }>
@@ -55,8 +56,8 @@ export type LoadedConfig = {
   readonly env: Env
 }
 
-export const DEFAULT_SSD_VOLUME = '/Volumes/ssd'
-export const DEFAULT_PROJECTS_DIRNAME = 'claude-projects'
+// Phase 18 is where this stops assuming a disk exists; for now it names one.
+export const DEFAULT_SSD_ROOT = '/Volumes/ssd/claude-projects'
 export const DEFAULT_TERMINAL = 'Terminal'
 
 export type Env = Readonly<Record<string, string | undefined>>
@@ -118,19 +119,14 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
 
   const overrides: string[] = []
   const envRoot = env.BDLR_SSD_ROOT
-  const envVolume = env.BDLR_SSD_VOLUME
   if (envRoot) overrides.push('BDLR_SSD_ROOT')
-  if (envVolume) overrides.push('BDLR_SSD_VOLUME')
+  // $BDLR_SSD_VOLUME is not read: there is no `ssd_volume` key left to override.
 
-  const volume = expandPath(envVolume || file.ssd_volume || DEFAULT_SSD_VOLUME, home)
-  // The root defaults *inside* the configured volume, so setting only
-  // `ssd_volume` moves both and the two can never point at different disks.
-  const root = expandPath(envRoot || file.ssd_root || join(volume, DEFAULT_PROJECTS_DIRNAME), home)
+  const root = expandPath(envRoot || file.ssd_root || DEFAULT_SSD_ROOT, home)
 
   return {
     config: {
       ssd_root: root,
-      ssd_volume: volume,
       catalogue_path: file.catalogue_path ? expandPath(file.catalogue_path, home) : null,
       terminal: file.terminal || DEFAULT_TERMINAL,
     },
@@ -150,7 +146,7 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
  * but this rejects would be settable by hand and not by the app, which is the
  * kind of split that makes Preferences lie.
  */
-export const CONFIG_KEYS = ['ssd_root', 'ssd_volume', 'catalogue_path', 'terminal'] as const
+export const CONFIG_KEYS = ['ssd_root', 'catalogue_path', 'terminal'] as const
 export type ConfigKey = (typeof CONFIG_KEYS)[number]
 
 export function isConfigKey(value: string): value is ConfigKey {

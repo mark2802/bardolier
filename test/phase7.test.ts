@@ -22,6 +22,7 @@ import { BardolierError } from '../cli/src/errors.ts'
 import { createSsdDevice, type SsdDevice } from '../cli/src/device.ts'
 import { validate } from '../cli/src/schema.ts'
 import { runEject } from '../cli/src/commands/ssd.ts'
+import { containingVolume } from '../cli/src/projects.ts'
 import { runShell } from '../cli/src/commands/shell.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import type { Context } from '../cli/src/context.ts'
@@ -54,9 +55,9 @@ afterEach(() => {
 // ── The CLI half ─────────────────────────────────────────────────────────────
 
 describe('the eject flow the menu drives (app-spec.md §10)', () => {
-  /** A sandbox whose SSD_VOLUME is the temp dir standing in for the mount. */
+  /** The mount point is whatever `containingVolume` derives from `box.root` on this machine (phase 17) — not a settable value. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: SsdDevice): Context {
-    return makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } })
+    return makeContext(box, docker, { device })
   }
 
   test('a blocked eject hands the app holders to render, and leaves the disk mounted', async () => {
@@ -96,7 +97,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     assert.equal(output.ejected, true)
     assert.ok(validate('eject', output).valid, validate('eject', output).errors.join('\n'))
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
   })
 
   // Below: the real device, driven by a scripted `lsof`/`diskutil`. The stub
@@ -186,12 +187,12 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
     const confirm = stubConfirm(true)
 
-    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BDLR_SSD_VOLUME: box.root } }))
+    const output = await runEject(makeContext(box, docker, { device, confirm }))
 
     assert.equal(output.ejected, true)
     assert.equal(output.docker_stopped, true, 'the app has to be able to say the engine is down')
     assert.ok(validate('eject', output).valid, validate('eject', output).errors.join('\n'))
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
     assert.deepEqual(docker.calls.filter((call) => call.kind === 'stopEngine').length, 1)
     assert.match(confirm.questions[0] ?? '', /Docker/, 'the prompt names what is being stopped')
   })
@@ -206,7 +207,6 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
         runEject(makeContext(box, docker, {
           device,
           confirm: stubConfirm(false),
-          env: { BDLR_SSD_VOLUME: box.root },
         })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
@@ -231,12 +231,12 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
 
     const output = await runEject(
-      makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device }),
       { stopDocker: true },
     )
 
     assert.equal(output.docker_stopped, true)
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
   })
 
   test('`--stop-docker` on the actual command line reaches the flag runEject reads', async () => {
@@ -262,7 +262,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => device.setRuntimeHolders([]) })
     const confirm = stubConfirm(true)
 
-    const output = await runEject(makeContext(box, docker, { device, confirm, env: { BDLR_SSD_VOLUME: box.root } }))
+    const output = await runEject(makeContext(box, docker, { device, confirm }))
 
     assert.equal(output.docker_stopped, true)
     assert.match(confirm.questions[0] ?? '', /com\.docker\.backend/)
@@ -280,7 +280,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })),
+        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true) })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.deepEqual((error.details?.holders as { command: string }[]).map((h) => h.command), ['Xcode'])
@@ -300,7 +300,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } })),
+        runEject(makeContext(box, docker, { device, confirm: stubConfirm(true) })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.deepEqual((error.details?.holders as { command: string }[]).map((h) => h.command), ['mds_stores'])
@@ -323,7 +323,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     })
 
     await assert.rejects(
-      () => runEject(makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }), { stopDocker: true }),
+      () => runEject(makeContext(box, docker, { device }), { stopDocker: true }),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')
@@ -355,7 +355,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const docker = stubDocker({ running: [], onStopEngine: () => { vmAlive = false } })
 
     const output = await runEject(
-      makeContext(box, docker, { device, confirm: stubConfirm(true), env: { BDLR_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, confirm: stubConfirm(true) }),
     )
 
     assert.equal(output.ejected, true)
@@ -397,7 +397,6 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
         runEject(makeContext(box, docker, {
           device,
           confirm: stubConfirm(false),
-          env: { BDLR_SSD_VOLUME: box.root },
         })),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
@@ -417,7 +416,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     // Consenting — the button.
     const output = await runEject(
-      makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device }),
       { stopDocker: true },
     )
     assert.equal(output.ejected, true)
@@ -438,13 +437,13 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     const wait = stubWait()
 
     const output = await runEject(
-      makeContext(box, docker, { device, wait, env: { BDLR_SSD_VOLUME: box.root } }),
+      makeContext(box, docker, { device, wait }),
       { stopDocker: true },
     )
 
     assert.equal(output.ejected, true)
     assert.equal(output.docker_stopped, true)
-    assert.deepEqual(device.ejected, [box.root])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
     assert.deepEqual(wait.delays, [500, 500], 'it waited for the hold to go — and stopped waiting when it went')
     assert.equal(device.runtimeProbes(), 3, 'the signal is lsof, not a fixed sleep')
   })
@@ -460,7 +459,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
 
     await assert.rejects(
       () =>
-        runEject(makeContext(box, docker, { device, wait, env: { BDLR_SSD_VOLUME: box.root } }), {
+        runEject(makeContext(box, docker, { device, wait }), {
           stopDocker: true,
         }),
       (error: unknown) => {
@@ -501,7 +500,7 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
     })
 
     await assert.rejects(
-      () => runEject(makeContext(box, docker, { device, env: { BDLR_SSD_VOLUME: box.root } }), { stopDocker: true }),
+      () => runEject(makeContext(box, docker, { device }), { stopDocker: true }),
       (error: unknown) => {
         assert.ok(error instanceof BardolierError)
         assert.equal(error.code, 'EJECT_BLOCKED')

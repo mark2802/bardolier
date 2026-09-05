@@ -140,8 +140,8 @@ function detailHolders(error: BardolierError): EjectHolder[] {
 
 export async function runEject(ctx: Context, options: EjectOptions = {}): Promise<EjectOutput> {
   const ssd = probeSsd(ctx.config)
-  if (!ssd.volumePresent) {
-    throw new BardolierError('SSD_NOT_MOUNTED', `Nothing is mounted at ${ssd.volume}; there is nothing to eject.`)
+  if (!ssd.mounted || !ssd.volume) {
+    throw new BardolierError('SSD_NOT_MOUNTED', `${ssd.root} is not readable; there is nothing to eject.`)
   }
 
   if (!(await ctx.device.removable(ssd.volume))) {

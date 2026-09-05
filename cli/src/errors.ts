@@ -45,7 +45,7 @@ const EXTENDED_ERROR_CODES = [
   'PACKAGE_ATTACHED',
   /** `deps remove` named something not declared. */
   'PACKAGE_NOT_ATTACHED',
-  /** `eject` on an `ssd_volume` that isn't a removable volume — use `down-all` instead. */
+  /** `eject` on a root whose volume isn't removable — use `down-all` instead. */
   'EJECT_NOT_APPLICABLE',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
