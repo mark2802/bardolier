@@ -304,6 +304,26 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   §4.2, §9. This is for OS packages only — a genuinely new language/toolchain
   is the different, bigger gap below.
 
+- **The project's toolchain includes something installed by its own
+  installer script** — an agent skill pack such as gstack, a version manager,
+  anything shipping a `curl | sh` installer. It is neither an apt package
+  (`deps add` is apt-only, and its derived image is shared by every project
+  declaring the same set) nor big enough to be the toolchain gap below.
+  Installers default to `$HOME`, which here is the per-project `$HOME` volume:
+  it survives `down`, but not `delete --purge` or a `docker` prune of unused
+  volumes, and nothing records how to rebuild it. Route around it by
+  installing under the **project directory** instead — that's on the SSD and
+  survives both. Point the installer at it (`BUN_INSTALL=/work/.bun`, a clone
+  into `/work/.claude/skills/…`); symlink the `$HOME` paths the tool
+  hardcodes to their `/work` counterparts; and put any `PATH` it needs in the
+  project's `.claude/settings.json` `env` block — the generated compose file
+  cannot extend `PATH`, because `${PATH}` there substitutes the **Mac's**
+  value. Then leave a small re-link script beside the install: the symlinks
+  and the `.bashrc` line are the only parts still living in the volume, so
+  recovery after a prune is one command. This is a documented route-around,
+  not a bardolier capability — see "Persisting user-space tooling installed
+  inside the container" in `docs/migration-guide-gaps.md`.
+
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
   situational fix — it's the same shape of change Phase 11 made for Python.
