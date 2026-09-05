@@ -11,6 +11,8 @@ export type ListedProject = {
   name: string
   archetype: Archetype
   state: ProjectState
+  /** The configured root's name this project lives under. Additive since phase 18. */
+  root?: string
 }
 
 export type ListOutput = {

@@ -16,7 +16,8 @@
         "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
         "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
         "dir": { "type": "string", "minLength": 1 },
-        "created": { "type": "string", "format": "date-time" }
+        "created": { "type": "string", "format": "date-time" },
+        "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project was created under (phase 18)." }
       }
     },
     "manifest_path": { "type": "string", "minLength": 1 },

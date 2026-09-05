@@ -6,9 +6,12 @@
  * crash mid-way leaves a directory that `status` can still read rather than an
  * unattributable pile of files.
  *
- * The SSD must already be mounted. Creating `$SSD_ROOT` ourselves would put the
- * project on the internal disk the moment the disk was unplugged — exactly the
- * failure the split-storage design exists to prevent.
+ * The target root must already be readable. Creating it ourselves would put
+ * the project on the internal disk the moment the disk was unplugged — exactly
+ * the failure the split-storage design exists to prevent. `--root <name>`
+ * (phase 18) picks which configured root to use, defaulting to the first;
+ * an unreadable target is ROOT_UNREADABLE, not SSD_NOT_MOUNTED — it names the
+ * one root this call cares about, not "nothing is mounted anywhere".
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -24,7 +27,7 @@ import { allocateAppPort, allocatePorts } from '../allocator.ts'
 import { describeService } from '../services.ts'
 import { parseServiceList, resolveServices } from './service.ts'
 import { seededFiles } from '../scaffold.ts'
-import { probeSsd } from '../projects.ts'
+import { defaultRoot, discoverProjects, findProject, probeRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, writeManifest } from '../workspace.ts'
 import { validate } from '../schema.ts'
 
@@ -36,6 +39,8 @@ export type NewRequest = {
   readonly archetype: string | undefined
   /** Raw `--services a,b`; ports are assigned now, at creation (§5, §6). */
   readonly services: string | undefined
+  /** `--root <name>`, defaulting to the first configured root (phase 18). */
+  readonly root?: string
 }
 
 function requireName(name: string | undefined): string {
@@ -59,21 +64,39 @@ function requireArchetype(value: string | undefined): Archetype {
   return value
 }
 
+function requireTargetRoot(ctx: Context, name: string | undefined) {
+  if (name === undefined) return defaultRoot(ctx.config)
+  const root = ctx.config.roots.find((r) => r.name === name)
+  if (!root) {
+    throw new BardolierError(
+      'INVALID_ARGUMENT',
+      `Unknown root \`${name}\`. Configured roots: ${ctx.config.roots.map((r) => r.name).join(', ')}.`,
+    )
+  }
+  return root
+}
+
 export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutput> {
   const name = requireName(request.name)
   const archetype = requireArchetype(request.archetype)
+  const target = requireTargetRoot(ctx, request.root)
 
-  const ssd = probeSsd(ctx.config)
-  if (!ssd.mounted) {
+  const probe = probeRoot(target)
+  if (!probe.mounted) {
     throw new BardolierError(
-      'SSD_NOT_MOUNTED',
-      `The SSD is not mounted at ${ctx.config.ssd_root}; refusing to create a project on the internal disk.`,
+      'ROOT_UNREADABLE',
+      `Root \`${target.name}\` (${target.path}) is not readable; refusing to create a project on the internal disk.`,
+      { roots: [target.name] },
     )
   }
 
-  const dir = join(ctx.config.ssd_root, name)
-  if (existsSync(dir)) {
-    throw new BardolierError('PROJECT_EXISTS', `\`${name}\` already exists at ${dir}.`)
+  const dir = join(target.path, name)
+  // PROJECT_EXISTS means "in any root": two projects sharing a name would
+  // share a container name and a home volume (§9), which is destructive.
+  const discovery = discoverProjects(ctx.config)
+  const elsewhere = findProject(discovery, name) ?? null
+  if (elsewhere || existsSync(dir)) {
+    throw new BardolierError('PROJECT_EXISTS', `\`${name}\` already exists at ${elsewhere?.dir ?? dir}.`)
   }
 
   // Everything that can fail happens before the directory exists: an unknown
@@ -132,7 +155,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   regenerateCompose(dir, manifest, catalogue)
 
   return {
-    project: { name, archetype, base_image: manifest.base_image, dir, created: manifest.created },
+    project: { name, archetype, base_image: manifest.base_image, dir, created: manifest.created, root: target.name },
     manifest_path: manifestPath(dir),
     compose_path: composePath(dir),
     seeded,

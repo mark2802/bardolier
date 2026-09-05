@@ -36,7 +36,7 @@
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
 import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, ROLE_CACHE, volumeName } from './compose.ts'
-import { discoverProjects } from './projects.ts'
+import { discoverProjects, rootUnreadableError, unreadableRoots } from './projects.ts'
 import { homeVolumeName } from './naming.ts'
 import type { DockerVolume } from './docker.ts'
 import type { ResolvedCatalogue } from './catalogue.ts'
@@ -95,15 +95,20 @@ type Claims = {
   readonly attachments: ReadonlySet<string>
 }
 
-/** Everything the manifests under `$SSD_ROOT` claim. One walk, both rules. */
+/** Everything the manifests under every configured root claim. One walk, both rules. */
 function claimsFromManifests(ctx: Context): Claims {
   const discovery = discoverProjects(ctx.config)
   if (!discovery.mounted) {
     throw new BardolierError(
       'SSD_NOT_MOUNTED',
-      `The SSD is not mounted at ${ctx.config.ssd_root}, so bardolier cannot tell which volumes are still in use. Mount it before reclaiming disk.`,
+      `No configured root is readable, so bardolier cannot tell which volumes are still in use. Mount one before reclaiming disk.`,
     )
   }
+  // Some, but not all, roots readable: a PARTIAL view is the dangerous case —
+  // silently scanning only what's reachable would call the other root's
+  // volumes orphaned. Total absence above is the worse, already-handled case.
+  const unreadable = unreadableRoots(discovery)
+  if (unreadable.length > 0) throw rootUnreadableError(unreadable)
   if (discovery.invalid.length > 0) {
     const broken = discovery.invalid.map((p) => p.name).join(', ')
     throw new BardolierError(

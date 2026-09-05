@@ -36,6 +36,8 @@
             "PACKAGE_ATTACHED",
             "PACKAGE_NOT_ATTACHED",
             "EJECT_NOT_APPLICABLE",
+            "PROJECT_AMBIGUOUS",
+            "ROOT_UNREADABLE",
             "INTERNAL_ERROR"
           ]
         },

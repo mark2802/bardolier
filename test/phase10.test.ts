@@ -116,6 +116,7 @@ describe('doctor on a local root (cli-spec.md §6)', () => {
     assert.equal(ssd.remedy, undefined)
     assert.doesNotMatch(ssd.detail, /[Pp]lug in/)
     assert.match(ssd.detail, /eject/)
+    assert.equal(ssd.roots?.[0]?.removable, false, 'structured per-root state, for the app to tell SSD wording apart from internal-disk wording')
     assert.ok(validate('doctor', report).valid)
   })
 
@@ -125,6 +126,18 @@ describe('doctor on a local root (cli-spec.md §6)', () => {
     const ctx = makeContext(box, stubDocker(), { device })
 
     const report = await collectDoctor(ctx)
-    assert.match(finding(report, 'ssd').detail, /readable \(volume/)
+    const ssd = finding(report, 'ssd')
+    assert.match(ssd.detail, /readable \(volume/)
+    assert.equal(ssd.roots?.[0]?.removable, true)
+  })
+
+  test('an unreadable root reports removable: null — nothing to ask diskutil about', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '/nonexistent/nowhere' } })
+
+    const report = await collectDoctor(ctx)
+    const ssd = finding(report, 'ssd')
+    assert.equal(ssd.roots?.[0]?.mounted, false)
+    assert.equal(ssd.roots?.[0]?.removable, null)
   })
 })

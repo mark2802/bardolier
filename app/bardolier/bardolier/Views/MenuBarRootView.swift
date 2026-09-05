@@ -263,12 +263,15 @@ struct MenuBarRootView: View {
     /// a holder list while the eject is still running is exactly the point.
     ///
     /// `.notApplicable` (phase 10) is the one phase that closes the row instead
-    /// of opening a panel: `ssd_root` is a plain local directory, so there is
+    /// of opening a panel: the root's path is a plain local directory, so there is
     /// nothing a panel could offer beyond the reason, and the row already has
     /// somewhere to put that (`disabledReason`) — the same treatment a missing
     /// archetype Dockerfile gets, not a failure to click into.
     private var canOpenEject: Bool {
         if case .notApplicable = store.ejectPhase { return false }
+        // Plain "Close all" (no removable root) is `down-all` underneath —
+        // it needs no root mounted, unlike an actual eject.
+        if !store.anyRootRemovable { return true }
         return store.status?.ssd.mounted == true || store.ejectPhase != .ready
     }
 
@@ -307,7 +310,10 @@ struct MenuBarRootView: View {
         case .notApplicable:
             return "Nothing to eject"
         default:
-            return "Close all & eject"
+            // No configured root is a removable volume: say what the click
+            // will actually do (phase 18) rather than promising an eject
+            // that would fail before stopping anything.
+            return store.anyRootRemovable ? "Close all & eject" : "Close all"
         }
     }
 
@@ -315,7 +321,7 @@ struct MenuBarRootView: View {
         switch store.ejectPhase {
         case .blocked, .blockedByDocker: return "exclamationmark.triangle"
         case .ejected: return "eject.circle"
-        default: return "eject"
+        default: return store.anyRootRemovable ? "eject" : "stop.circle"
         }
     }
 }
@@ -346,6 +352,13 @@ struct ProjectRow: View {
                     Text(project.archetype.display)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    // Only shown with more than one configured root (phase
+                    // 18) — the common single-root case says nothing new.
+                    if store.roots.count > 1, let root = project.root {
+                        Text(root)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                     Spacer(minLength: 0)
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9))

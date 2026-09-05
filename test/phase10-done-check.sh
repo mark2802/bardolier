@@ -40,7 +40,7 @@ ROOT="$TMP/local-root"
 mkdir -p "$ROOT"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_ROOT="$ROOT"
+export BARDOLIER_ROOT="$ROOT"
 export BDLR_SSD_VOLUME="$ROOT"
 
 json_assert() { # json_assert <json> <js body over `d`>

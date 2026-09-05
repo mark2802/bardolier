@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/root-remove.schema.json",
+  "title": "bardolier root remove output",
+  "description": "What `bardolier root remove` forgot (cli-spec.md §8, phase 18). Never touches the directory or anything in it. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "removed", "roots"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1, "description": "The config file written." },
+    "removed": { "$ref": "#/$defs/root" },
+    "roots": {
+      "type": "array",
+      "description": "Every configured root afterwards, in order.",
+      "items": { "$ref": "#/$defs/root" }
+    }
+  },
+  "$defs": {
+    "root": {
+      "type": "object",
+      "description": "One configured root. Duplicated verbatim in root-add/root-remove/root-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["name", "path", "mounted"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mounted": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -307,7 +307,7 @@ describe('service add (cli-spec.md §6)', () => {
       (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
     )
 
-    const unmounted = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: `${box.root}-gone` } })
+    const unmounted = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: `${box.root}-gone` } })
     await assert.rejects(
       () => runServiceAdd(unmounted, { project: 'myapp', service: 'postgres' }),
       (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',

@@ -15,7 +15,7 @@
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { devContainerName, serviceContainerName } from '../naming.ts'
-import { discoverProjects, probeSsd, type DiscoveredProject } from '../projects.ts'
+import { defaultRoot, discoverProjects, findProject, type DiscoveredProject } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
 import { scanVolumes } from '../volumes.ts'
 import { connectionHint } from '../catalogue.ts'
@@ -64,22 +64,25 @@ function buildProject(
     app_port: manifest.app_port ?? null,
     app_url: appUrl(manifest),
     extra_ports: attachedExtraPorts(manifest),
+    root: project.root,
   }
 }
 
 export async function collectStatus(ctx: Context, projectName?: string | null): Promise<Status> {
-  const ssd = probeSsd(ctx.config)
   const discovery = discoverProjects(ctx.config)
 
   let selected = discovery.projects
   if (projectName) {
-    const match = discovery.projects.find((p) => p.name === projectName)
+    const match = findProject(discovery, projectName)
     if (!match) {
       const broken = discovery.invalid.find((p) => p.name === projectName)
       if (broken) {
         throw new BardolierError('CONFIG_INVALID', `Project \`${projectName}\` has an unusable manifest: ${broken.reason}`)
       }
-      throw new BardolierError('PROJECT_NOT_FOUND', `No project named \`${projectName}\` under ${ctx.config.ssd_root}.`)
+      throw new BardolierError(
+        'PROJECT_NOT_FOUND',
+        `No project named \`${projectName}\` in any configured root (${ctx.config.roots.map((r) => r.path).join(', ')}).`,
+      )
     }
     selected = [match]
   }
@@ -92,10 +95,13 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
   const catalogue = needsCatalogue ? ctx.catalogue().catalogue : null
 
   return {
-    ssd: { mounted: ssd.mounted, root: ssd.root },
+    // `ssd.root` keeps reporting the default root's path so the field the app
+    // already reads stays meaningful; `roots` (phase 18) is the complete view.
+    ssd: { mounted: discovery.mounted, root: defaultRoot(ctx.config).path },
+    roots: discovery.roots.map((root) => ({ name: root.name, path: root.path, mounted: root.mounted })),
     docker: { available: dockerAvailable },
     projects: selected.map((project) => buildProject(project, running, catalogue)),
-    orphaned_volumes: await orphanedVolumes(ctx, ssd.mounted, dockerAvailable),
+    orphaned_volumes: await orphanedVolumes(ctx, discovery.mounted, dockerAvailable),
   }
 }
 
@@ -121,17 +127,24 @@ async function orphanedVolumes(ctx: Context, mounted: boolean, dockerAvailable: 
 
 export function renderStatus(status: Status): string[] {
   const lines: string[] = []
-  lines.push(`SSD:    ${status.ssd.mounted ? 'mounted' : 'NOT MOUNTED'}  ${status.ssd.root}`)
+  const multipleRoots = status.roots !== undefined && status.roots.length > 1
+  if (multipleRoots) {
+    lines.push('Roots:')
+    for (const root of status.roots ?? []) lines.push(`  ${root.name}  ${root.mounted ? 'mounted' : 'NOT MOUNTED'}  ${root.path}`)
+  } else {
+    lines.push(`SSD:    ${status.ssd.mounted ? 'mounted' : 'NOT MOUNTED'}  ${status.ssd.root}`)
+  }
   lines.push(`Docker: ${status.docker.available ? 'available' : 'UNAVAILABLE'}`)
   lines.push('')
 
   if (status.projects.length === 0) {
-    lines.push(status.ssd.mounted ? 'No projects.' : 'No projects visible while the SSD is unmounted.')
+    lines.push(status.ssd.mounted ? 'No projects.' : 'No projects visible while every root is unmounted.')
     return lines
   }
 
   for (const project of status.projects) {
-    lines.push(`${project.name}  [${project.archetype}]  ${project.state}`)
+    const root = multipleRoots ? `  (${project.root})` : ''
+    lines.push(`${project.name}  [${project.archetype}]  ${project.state}${root}`)
     lines.push(`  dev container: ${project.dev_container ?? '—'}`)
     if (project.app_url) lines.push(`  dev server:    ${project.app_url}`)
     for (const port of project.extra_ports ?? []) lines.push(`  ${port.name}:   ${port.url}`)

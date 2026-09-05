@@ -101,10 +101,11 @@ nonisolated struct CatalogueOrigin: BardolierToken {
 }
 
 /// A settable key of the CLI config file (cli-spec.md §8) — what Preferences
-/// writes through `bardolier config set` (app-spec.md §12).
+/// writes through `bardolier config set` (app-spec.md §12). `roots` is
+/// list-valued and is not settable this way — see `ConfiguredRoot` and
+/// `bardolier root add | remove | list` (phase 18).
 nonisolated struct ConfigKey: BardolierToken {
     let rawValue: String
-    static let ssdRoot = ConfigKey(rawValue: "ssd_root")
     static let cataloguePath = ConfigKey(rawValue: "catalogue_path")
     static let terminal = ConfigKey(rawValue: "terminal")
 }
@@ -136,12 +137,25 @@ nonisolated struct BardolierStatus: Codable, Hashable, Sendable {
     let docker: DockerStatus
     let projects: [BardolierProject]
     let orphanedVolumes: [OrphanedVolume]
+    /// Every configured root's readable state. Additive since phase 18.
+    let roots: [ConfiguredRoot]?
 }
 
 nonisolated struct SsdStatus: Codable, Hashable, Sendable {
     let mounted: Bool
-    /// Configured `$SSD_ROOT` — reportable even when `mounted` is false.
+    /// The default root's path (`roots[0]`) — reportable even when `mounted`
+    /// is false. See `roots` on `BardolierStatus` for every configured root.
     let root: String
+}
+
+/// One configured root (cli-spec.md §8, phase 18) — mirrors `status.roots`
+/// and every `root add | remove | list` payload.
+nonisolated struct ConfiguredRoot: Codable, Hashable, Identifiable, Sendable {
+    let name: String
+    let path: String
+    let mounted: Bool
+
+    var id: String { name }
 }
 
 nonisolated struct DockerStatus: Codable, Hashable, Sendable {
@@ -173,6 +187,8 @@ nonisolated struct BardolierProject: Codable, Hashable, Identifiable, Sendable {
     /// Extra ports declared on this project (§5.1), sorted by name. Additive
     /// since Phase 12 — absent on an older CLI, decoded as nil either way.
     let extraPorts: [AttachedExtraPort]?
+    /// The configured root's name this project lives under. Additive since phase 18.
+    let root: String?
 
     var id: String { name }
 }
@@ -210,6 +226,8 @@ nonisolated struct ProjectSummary: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let archetype: Archetype
     let state: ProjectState
+    /// The configured root's name this project lives under. Additive since phase 18.
+    let root: String?
 
     var id: String { name }
 }
@@ -222,6 +240,20 @@ nonisolated struct DoctorOutput: Codable, Hashable, Sendable {
     let findings: [DoctorFinding]
 }
 
+/// One configured root's state, as reported on the `ssd` finding. Additive since phase 18.
+nonisolated struct DoctorRootState: Codable, Hashable, Identifiable, Sendable {
+    let name: String
+    let path: String
+    let mounted: Bool
+    /// Whether `diskutil` reports this as a removable, non-internal volume —
+    /// what tells "SSD" wording apart from "internal folder" wording. Nil
+    /// when the root isn't currently mounted: there is nothing to ask, and
+    /// the CLI never guesses.
+    let removable: Bool?
+
+    var id: String { name }
+}
+
 nonisolated struct DoctorFinding: Codable, Hashable, Identifiable, Sendable {
     let id: DoctorFindingID
     let title: String
@@ -229,6 +261,8 @@ nonisolated struct DoctorFinding: Codable, Hashable, Identifiable, Sendable {
     let detail: String
     /// Present only when the finding is actionable.
     let remedy: String?
+    /// Per-root state. Present only on the `ssd` finding. Additive since phase 18.
+    let roots: [DoctorRootState]?
 }
 
 // MARK: - shell (cli-spec.md §6 — the CLI names the command, the app spawns it)
@@ -260,6 +294,8 @@ nonisolated struct CreatedProject: Codable, Hashable, Sendable {
     let dir: String
     /// RFC 3339 timestamp, kept as the string the CLI emitted.
     let created: String
+    /// The configured root's name this project was created under. Additive since phase 18.
+    let root: String?
 }
 
 /// The manifest's host port joined with the catalogue's identity — the shape
@@ -470,6 +506,8 @@ nonisolated struct EjectOutput: Codable, Hashable, Sendable {
     /// Optional because the field is additive: a CLI from before it says
     /// nothing, and nothing is the same as false here.
     let dockerStopped: Bool?
+    /// The configured root's name that was ejected. Additive since phase 18.
+    let root: String?
 }
 
 /// A process holding files open on the SSD, as `lsof` reports it.
@@ -536,11 +574,34 @@ nonisolated struct CatalogueService: Codable, Hashable, Identifiable, Sendable {
     var id: String { key }
 }
 
+// MARK: - root add / remove / list (cli-spec.md §8, phase 18)
+
+nonisolated struct RootAddOutput: Codable, Hashable, Sendable {
+    let path: String
+    let created: Bool
+    let added: ConfiguredRoot
+    /// Every configured root afterwards, in order.
+    let roots: [ConfiguredRoot]
+}
+
+nonisolated struct RootRemoveOutput: Codable, Hashable, Sendable {
+    let path: String
+    let removed: ConfiguredRoot
+    /// Every configured root afterwards, in order.
+    let roots: [ConfiguredRoot]
+}
+
+nonisolated struct RootListOutput: Codable, Hashable, Sendable {
+    /// Every configured root, in order; `roots[0]` is the default `new` targets.
+    let roots: [ConfiguredRoot]
+}
+
 // MARK: - config get / set (app-spec.md §12)
 
-/// Every §8 key, resolved: defaults, then the file, then the environment.
+/// Every settable §8 key, resolved: defaults, then the file, then the
+/// environment. Roots are list-valued and reported by `bardolier root list`
+/// instead (phase 18) — see `ConfiguredRoot`.
 nonisolated struct EffectiveConfig: Codable, Hashable, Sendable {
-    let ssdRoot: String
     /// nil when unset — the §4.1 fallback chain applies.
     let cataloguePath: String?
     let terminal: String

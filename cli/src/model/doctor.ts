@@ -14,6 +14,21 @@
 export const DOCTOR_CHECKS = ['config', 'ssd', 'docker', 'base_images', 'catalogue', 'manifests'] as const
 export type DoctorCheck = (typeof DOCTOR_CHECKS)[number]
 
+/** One configured root's state, as reported on the `ssd` finding. Additive since phase 18. */
+export type DoctorRootState = {
+  name: string
+  path: string
+  mounted: boolean
+  /**
+   * Whether `diskutil` reports this as a removable, non-internal volume —
+   * what tells the app apart "SSD" wording from "internal folder" wording,
+   * and whether `eject` applies at all. Null when the root isn't currently
+   * mounted: there is nothing to ask diskutil about, and the CLI never
+   * guesses at what a path WOULD be if it existed.
+   */
+  removable: boolean | null
+}
+
 export type DoctorFinding = {
   id: DoctorCheck
   /** Short human label, e.g. "SSD mounted". */
@@ -23,6 +38,8 @@ export type DoctorFinding = {
   detail: string
   /** What to do about it. Present only when the finding is actionable. */
   remedy?: string
+  /** Per-root state. Present only on the `ssd` finding. Additive since phase 18. */
+  roots?: DoctorRootState[]
 }
 
 export type DoctorReport = {

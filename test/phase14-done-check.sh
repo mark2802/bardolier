@@ -35,7 +35,7 @@ mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
 export BDLR_SSD_VOLUME="$TMP/ssd"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "

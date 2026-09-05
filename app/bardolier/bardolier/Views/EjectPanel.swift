@@ -38,9 +38,16 @@ struct EjectPanel: View {
 
     var back: () -> Void
 
+    /// Which configured root to eject (phase 18) — nil until the picker below
+    /// resolves one, which it does itself when there is only one candidate.
+    @State private var root: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PanelHeader(title: "Close all & eject", back: back)
+            // Plain "Close all" when no configured root is a removable
+            // volume: `eject` doesn't apply to any of them (§10, phase 18),
+            // so the panel doesn't offer language for an action it can't do.
+            PanelHeader(title: store.anyRootRemovable ? "Close all & eject" : "Close all", back: back)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
@@ -66,13 +73,52 @@ struct EjectPanel: View {
             .frame(maxHeight: 340)
         }
         .padding(.bottom, 12)
+        .task {
+            if root == nil && store.roots.count == 1 { root = store.roots.first?.name }
+        }
+    }
+
+    /// Only shown when the CLI would otherwise have to guess (phase 18): more
+    /// than one configured root. A single root resolves itself in `.task`
+    /// above, so the common case shows nothing here.
+    @ViewBuilder
+    private var rootPicker: some View {
+        if store.roots.count > 1 {
+            VStack(alignment: .leading, spacing: 2) {
+                Picker("Root", selection: $root) {
+                    Text("Choose one…").tag(String?.none)
+                    ForEach(store.roots) { configured in
+                        Text(configured.name).tag(Optional(configured.name))
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(store.isBusy)
+                Text("More than one root is configured; eject needs to know which disk.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Before
 
     @ViewBuilder
     private var readyState: some View {
-        if store.status?.ssd.mounted == false {
+        if !store.anyRootRemovable {
+            // No configured root is a removable volume — this is `down-all`
+            // wearing the same panel, not eject waiting on a mount (§10,
+            // phase 18): no SSD gate, no root picker, no disk to name.
+            Text("Every running project is stopped. Nothing is unmounted — none of the configured roots is a removable disk.")
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+
+            runningProjectsList
+
+            actionButton("Close all", role: nil) {
+                Task { await store.closeAllAndEject() }
+            }
+            .disabled(store.isBusy)
+        } else if store.status?.ssd.mounted == false {
             Text("The SSD isn’t mounted, so there is nothing to eject.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -84,24 +130,31 @@ struct EjectPanel: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !runningProjects.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Will be stopped").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(runningProjects) { project in
-                        HStack(spacing: 6) {
-                            StateDot(state: project.state)
-                            Text(project.name).font(.caption)
-                        }
-                    }
-                }
-            } else {
-                Text("Nothing is running.").font(.caption2).foregroundStyle(.tertiary)
-            }
+            runningProjectsList
+
+            rootPicker
 
             actionButton("Close all & eject", role: .destructive) {
-                Task { await store.closeAllAndEject() }
+                Task { await store.closeAllAndEject(root: root) }
             }
-            .disabled(store.isBusy || store.status?.ssd.mounted != true)
+            .disabled(store.isBusy || store.status?.ssd.mounted != true || (store.roots.count > 1 && root == nil))
+        }
+    }
+
+    @ViewBuilder
+    private var runningProjectsList: some View {
+        if !runningProjects.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Will be stopped").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(runningProjects) { project in
+                    HStack(spacing: 6) {
+                        StateDot(state: project.state)
+                        Text(project.name).font(.caption)
+                    }
+                }
+            }
+        } else {
+            Text("Nothing is running.").font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -140,7 +193,7 @@ struct EjectPanel: View {
 
         HStack(spacing: 8) {
             actionButton("Retry", role: nil) {
-                Task { await store.closeAllAndEject() }
+                Task { await store.closeAllAndEject(root: root) }
             }
             .disabled(store.isBusy)
 
@@ -207,17 +260,17 @@ struct EjectPanel: View {
             // effect has already happened is a loop, not a move.
             if engineStopped {
                 actionButton("Retry", role: nil) {
-                    Task { await store.closeAllAndEject() }
+                    Task { await store.closeAllAndEject(root: root) }
                 }
                 .disabled(store.isBusy)
             } else {
                 actionButton("Stop Docker & eject", role: nil) {
-                    Task { await store.closeAllAndEject(stopDocker: true) }
+                    Task { await store.closeAllAndEject(root: root, stopDocker: true) }
                 }
                 .disabled(store.isBusy)
 
                 Button("Retry") {
-                    Task { await store.closeAllAndEject() }
+                    Task { await store.closeAllAndEject(root: root) }
                 }
                 .controlSize(.small)
                 .disabled(store.isBusy)
@@ -273,7 +326,7 @@ struct EjectPanel: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    // MARK: - Not applicable (phase 10: a local, non-removable `ssd_root`)
+    // MARK: - Not applicable (phase 10: a local, non-removable root path)
 
     /// Nothing is wrong — there is simply nothing to eject, so this reads as
     /// information rather than a failure: no warning triangle, no Retry (it
@@ -306,7 +359,7 @@ struct EjectPanel: View {
         }
         HStack(spacing: 8) {
             actionButton("Try again", role: nil) {
-                Task { await store.closeAllAndEject() }
+                Task { await store.closeAllAndEject(root: root) }
             }
             .disabled(store.isBusy)
 

@@ -548,7 +548,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
 
   test('Retry re-runs the same command (§10.2)', () => {
     assert.match(panel, /"Retry"/)
-    const retries = panel.match(/await store\.closeAllAndEject\(\)/g) ?? []
+    const retries = panel.match(/await store\.closeAllAndEject\(root: root\)/g) ?? []
     assert.ok(retries.length >= 2, 'the panel starts the eject and retries it with the same call')
   })
 
@@ -588,7 +588,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     assert.match(store, /case blockedByDocker\(holders: \[SsdHolder\], message: String, engineStopped: Bool\)/)
     assert.match(store, /failure\.isRuntimeHold/)
     assert.match(panel, /"Stop Docker & eject"/)
-    assert.match(panel, /closeAllAndEject\(stopDocker: true\)/)
+    assert.match(panel, /closeAllAndEject\(root: root, stopDocker: true\)/)
   })
 
   test('and once the engine IS stopped, that button is not offered again (§10)', () => {
@@ -611,9 +611,9 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     // The default has to stay "don't", or the menu's ordinary eject would take
     // down every container on the Mac — bardolier's and everyone else's.
     const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
-    assert.match(client, /func eject\(stopDocker: Bool = false\)/)
+    assert.match(client, /func eject\(root: String\? = nil, stopDocker: Bool = false\)/)
     assert.match(client, /stopDocker \? \["--stop-docker"\] : \[\]/)
-    assert.match(store, /func closeAllAndEject\(stopDocker: Bool = false\)/)
+    assert.match(store, /func closeAllAndEject\(root: String\? = nil, stopDocker: Bool = false\)/)
   })
 
   test('the holders are shown by name, from the CLI’s own fields', () => {

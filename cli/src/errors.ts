@@ -47,6 +47,10 @@ const EXTENDED_ERROR_CODES = [
   'PACKAGE_NOT_ATTACHED',
   /** `eject` on a root whose volume isn't removable — use `down-all` instead. */
   'EJECT_NOT_APPLICABLE',
+  /** A name resolved to a project in more than one root (phase 18). */
+  'PROJECT_AMBIGUOUS',
+  /** A configured root could not be read where the answer must be complete (phase 18). */
+  'ROOT_UNREADABLE',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
 ] as const

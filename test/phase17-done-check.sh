@@ -30,7 +30,7 @@ ROOT="$TMP/local-root"
 mkdir -p "$ROOT/claude-projects"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_ROOT="$ROOT/claude-projects"
+export BARDOLIER_ROOT="$ROOT/claude-projects"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -53,7 +53,7 @@ fi
 # ── 2. eject on an absent root: SSD_NOT_MOUNTED naming the root ───────────────
 head "2. eject on an absent root (§6)"
 
-if OUT="$(BDLR_SSD_ROOT="$ROOT/claude-projects-gone" $BARDOLIER eject --json 2>&1)"; then
+if OUT="$(BARDOLIER_ROOT="$ROOT/claude-projects-gone" $BARDOLIER eject --json 2>&1)"; then
   bad "eject succeeded against a root that does not exist: $OUT"
 elif json_assert "$OUT" "d.error?.code === 'SSD_NOT_MOUNTED' && d.error.message.includes('${ROOT}/claude-projects-gone')"; then
   ok "SSD_NOT_MOUNTED, naming the root"

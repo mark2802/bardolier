@@ -26,7 +26,7 @@
 import type { Config } from './config.ts'
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
-import { discoverProjects } from './projects.ts'
+import { discoverProjects, rootUnreadableError, unreadableRoots } from './projects.ts'
 import type { CatalogueService } from './model/catalogue.ts'
 
 /**
@@ -51,10 +51,18 @@ export type PortHolder = {
  * trusted enough to reserve a port from, and `doctor`'s manifest check is where
  * that is reported. The host probe is the backstop — if such a project is
  * running, its port is bound and will not be handed out anyway.
+ *
+ * With more than one root (phase 18), this refuses a PARTIAL view: a root that
+ * cannot be read is a root whose assignments are unknowable, and silently
+ * scanning only the rest would risk handing out a port already taken there.
  */
 export function assignedPorts(config: Config): Map<number, PortHolder> {
+  const discovery = discoverProjects(config)
+  const unreadable = unreadableRoots(discovery)
+  if (unreadable.length > 0) throw rootUnreadableError(unreadable)
+
   const holders = new Map<number, PortHolder>()
-  for (const project of discoverProjects(config).projects) {
+  for (const project of discovery.projects) {
     // The dev-server port (§9) is spoken for exactly as a service's is —
     // it lives in the same manifest and must not be handed out twice.
     const appPort = project.manifest.app_port

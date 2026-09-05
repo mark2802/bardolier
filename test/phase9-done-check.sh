@@ -21,7 +21,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-APP="app/claude-yard/claude-yard"
+APP="app/bardolier/bardolier"
 BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
@@ -50,7 +50,7 @@ mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
 export BDLR_SSD_VOLUME="$VOLUME"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "

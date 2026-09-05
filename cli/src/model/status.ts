@@ -56,6 +56,15 @@ export type StatusProject = {
   app_url: string | null
   /** Extra ports declared on this project (§5.1), sorted by name. Additive since Phase 12. */
   extra_ports?: AttachedExtraPort[]
+  /** The configured root's name this project lives under. Additive since phase 18. */
+  root?: string
+}
+
+/** One configured root's readable state (phase 18). */
+export type StatusRoot = {
+  name: string
+  path: string
+  mounted: boolean
 }
 
 export type OrphanedVolume = {
@@ -71,4 +80,6 @@ export type Status = {
   docker: { available: boolean }
   projects: StatusProject[]
   orphaned_volumes: OrphanedVolume[]
+  /** Every configured root's readable state. Additive since phase 18. */
+  roots?: StatusRoot[]
 }

@@ -69,7 +69,7 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     case blockedByDocker(holders: [SsdHolder], message: String, engineStopped: Bool)
     /// Unmounted. The "safe to unplug" state (§10, §11).
     case ejected(volume: String, stopped: [String])
-    /// EJECT_NOT_APPLICABLE (phase 10): `ssd_root` is a plain directory on the
+    /// EJECT_NOT_APPLICABLE (phase 10): the root's path is a plain directory on the
     /// internal disk, not a removable volume. Kept apart from `failed` because
     /// it isn't one — nothing is wrong, there is simply nothing to eject, so the
     /// row goes quiet with a reason instead of a Retry that would fail the same
@@ -164,18 +164,32 @@ final class BardolierStore: ObservableObject {
         return !status.ssd.mounted || !status.docker.available
     }
 
-    /// One line for the top of the menu (§5's status line).
+    /// One line for the top of the menu (§5's status line). Speaks of "SSD"
+    /// only when the default root is known to be a removable volume (phase
+    /// 18) — an internal-disk root is a folder, not a drive to plug in, and
+    /// while it's unmounted there is nothing for `diskutil` to answer, so an
+    /// unknown kind reads as "root", never a guessed "SSD".
+    ///
+    /// Not mounted with `defaultRootRemovable == true` is the one case
+    /// `doctor` can't currently confirm (its check needs the volume present)
+    /// — that value can only be true here because a PRIOR `doctor` saw it
+    /// removable, i.e. the CLI's last real answer, not an app-side guess.
     var ssdSummary: String {
         guard let status else { return "SSD: checking…" }
         if ejected && !status.ssd.mounted { return "SSD: ejected — safe to unplug" }
-        if !status.ssd.mounted { return "SSD: not mounted (\(status.ssd.root))" }
-        return "SSD: mounted (\(status.ssd.root))"
+        if !status.ssd.mounted {
+            return defaultRootRemovable == true ? "SSD: not mounted (\(status.ssd.root))" : "Root not found: \(status.ssd.root)"
+        }
+        return defaultRootRemovable == false ? "Root: \(status.ssd.root)" : "SSD: mounted (\(status.ssd.root))"
     }
 
     /// Why the mutating items are disabled, or nil when they aren't.
     var degradedReason: String? {
         guard let status else { return nil }
-        if !status.ssd.mounted { return ejected ? "Plug the SSD back in to carry on." : "Plug the SSD in, or set its path in Preferences." }
+        if !status.ssd.mounted {
+            guard defaultRootRemovable == true else { return "Create the projects folder, or set its path in Preferences." }
+            return ejected ? "Plug the SSD back in to carry on." : "Plug the SSD in, or set its path in Preferences."
+        }
         if !status.docker.available { return "Start Docker Desktop to run projects." }
         return nil
     }
@@ -243,6 +257,7 @@ final class BardolierStore: ObservableObject {
                 bardolierSearchedLocations = BardolierExecutable.searchedLocations
             }
             do {
+                let wasMounted = status?.ssd.mounted ?? true
                 let fresh = try await client.status()
                 status = fresh
                 // The SSD coming back is the only thing that clears "ejected";
@@ -257,6 +272,13 @@ final class BardolierStore: ObservableObject {
                     // very next menu open — the one after the user went off to
                     // quit Xcode (§10).
                     if ejectPhase.isEjected { ejectPhase = .ready }
+                    // A root mounting for the first time this session is the
+                    // one moment `doctorRoots` can be stale in the direction
+                    // that matters — `defaultRootRemovable` still nil from a
+                    // launch that saw it absent — so `ssdSummary` would call a
+                    // real SSD a bare "root". `doctor` re-derives it now that
+                    // there's something for `diskutil` to answer.
+                    if !wasMounted { await loadDoctor() }
                 }
                 lastRefresh = Date()
                 lastError = nil
@@ -393,9 +415,11 @@ final class BardolierStore: ObservableObject {
     /// Create a project (§8). Returns the payload so the window can close only
     /// on success, and reports the ports any initial services were assigned.
     @discardableResult
-    func create(name: String, archetype: Archetype, services: [String]) async -> NewOutput? {
+    /// `root` picks which configured root to create it under (phase 18);
+    /// `nil` defers to the CLI's own default (the first configured root).
+    func create(name: String, archetype: Archetype, services: [String], root: String? = nil) async -> NewOutput? {
         let result = await perform("Creating \(name)") { client in
-            try await client.new(name: name, archetype: archetype, services: services)
+            try await client.new(name: name, archetype: archetype, services: services, root: root)
         }
         guard let result else { return nil }
         let ports = result.services.map { "\($0.key) :\($0.hostPort)" }.joined(separator: ", ")
@@ -483,12 +507,32 @@ final class BardolierStore: ObservableObject {
     /// SSD for as long as it runs, so a disk with every container stopped can
     /// still be refused, and no Retry ever clears it. It stops the ENGINE, not
     /// a holder — nothing is killed and nothing is forced.
-    func closeAllAndEject(stopDocker: Bool = false) async {
+    ///
+    /// `root` names which configured root to eject (phase 18) — `nil` defers
+    /// to the CLI, which requires a name only when more than one configured
+    /// root is a mounted, removable volume.
+    func closeAllAndEject(root: String? = nil, stopDocker: Bool = false) async {
         guard !isBusy else { return }
+
+        // No configured root is a removable volume: `eject` would only ever
+        // answer EJECT_NOT_APPLICABLE, and it does so BEFORE stopping
+        // anything (cli-spec.md §6) — so routing this through `eject` would
+        // leave every project running behind a menu item that says "Close
+        // all". Call `down-all` directly instead; there is no eject flow to
+        // land in, so `ejectPhase` stays untouched.
+        guard anyRootRemovable else {
+            let result = await perform("Closing everything") { client in
+                try await client.downAll()
+            }
+            guard let result else { return }
+            notice = result.stopped.isEmpty ? "Nothing was running." : "Stopped \(result.stopped.joined(separator: ", "))."
+            return
+        }
+
         ejectPhase = .working
 
         let result = await perform(stopDocker ? "Stopping Docker, then ejecting" : "Ejecting") { client in
-            try await client.eject(stopDocker: stopDocker)
+            try await client.eject(root: root, stopDocker: stopDocker)
         }
 
         if let result {
@@ -549,12 +593,69 @@ final class BardolierStore: ObservableObject {
         } else {
             notice = "Saved to \(result.path)."
         }
-        // The SSD path changing means everything the menu shows is about a
-        // different disk; the catalogue may move with it (§4.1).
-        if key == .ssdRoot || key == .cataloguePath {
+        // The catalogue may move with catalogue_path (§4.1). Roots have their
+        // own surface (`addRoot`/`removeRoot` below) since they are
+        // list-valued and not settable through `config set` (phase 18).
+        if key == .cataloguePath {
             await loadCatalogue(force: true)
             await loadDoctor()
         }
+        await refresh(force: true)
+    }
+
+    /// Every configured root (phase 18) — `roots[0]` is the default `new`
+    /// targets. Derived from `status`, which already carries it and is kept
+    /// fresh by `refresh()`: a separate fetch would just be a second copy of
+    /// the same answer, one refresh cycle staler.
+    var roots: [ConfiguredRoot] { status?.roots ?? [] }
+
+    /// The `ssd` doctor finding's per-root state (phase 18) — `nil` before
+    /// `doctor` has answered.
+    private var doctorRoots: [DoctorRootState]? {
+        doctor?.findings.first { $0.id == .ssd }?.roots
+    }
+
+    /// Whether ANY configured root is an actual removable volume, as opposed
+    /// to a plain directory on the internal disk. Drives whether the menu
+    /// offers "Close all & eject" or plain "Close all" (§10, §11) — `eject`
+    /// on an all-internal setup would only ever answer EJECT_NOT_APPLICABLE,
+    /// which is not worth discovering by clicking. `true` while `doctor`
+    /// hasn't answered yet, so the row doesn't flicker from "eject" to
+    /// "close all" and back on every launch.
+    var anyRootRemovable: Bool {
+        doctorRoots?.contains { $0.removable == true } ?? true
+    }
+
+    /// Whether the DEFAULT root (`status.ssd`) is a removable volume, an
+    /// internal-disk directory, or (root absent) unknown. Drives whether the
+    /// status line and its degraded reason speak of an "SSD" at all (§5, §11)
+    /// — `nil` while `doctor` hasn't answered, or the root isn't mounted and
+    /// there is nothing for `diskutil` to have told it.
+    var defaultRootRemovable: Bool? {
+        guard let name = roots.first?.name else { return nil }
+        return doctorRoots?.first { $0.name == name }?.removable
+    }
+
+    /// Register a root. Adding one means everything the menu shows might now
+    /// span a different disk, same as `catalogue_path` changing.
+    func addRoot(path: String, name: String?) async {
+        let result = await perform("Adding root", refresh: false) { client in
+            try await client.rootAdd(path: path, name: name)
+        }
+        guard let result else { return }
+        notice = "Added root \(result.added.name)."
+        await loadCatalogue(force: true)
+        await loadDoctor()
+        await refresh(force: true)
+    }
+
+    /// Forgets the root; never touches the directory it pointed at.
+    func removeRoot(name: String) async {
+        let result = await perform("Removing root", refresh: false) { client in
+            try await client.rootRemove(name: name)
+        }
+        guard let result else { return }
+        notice = "Forgot root \(result.removed.name)."
         await refresh(force: true)
     }
 

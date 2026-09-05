@@ -16,18 +16,17 @@
     "config": { "$ref": "#/$defs/effective_config" },
     "overrides": {
       "type": "array",
-      "description": "Environment variables that overrode a value, e.g. BDLR_SSD_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
+      "description": "Environment variables that overrode a value, e.g. BARDOLIER_ROOT. A key named here cannot be changed by writing the file — the app says so rather than appearing to succeed.",
       "items": { "type": "string", "minLength": 1 }
     }
   },
   "$defs": {
     "effective_config": {
       "type": "object",
-      "description": "Every §8 key, resolved. Paths are absolute and tilde-expanded. This block is duplicated verbatim in config-get and config-set; test/contracts.test.ts asserts the copies stay identical.",
+      "description": "Every settable §8 key, resolved. Paths are absolute and tilde-expanded. Roots are a separate, list-valued surface (`bardolier root add | remove | list`) and are not reported here. This block is duplicated verbatim in config-get and config-set; test/contracts.test.ts asserts the copies stay identical.",
       "additionalProperties": false,
-      "required": ["ssd_root", "catalogue_path", "terminal"],
+      "required": ["catalogue_path", "terminal"],
       "properties": {
-        "ssd_root": { "type": "string", "minLength": 1 },
         "catalogue_path": {
           "type": ["string", "null"],
           "description": "null when unset — the §4.1 fallback chain applies."

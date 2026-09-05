@@ -29,7 +29,7 @@ mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
 export BDLR_SSD_VOLUME="$VOLUME"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 cleanup() {
   $BARDOLIER down-all --force >/dev/null 2>&1 || true

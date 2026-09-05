@@ -30,11 +30,11 @@ head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 # ── 0. The MANUAL prerequisite (the human, in Xcode) ────────────────────────────
 head "0. MANUAL prerequisite (docs/phases/16-rename-app.md)"
 
-PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
-SCHEME="app/claude-yard/claude-yard.xcodeproj/xcshareddata/xcschemes/claude-yard.xcscheme"
+PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
+SCHEME="app/bardolier/bardolier.xcodeproj/xcshareddata/xcschemes/bardolier.xcscheme"
 
-if [ -d "app/Bardolier/Bardolier" ]; then
-  ok "app/Bardolier/Bardolier exists — the outer directories are renamed"
+if [ -d "app/bardolier/bardolier" ]; then
+  ok "app/bardolier/bardolier exists — the outer directories are renamed"
 else
   todo "app/claude-yard/ and app/claude-yard/claude-yard/ are still named claude-yard — rename them in Xcode and re-point the synchronized folder group"
 fi
@@ -61,23 +61,18 @@ OLD_YARD="claude-""yard"
 OLD_ENV="CP""ROJ_"
 OLD_UNDERSCORE="claude_""yard"
 
-# Still excluded, and still for the reason phase15-done-check.sh gives: these
-# name the app's *actual* Swift source tree by its real, on-disk path — which
-# is still `app/claude-yard/claude-yard` until the human's MANUAL Xcode rename
-# (§ below) moves it. That path string is accurate, not leftover debt.
+# The MANUAL Xcode rename is done (§0 above), so the old name should be gone
+# everywhere except the historical phase specs and this script's own OLD_*
+# definitions and instructional text.
 HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_UNDERSCORE}" . \
   --include='*' -I 2>/dev/null \
   | grep -v '^\./node_modules/' \
   | grep -v '^\./\.git/' \
   | grep -v '^\./\.claude/' \
-  | grep -v '^\./app/claude-yard/claude-yard\.xcodeproj/' \
   | grep -v '^\./docs/phases/15-rename-cli\.md$' \
   | grep -v '^\./docs/phases/16-rename-app\.md$' \
   | grep -v '^\./test/phase15-done-check\.sh$' \
   | grep -v '^\./test/phase16-done-check\.sh$' \
-  | grep -v '^\./test/phase[5679]-done-check\.sh$' \
-  | grep -v '^\./test/phase7\.test\.ts$' \
-  | grep -v '^\./test/app-models\.test\.ts$' \
   || true)"
 
 if [ -z "$HITS" ]; then
@@ -90,7 +85,7 @@ fi
 # ── 2. The Swift files exist under their new names ────────────────────────────
 head "2. Renamed Swift sources"
 
-APP="app/claude-yard/claude-yard"
+APP="app/bardolier/bardolier"
 for file in \
   "$APP/Bardolier/BardolierModels.swift" \
   "$APP/Bardolier/BardolierError.swift" \

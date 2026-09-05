@@ -2,18 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/config.schema.json",
   "title": "bardolier config file (~/.config/bardolier/config.yml)",
-  "description": "cli-spec.md §8. Lives on the INTERNAL disk so doctor/status can report \"SSD not mounted\". Every key is optional; a missing file is equivalent to an empty one.",
+  "description": "cli-spec.md §8. Lives on the INTERNAL disk so doctor/status can report a root as unreadable rather than failing. Every key is optional; a missing file is equivalent to an empty one.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "ssd_root": {
-      "type": "string",
-      "description": "Directory holding the project dirs, e.g. /Volumes/ssd/claude-projects. Defaults to /Volumes/ssd/claude-projects. Overridden by $BDLR_SSD_ROOT. The mount point `eject` unmounts is derived from this path, not a separate key.",
-      "minLength": 1
+    "roots": {
+      "type": "array",
+      "description": "Ordered; roots[0] is the default `new` targets. Names and paths must each be unique. Overridden wholesale by $BARDOLIER_ROOT, which replaces this list with a single root named after the path's basename (phase 18). Not editable through `config set` — see `bardolier root add | remove | list`.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 }
+        }
+      }
     },
     "catalogue_path": {
       "type": "string",
-      "description": "Service catalogue location (§4.1). Unset falls back to $SSD_ROOT/services.yml, then the bundled default.",
+      "description": "Service catalogue location (§4.1). Unset falls back to <default root>/services.yml, then the bundled default.",
       "minLength": 1
     },
     "terminal": {

@@ -42,6 +42,11 @@ export const SCHEMA_NAMES = [
   'catalogue',
   'config-get',
   'config-set',
+  // Phase 18: roots are list-valued, so they get their own commands rather
+  // than a `config set` key.
+  'root-add',
+  'root-remove',
+  'root-list',
 ] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]
 

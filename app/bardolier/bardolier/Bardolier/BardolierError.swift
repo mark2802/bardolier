@@ -47,6 +47,8 @@ nonisolated struct BardolierErrorCode: BardolierToken {
     static let packageAttached = BardolierErrorCode(rawValue: "PACKAGE_ATTACHED")
     static let packageNotAttached = BardolierErrorCode(rawValue: "PACKAGE_NOT_ATTACHED")
     static let ejectNotApplicable = BardolierErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
+    static let projectAmbiguous = BardolierErrorCode(rawValue: "PROJECT_AMBIGUOUS")
+    static let rootUnreadable = BardolierErrorCode(rawValue: "ROOT_UNREADABLE")
     static let internalError = BardolierErrorCode(rawValue: "INTERNAL_ERROR")
 
     /// A short line for the UI, or nil when only the CLI's own message will do.
@@ -69,6 +71,8 @@ nonisolated struct BardolierErrorCode: BardolierToken {
         case .configInvalid: return "The bardolier config or service catalogue is invalid."
         case .volumeNotFound: return "Docker doesn’t have a volume with that name."
         case .ejectNotApplicable: return "This isn’t a removable volume, so there’s nothing to eject."
+        case .projectAmbiguous: return "That name exists in more than one root."
+        case .rootUnreadable: return "One of the configured roots isn’t readable right now."
         // INVALID_ARGUMENT, NOT_IMPLEMENTED and INTERNAL_ERROR are bugs in the
         // app's own invocation or in the CLI; the CLI's message is the useful
         // text, so don't paper over it.

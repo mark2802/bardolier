@@ -35,7 +35,7 @@ afterEach(() => {
 
 /** A context whose config comes from the FILE, not from the test env (§8). */
 function fileConfigured(box: Sandbox) {
-  return makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: '' } })
+  return makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '' } })
 }
 
 describe('catalogue (app-spec.md §6, §8)', () => {
@@ -95,7 +95,7 @@ describe('catalogue (app-spec.md §6, §8)', () => {
 describe('config get (app-spec.md §12)', () => {
   test('reports the effective config and the file it came from', () => {
     const box = sandbox()
-    box.writeConfig({ ssd_root: '/Volumes/other/claude-projects', terminal: 'iTerm' })
+    box.writeConfig({ catalogue_path: '/Volumes/other/services.yml', terminal: 'iTerm' })
 
     const output = collectConfigGet(fileConfigured(box))
 
@@ -103,7 +103,7 @@ describe('config get (app-spec.md §12)', () => {
     assert.equal(output.path, box.configPath)
     assert.equal(output.exists, true)
     assert.equal(output.config.terminal, 'iTerm')
-    assert.equal(output.config.ssd_root, '/Volumes/other/claude-projects')
+    assert.equal(output.config.catalogue_path, '/Volumes/other/services.yml')
     assert.deepEqual(output.overrides, [])
   })
 
@@ -117,8 +117,9 @@ describe('config get (app-spec.md §12)', () => {
   test('names the environment overrides, so Preferences can say the file cannot win', () => {
     const box = sandbox()
     const output = collectConfigGet(makeContext(box))
-    assert.deepEqual(output.overrides, ['BDLR_SSD_ROOT'])
-    assert.equal(output.config.ssd_root, box.root)
+    // Roots aren't part of `config get` at all (they're list-valued — `root
+    // list`, phase 18); $BARDOLIER_ROOT is still reported as an override.
+    assert.deepEqual(output.overrides, ['BARDOLIER_ROOT'])
   })
 })
 
@@ -148,10 +149,13 @@ describe('config set (app-spec.md §12)', () => {
 
   test('paths are expanded on the way in, so the stored value is the one used', () => {
     const box = sandbox()
-    const output = runConfigSet(fileConfigured(box), { key: 'ssd_root', value: '~/ssd' })
+    const output = runConfigSet(fileConfigured(box), { key: 'catalogue_path', value: '~/services.yml' })
 
-    assert.equal(output.config.ssd_root, `${box.home}/ssd`)
-    assert.equal((parseYaml(readFileSync(box.configPath, 'utf8')) as { ssd_root: string }).ssd_root, `${box.home}/ssd`)
+    assert.equal(output.config.catalogue_path, `${box.home}/services.yml`)
+    assert.equal(
+      (parseYaml(readFileSync(box.configPath, 'utf8')) as { catalogue_path: string }).catalogue_path,
+      `${box.home}/services.yml`,
+    )
   })
 
   test('an empty value clears the key rather than storing an empty string', () => {
@@ -168,10 +172,10 @@ describe('config set (app-spec.md §12)', () => {
   test('keys are written in a stable order, so two writes give the same bytes', () => {
     const first = sandbox()
     runConfigSet(fileConfigured(first), { key: 'terminal', value: 'iTerm' })
-    runConfigSet(fileConfigured(first), { key: 'ssd_root', value: '/Volumes/ssd/claude-projects' })
+    runConfigSet(fileConfigured(first), { key: 'catalogue_path', value: '/tmp/services.yml' })
 
     const second = sandbox()
-    runConfigSet(fileConfigured(second), { key: 'ssd_root', value: '/Volumes/ssd/claude-projects' })
+    runConfigSet(fileConfigured(second), { key: 'catalogue_path', value: '/tmp/services.yml' })
     runConfigSet(fileConfigured(second), { key: 'terminal', value: 'iTerm' })
 
     assert.equal(readFileSync(first.configPath, 'utf8'), readFileSync(second.configPath, 'utf8'))
@@ -186,14 +190,16 @@ describe('config set (app-spec.md §12)', () => {
     assert.equal(box.exists('..', 'config.yml'), false)
   })
 
-  test('an overridden key is still written, and the override is still reported', () => {
+  // `roots` is list-valued and not settable through `config set` at all (see
+  // `bardolier root add|remove`, phase 18) — there is no longer a settable key an
+  // env override can shadow, so the old "overridden key is still written" case
+  // no longer has a scenario to cover.
+  test('`roots` is rejected as a `config set` key — it is list-valued (phase 18)', () => {
     const box = sandbox()
-    // BDLR_SSD_ROOT is set by makeContext, so the file cannot win here.
-    const output = runConfigSet(makeContext(box), { key: 'ssd_root', value: '/Volumes/elsewhere/projects' })
-
-    assert.deepEqual(output.changed, ['ssd_root'])
-    assert.deepEqual(output.overrides, ['BDLR_SSD_ROOT'])
-    assert.equal(output.config.ssd_root, box.root, 'the environment still wins for the effective value')
+    assert.throws(
+      () => runConfigSet(fileConfigured(box), { key: 'roots', value: '/x' }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
+    )
   })
 })
 

@@ -12,7 +12,7 @@ import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { CONFIG_KEYS, loadConfig } from '../cli/src/config.ts'
-import { containingVolume, probeSsd } from '../cli/src/projects.ts'
+import { containingVolume, defaultRoot, probeRoot } from '../cli/src/projects.ts'
 import { runEject } from '../cli/src/commands/ssd.ts'
 import { collectConfigGet } from '../cli/src/commands/config.ts'
 import { makeContext, makeSandbox, stubDevice, stubDocker, type Sandbox } from './helpers.ts'
@@ -47,15 +47,15 @@ describe('SsdProbe (cli-spec.md §8)', () => {
   test('volume is derived from the root, and volumePresent is gone', () => {
     const box = sandbox()
     const ctx = makeContext(box, stubDocker())
-    const probe = probeSsd(ctx.config)
+    const probe = probeRoot(defaultRoot(ctx.config))
     assert.equal(probe.volume, containingVolume(box.root))
     assert.ok(!('volumePresent' in probe))
   })
 
   test('an unreadable root reports a null volume', () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'gone') } })
-    const probe = probeSsd(ctx.config)
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'gone') } })
+    const probe = probeRoot(defaultRoot(ctx.config))
     assert.equal(probe.mounted, false)
     assert.equal(probe.volume, null)
   })
@@ -91,7 +91,7 @@ describe('eject (cli-spec.md §6, phase 17)', () => {
 
   test('an unreadable root is SSD_NOT_MOUNTED, naming the root', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'gone') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'gone') } })
 
     await assert.rejects(
       () => runEject(ctx),

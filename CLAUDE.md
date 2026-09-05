@@ -119,10 +119,14 @@ UID/GID, clock, `wait`. It never touches `process.env`, spawns processes, binds
 sockets, prompts, or hard-codes the SSD path. That is what lets mutations be
 tested with a temp dir and stubs (`test/helpers.ts`). **Anything with an
 observable side effect belongs on the Context**, including passing time. Config
-comes from `~/.config/bardolier/config.yml` with a `BDLR_SSD_ROOT` override and
-`BARDOLIER_CONFIG` to relocate the file — which is how done-checks stay
-hermetic. There is no `ssd_volume` override: `eject`'s mount point is derived
-from `ssd_root` (phase 17), never a second setting to disagree with it.
+comes from `~/.config/bardolier/config.yml` with a `BARDOLIER_ROOT` override (phase
+18; replaces the whole `roots` list with one root named after the path's
+basename) and `BARDOLIER_CONFIG` to relocate the file — which is how done-checks
+stay hermetic. There is no `ssd_volume` override: each root's mount point is
+derived from its `path` (phase 17), never a second setting to disagree with it.
+`roots` is never empty, so `root remove` refuses the only configured one
+(`INVALID_ARGUMENT`) rather than silently rematerialising the built-in default
+in its place — add a replacement root first.
 
 ## Behaviour that is easy to get wrong
 
@@ -134,23 +138,32 @@ facts; a hand edit loses. The §10 seeds (`.gitignore`, `.dockerignore`, project
 observable.
 
 **Ports: chosen once, written once.** `cli/src/allocator.ts` scans every
-manifest under `$SSD_ROOT` *and* probes the host socket — free means both. The
-port persists in `project.yml` and is never revisited: `up` re-probes and fails
-`PORT_UNAVAILABLE` naming it rather than remapping, because users have
-connection strings. Search starts at the catalogue's `host_port_base`, bounded
-to keep bands readable (§5). `cli/src/services.ts` joins manifest to catalogue,
-so `status` and `service list` cannot disagree.
+manifest under *every configured root* *and* probes the host socket — free
+means both. A root that cannot be read makes the scan refuse (`ROOT_UNREADABLE`,
+phase 18) rather than allocate from a partial view — the same reasoning as the
+orphan scan below. The port persists in `project.yml` and is never revisited:
+`up` re-probes and fails `PORT_UNAVAILABLE` naming it rather than remapping,
+because users have connection strings. Search starts at the catalogue's
+`host_port_base`, bounded to keep bands readable (§5). `cli/src/services.ts`
+joins manifest to catalogue, so `status` and `service list` cannot disagree.
 
 **An orphan is derived, never recorded.** `cli/src/volumes.ts` asks the
 manifests what is still claimed (resolved volume name, plus the
 `bardolier.project`/`bardolier.service` labels compose writes); everything else this
 tool made is reclaimable. Because being wrong destroys data, the scan refuses
-(`SSD_NOT_MOUNTED`, `CONFIG_INVALID`) when it cannot read manifests; `status`
-catches that and reports an empty list, because `status` must never fail.
+when it cannot read manifests: `SSD_NOT_MOUNTED` when *no* root is readable at
+all, `ROOT_UNREADABLE` when *some* are (phase 18 — never call another root's
+volumes orphaned just because this one answered), `CONFIG_INVALID` for a
+broken manifest; `status` catches all three and reports an empty list, because
+`status` must never fail.
 
-**`eject` never forces, and a holder is someone you can act on.** Stop
-containers → ask `lsof` → unmount; a held volume is `EJECT_BLOCKED` carrying
-`holders`. `isActionableHolder` excludes the container runtime (it keeps
+**`eject` never forces, and a holder is someone you can act on.** With more
+than one configured root (phase 18), `eject [<root>]` needs a name unless
+exactly one root is a mounted, removable volume; otherwise it's
+`INVALID_ARGUMENT` naming every configured root — there is no safe guess among
+disks. `down-all` stays global, because containers don't belong to a root.
+Stop containers → ask `lsof` → unmount; a held volume is `EJECT_BLOCKED`
+carrying `holders`. `isActionableHolder` excludes the container runtime (it keeps
 descriptors on bind mounts after containers stop) and the OS volume agents
 (`mds`, QuickLook — counting them made eject refuse forever on an indexed SSD).
 Filtering is safe because both are DiskArbitration clients and the following
@@ -297,6 +310,14 @@ client fails there. A GUI app inherits no shell `PATH`, so
   clears); `EjectPanel` renders it, offers **Retry** (the same call again), and
   the menu row says where the flow got to. Nothing in Swift can force an unmount
   or kill a holder, and `eject` has no `--force` (`test/phase7.test.ts`).
+- **"SSD" is a claim about a specific root, not a synonym for "root."**
+  `doctor`'s `ssd` finding carries per-root `removable` (phase 18, null when
+  unmounted — nothing to ask `diskutil`); `BardolierStore.defaultRootRemovable`
+  and `.anyRootRemovable` read it so the status line says "Root: …" instead of
+  "SSD: …" for an internal-disk root, and the menu offers plain **Close all**
+  (routed straight to `down-all`, never through `eject`) when no configured
+  root is removable — `eject` would refuse `EJECT_NOT_APPLICABLE` before
+  stopping anything, so a button promising "eject" there would close nothing.
 - **A dimmed row and an absent row look the same.** `MenuRow` takes a
   `disabledReason` and serves it as help; `DisabledNotice` says it once per
   group — with Docker down, every mutating item is disabled for one reason.

@@ -74,10 +74,33 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["config", "set", key.rawValue, value])
     }
 
-    func new(name: String, archetype: Archetype, services: [String] = []) async throws -> NewOutput {
+    /// Every configured root (phase 18) — `roots[0]` is the default `new` targets.
+    /// `roots` is list-valued and so has its own surface rather than a
+    /// `config set` key; Preferences edits the list through these three calls.
+    func rootList() async throws -> RootListOutput {
+        try await run(["root", "list"])
+    }
+
+    /// `name` defaults to the path's basename when omitted.
+    func rootAdd(path: String, name: String? = nil) async throws -> RootAddOutput {
+        try await run(["root", "add", path] + (name.map { ["--name", $0] } ?? []))
+    }
+
+    /// Never touches the directory the root pointed at — this forgets a
+    /// location, it does not delete one.
+    func rootRemove(name: String) async throws -> RootRemoveOutput {
+        try await run(["root", "remove", name])
+    }
+
+    /// `root` picks which configured root to create it under (phase 18);
+    /// `nil` defers to the CLI's own default (the first configured root).
+    func new(name: String, archetype: Archetype, services: [String] = [], root: String? = nil) async throws -> NewOutput {
         var argv = ["new", name, "--archetype", archetype.rawValue]
         if !services.isEmpty {
             argv += ["--services", services.joined(separator: ",")]
+        }
+        if let root {
+            argv += ["--root", root]
         }
         return try await run(argv)
     }
@@ -145,8 +168,10 @@ nonisolated struct BardolierClient: Sendable {
     /// does not have — whether it may stop the Docker ENGINE when that VM's
     /// file share is what holds the disk. The user answers it by pressing the
     /// button the blocked panel offers, never by the app deciding.
-    func eject(stopDocker: Bool = false) async throws -> EjectOutput {
-        try await run(["eject"] + (stopDocker ? ["--stop-docker"] : []))
+    /// `root` names which configured root to eject (phase 18) — required
+    /// unless exactly one configured root is a mounted, removable volume.
+    func eject(root: String? = nil, stopDocker: Bool = false) async throws -> EjectOutput {
+        try await run(["eject"] + (root.map { [$0] } ?? []) + (stopDocker ? ["--stop-docker"] : []))
     }
 
     func build(archetype: Archetype? = nil) async throws -> BuildOutput {
@@ -226,7 +251,7 @@ nonisolated struct BardolierClient: Sendable {
 
         // A GUI app's PATH can't find node, docker or diskutil — see
         // BardolierExecutable. Everything else is inherited unchanged, so
-        // BDLR_SSD_ROOT and friends still work when launched from a shell.
+        // BARDOLIER_ROOT and friends still work when launched from a shell.
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = BardolierExecutable.childSearchPath
         process.environment = environment

@@ -75,7 +75,10 @@ node -e "
 " && ok "cli/package.json declares both \`bardolier\` and \`bdlr\` pointing at the same script" \
   || bad "cli/package.json bin field is missing bardolier or bdlr"
 
-STATUS="$($BARDOLIER status --json)"
+# A throwaway config: this only checks that the command runs and prints valid
+# JSON, and must not depend on whatever config.yml happens to exist on the
+# machine running it (phase 18 changed the file's shape — `roots`, not `ssd_root`).
+STATUS="$(BARDOLIER_CONFIG="$(mktemp -d)/config.yml" $BARDOLIER status --json)"
 node -e "JSON.parse(process.argv[1])" "$STATUS" >/dev/null 2>&1 \
   && ok "bardolier status --json prints valid JSON" || bad "status --json did not print valid JSON: $STATUS"
 
@@ -96,7 +99,7 @@ ROOT="$TMP/local-root"
 mkdir -p "$ROOT"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_ROOT="$ROOT"
+export BARDOLIER_ROOT="$ROOT"
 export BDLR_SSD_VOLUME="$ROOT"
 
 json_assert() { # json_assert <json> <js body over `d`>

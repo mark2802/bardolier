@@ -12,48 +12,61 @@
 import type { Context } from '../context.ts'
 import { toBardolierError } from '../errors.ts'
 import { BASE_IMAGES } from '../model/archetype.ts'
-import type { DoctorFinding, DoctorReport } from '../model/doctor.ts'
-import { discoverProjects, probeSsd } from '../projects.ts'
+import type { DoctorFinding, DoctorReport, DoctorRootState } from '../model/doctor.ts'
+import { discoverProjects, probeRoot } from '../projects.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 
 function configFinding(ctx: Context): DoctorFinding {
   const { path, exists, overrides } = ctx.loaded
   const envNote = overrides.length > 0 ? `; overridden by ${overrides.join(', ')}` : ''
+  const rootsNote = ctx.config.roots.map((r) => `${r.name}=${r.path}`).join(', ')
   return {
     id: 'config',
     title: 'Config',
     ok: true,
     detail: exists
-      ? `Loaded ${path}${envNote}. ssd_root=${ctx.config.ssd_root}, terminal=${ctx.config.terminal}`
+      ? `Loaded ${path}${envNote}. roots: ${rootsNote}; terminal=${ctx.config.terminal}`
       // A missing config file is a supported state, not a fault: the defaults
       // are usable and `doctor` runs before the user has written anything.
-      : `No config file at ${path}; using defaults${envNote}. ssd_root=${ctx.config.ssd_root}`,
+      : `No config file at ${path}; using defaults${envNote}. roots: ${rootsNote}`,
   }
 }
 
+/** `ssd` keeps its frozen id (§6) even though it now speaks for every configured root (phase 18). */
 async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
-  const ssd = probeSsd(ctx.config)
-  if (ssd.mounted && ssd.volume) {
-    if (await ctx.device.removable(ssd.volume)) {
-      return { id: 'ssd', title: 'SSD mounted', ok: true, detail: `${ssd.root} is readable (volume ${ssd.volume}).` }
+  const lines: string[] = []
+  const roots: DoctorRootState[] = []
+  let anyReadable = false
+  for (const root of ctx.config.roots) {
+    const probe = probeRoot(root)
+    if (!probe.mounted) {
+      lines.push(`${root.name}: ${root.path} is not readable`)
+      roots.push({ name: root.name, path: root.path, mounted: false, removable: null })
+      continue
     }
-    // A local `ssd_root` (phase 10) is a supported, first-class mode, not a
-    // fault — no "plug in" remedy, because there is nothing to plug in.
-    return {
-      id: 'ssd',
-      title: 'SSD mounted',
-      ok: true,
-      detail: `${ssd.root} is readable, on the internal disk rather than a removable volume — \`bardolier eject\` does not apply; use \`bardolier down-all\` to stop everything instead.`,
+    anyReadable = true
+    const removable = probe.volume ? await ctx.device.removable(probe.volume) : false
+    roots.push({ name: root.name, path: root.path, mounted: true, removable })
+    if (removable) {
+      lines.push(`${root.name}: ${root.path} is readable (volume ${probe.volume})`)
+    } else {
+      // A local root (phase 10) is a supported, first-class mode, not a
+      // fault — no "plug in" remedy, because there is nothing to plug in.
+      lines.push(
+        `${root.name}: ${root.path} is readable, on the internal disk rather than a removable volume — \`bardolier eject\` does not apply to it; use \`bardolier down-all\` to stop everything instead`,
+      )
     }
   }
-  // With the volume derived from the root (phase 17) there is only one way
-  // this can fail: the root itself isn't readable.
+
   return {
     id: 'ssd',
     title: 'SSD mounted',
-    ok: false,
-    detail: `${ssd.root} is not readable.`,
-    remedy: `Plug in the disk that holds ${ssd.root}, or point ssd_root somewhere else in ${ctx.loaded.path}.`,
+    ok: anyReadable,
+    detail: lines.join('; '),
+    roots,
+    ...(anyReadable
+      ? {}
+      : { remedy: `Plug in a disk, or add a reachable root with \`bardolier root add\` (${ctx.loaded.path}).` }),
   }
 }
 
@@ -139,8 +152,8 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
       id: 'manifests',
       title: 'Project manifests',
       ok: false,
-      detail: `Could not check: ${discovery.root} is unreachable.`,
-      remedy: 'Plug in the SSD, then re-run `bardolier doctor`.',
+      detail: 'Could not check: no configured root is reachable.',
+      remedy: 'Plug in a disk, or fix the configured roots, then re-run `bardolier doctor`.',
     }
   }
 
@@ -163,7 +176,7 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
       id: 'manifests',
       title: 'Project manifests',
       ok: true,
-      detail: count === 0 ? `No projects under ${discovery.root}.` : `${count} project${count === 1 ? '' : 's'} parsed and validated.`,
+      detail: count === 0 ? 'No projects under any reachable root.' : `${count} project${count === 1 ? '' : 's'} parsed and validated.`,
     }
   }
   return {

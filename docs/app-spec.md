@@ -70,6 +70,10 @@ Preferences…
 Quit
 ```
 
+- The status line reads "SSD: …" only when the default root is a removable
+  volume; a root on the internal disk reads "Root: mounted (…)" / "Root not
+  found: (…)" instead — a plain folder is never called an SSD, and "plug it
+  in" is never offered for one (phase 18, `doctor`'s `ssd.roots[].removable`).
 - Running project shows **Stop** + **Open shell**; stopped shows **Start**.
 - **Start** brings the project up and, per preference (default ON), opens a shell
   (see §7). **Open shell** is always available for a running project.
@@ -123,6 +127,12 @@ Small modal:
 
 ## 10. Close all & eject
 
+0. If no configured root is a removable volume (`doctor`'s `ssd` finding,
+   `roots[].removable` — phase 18), the row reads plain **Close all** and
+   calls `bardolier down-all --json` directly rather than `eject`, which would
+   only ever answer `EJECT_NOT_APPLICABLE` — and does so before stopping
+   anything, so routing through it here would leave every project running
+   behind a button that claims to close them.
 1. `bardolier eject --json` (which itself runs down-all → holder check → diskutil).
 2. On `EJECT_BLOCKED`, render the returned `holders` list ("Xcode, Simulator
    still hold the SSD — quit them") and offer **Retry**. Never force.
@@ -153,16 +163,22 @@ disabled) · ejected (distinct, safe-to-unplug). Derive purely from the latest
 
 ## 12. Preferences
 
-- SSD volume path / root (written to the CLI config so there is one source).
+- Roots: the configured list, each with a **Forget** button, plus a row to add
+  one — a path field, a **Choose…** button opening an `NSOpenPanel` (folders
+  only, "New Folder" enabled, since `root add` never creates the directory
+  itself), and a name field defaulted from the chosen folder's volume name
+  (a courtesy prefill; `root add` validates and can still default from the
+  path's basename itself) once a folder is picked.
 - Terminal app for shell-open.
 - Start-auto-opens-shell toggle (default ON).
 
-The first two are read with `bardolier config get` and written with
-`bardolier config set` (`cli-spec.md` §8); only the toggle is the app's own, since
-the CLI has no opinion about it. When an environment variable overrides a key,
-the write still happens and the panel says the environment wins — a preference
-that appears to save and then does nothing is worse than one that explains
-itself.
+Roots are read with `bardolier root list` and written with `bardolier root
+add | remove` (`cli-spec.md` §6, §8 — list-valued, so `config set` cannot
+touch them); the terminal is read with `bardolier config get` and written with
+`bardolier config set`. Only the toggle is the app's own, since the CLI has no
+opinion about it. When `$BARDOLIER_ROOT` overrides the roots list, the panel
+says so — a preference that appears to save and then does nothing is worse
+than one that explains itself.
 
 ## 13. Error handling
 

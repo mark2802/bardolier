@@ -26,6 +26,11 @@
     "docker_stopped": {
       "type": "boolean",
       "description": "True when the Docker engine was stopped to release the volume (eject --stop-docker, or a confirmed prompt). Additive and NOT required: an app build from before it decodes the same payload."
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The configured root's name that was ejected. Additive since phase 18."
     }
   },
   "$defs": {

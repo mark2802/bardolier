@@ -10,9 +10,11 @@
 
 import type { ConfigKey } from '../config.ts'
 
-/** Every §8 key, resolved. Paths absolute and tilde-expanded. */
+/**
+ * Every settable §8 key, resolved. Paths absolute and tilde-expanded. Roots
+ * are list-valued and reported by `bardolier root list` instead (phase 18).
+ */
 export type EffectiveConfig = {
-  ssd_root: string
   /** null when unset — the §4.1 fallback chain applies. */
   catalogue_path: string | null
   terminal: string

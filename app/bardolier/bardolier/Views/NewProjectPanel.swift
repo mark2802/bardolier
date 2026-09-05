@@ -28,6 +28,9 @@ struct NewProjectPanel: View {
     @State private var archetype: Archetype = .web
     @State private var services: Set<String> = []
     @State private var existingNames: [String] = []
+    /// nil means "the CLI's own default" (the first configured root) — the
+    /// common, single-root case never shows a picker at all.
+    @State private var root: String?
 
     /// The CLI's own rule (cli/src/commands/new.ts) — mirrored so the field can
     /// say why before the call, never so the app can decide instead.
@@ -56,6 +59,8 @@ struct NewProjectPanel: View {
                 .pickerStyle(.menu)
                 .disabled(store.isBusy)
 
+                rootPicker
+
                 Text("Services").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                 servicePicker
             }
@@ -73,7 +78,7 @@ struct NewProjectPanel: View {
                         // The window closes only on success (§8); a refusal
                         // stays here with the fields still filled in.
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
-                        if await store.create(name: trimmed, archetype: archetype, services: services.sorted()) != nil {
+                        if await store.create(name: trimmed, archetype: archetype, services: services.sorted(), root: root) != nil {
                             back()
                         }
                     }
@@ -88,6 +93,23 @@ struct NewProjectPanel: View {
             await store.loadCatalogue()
             // §8: the app calls `list` to check for a collision.
             existingNames = await store.projectNames()
+        }
+    }
+
+    /// Only shown with more than one configured root (phase 18) — the common
+    /// case stays a two-field form, and `root` stays nil so the CLI's own
+    /// default (the first configured root) applies.
+    @ViewBuilder
+    private var rootPicker: some View {
+        if store.roots.count > 1 {
+            Picker("Root", selection: $root) {
+                ForEach(store.roots) { configured in
+                    Text(configured.name).tag(Optional(configured.name))
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(store.isBusy)
+            .onAppear { if root == nil { root = store.roots.first?.name } }
         }
     }
 

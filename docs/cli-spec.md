@@ -31,24 +31,29 @@ grows to provide it.
 - **Exit codes:** `0` success; non-zero on failure. On failure with `--json`,
   stdout is `{ "error": { "code": "<STABLE_CODE>", "message": "<human>" } }`.
 - **Stable error codes** (not exhaustive): `SSD_NOT_MOUNTED`,
-  `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_RUNNING`, `PROJECT_STOPPED`,
-  `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
+  `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`,
+  `PROJECT_STOPPED`, `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
   `EXTRA_PORT_ATTACHED`, `EXTRA_PORT_NOT_ATTACHED`,
   `PACKAGE_ATTACHED`, `PACKAGE_NOT_ATTACHED`,
   `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
-  `DOCKER_UNAVAILABLE`.
+  `ROOT_UNREADABLE`, `DOCKER_UNAVAILABLE`.
 - **No partial mutation of a running project:** service add/remove, port
   add/remove and deps add/remove require the project stopped and fail
   `PROJECT_RUNNING` otherwise.
 - **Idempotency:** `up` on a running project is a no-op success; `down` on a
   stopped project is a no-op success.
 - **Read-only commands never mutate.** `status`, `list`, `volumes orphaned`.
-- The CLI reads `$SSD_ROOT` and `$SSD_VOLUME` from config (see §8).
+- The CLI reads `roots` from config (see §8); `$BARDOLIER_ROOT` overrides the
+  whole list with a single root (phase 18).
 
 ## 3. On-disk layout
 
+Projects live in more than one **root** at once (phase 18) — typically an
+internal-disk root and an external SSD root, though the CLI treats every
+configured root the same way. Each root has this layout:
+
 ```
-$SSD_ROOT/                         # e.g. /Volumes/ssd/claude-projects
+<root>/                            # e.g. /Volumes/ssd/claude-projects
   <project>/
     project.yml                    # manifest (source of truth per project)
     docker-compose.yml             # GENERATED from project.yml — never hand-edit
@@ -58,16 +63,21 @@ $SSD_ROOT/                         # e.g. /Volumes/ssd/claude-projects
     <source code>
 ```
 
+`roots` is an ordered array of `{ name, path }` (§8); `roots[0]` is the
+default `new` targets. A project name is unique across every root, not just
+within one — two roots each holding a project called `api` would collide on
+the container name and the home volume, both of which are global to Docker.
+
 Docker's image/layer store stays on the **internal** disk. Only project data and
-named volumes live on the SSD.
+named volumes live under a root.
 
 ## 4. Data model
 
 ### 4.1 Service catalogue — `services.yml`
 
-Single editable file (location in config; default `$SSD_ROOT/services.yml`,
-falling back to a bundled default). Adding a service type = adding an entry, no
-code change.
+Single editable file (location in config; default `<default root>/services.yml`
+— the default root only, not per-root, phase 18's non-goals — falling back to
+a bundled default). Adding a service type = adding an entry, no code change.
 
 ```yaml
 services:
@@ -159,7 +169,9 @@ one dev container: `UV_CACHE_DIR=/cache/uv`, volume `bardolier-uv-cache`, same
 ## 5. Port allocation (first-class)
 
 Requirements, in priority order:
-1. **Unique** across all projects and all services.
+1. **Unique** across all projects and all services, **across every root**
+   (phase 18) — a project's root is otherwise invisible to the person reading
+   a connection string.
 2. **Stable** — assigned once at service-add, persisted in `project.yml`, never
    reassigned on restart. Released only on service-remove or project-delete.
 3. **Host-exposed** — every service publishes its `host_port` to the Mac so GUI
@@ -169,11 +181,19 @@ Requirements, in priority order:
 
 Algorithm at service-add:
 1. Read the base port for the service from the catalogue.
-2. Scan **all** projects' `project.yml` for host ports already assigned (the
-   manifests are the single source of truth — no separate registry to desync).
+2. Scan **all** projects' `project.yml` **in every configured root** for host
+   ports already assigned (the manifests are the single source of truth — no
+   separate registry to desync). A root that cannot be read makes the scan
+   refuse (`ROOT_UNREADABLE`) rather than silently allocating from a partial
+   view — an unreadable root's assignments are simply unknowable, and handing
+   out one of its ports would be no different from never having scanned it.
 3. From `host_port_base` upward, pick the first port that is BOTH unassigned in
    any manifest AND not currently bound on the host (probe the host socket).
 4. Persist it in this project's manifest.
+
+Adding a root does not re-allocate anything already assigned: uniqueness is
+enforced going forward, and a collision between two roots that were
+previously separate is a `doctor` finding, not silently repaired.
 
 At `up`: validate each recorded `host_port` is still bindable on the host. If a
 port was squatted by another process while the project was down, fail
@@ -219,12 +239,17 @@ for a service — the app renders it, it does not compose it.
 All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Projects
-- `bardolier new <name> --archetype <a> [--services a,b]`
-  Creates dir, manifest, compose, `.gitignore`, `.dockerignore`, `CLAUDE.md`.
-  Assigns ports for any initial services. Errors: `SSD_NOT_MOUNTED`,
-  `PROJECT_EXISTS`.
-- `bardolier list` — array of projects with archetype + running state.
+- `bardolier new <name> --archetype <a> [--services a,b] [--root <name>]`
+  Creates dir, manifest, compose, `.gitignore`, `.dockerignore`, `CLAUDE.md`,
+  under the named root (default: the first configured root — §8).
+  Assigns ports for any initial services. Errors: `ROOT_UNREADABLE` (the
+  target root, or another root the port allocation cannot see past),
+  `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
+  (unknown `--root`, naming the configured roots).
+- `bardolier list` — array of projects with archetype + running state + root
+  (phase 18).
 - `bardolier status [<name>]` — full status object(s) (see §7). No arg = all.
+  A name found in more than one root is `PROJECT_AMBIGUOUS`.
 - `bardolier up <name> [--no-shell]`
   Brings the project up (app dev container + attached services on one network).
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
@@ -277,21 +302,29 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Volumes / disk
 - `bardolier volumes orphaned` — array of `{ name, size_bytes, size_human,
-  last_project }` for volumes not referenced by any current compose file.
+  last_project }` for volumes not referenced by any current compose file
+  under any configured root. Errors `SSD_NOT_MOUNTED` (no root readable at
+  all) and `ROOT_UNREADABLE` (some, but not all, roots readable — a partial
+  view is refused rather than calling another root's volumes orphaned).
 - `bardolier volumes rm <name>` — remove one orphaned volume (confirm unless
   `--force`). Errors `VOLUME_IN_USE` if still referenced.
 
 ### Lifecycle / SSD
-- `bardolier down-all` — stop + remove all bardolier containers.
-- `bardolier eject` — derives the volume from `ssd_root` (the last ancestor
-  directory sharing its `st_dev`, phase 17 — there is no separate `ssd_volume`
-  key to disagree with it) and first checks that it's actually a removable
-  volume (`diskutil info -plist`). It may not be: `ssd_root` is a fully
-  supported, first-class mode when it's an ordinary directory on the internal
-  disk (§8), and `diskutil eject`-ing `/` or another non-removable mount is
-  not a smaller version of ejecting, it's the wrong command. Not removable
-  fails `EJECT_NOT_APPLICABLE` immediately — no project is stopped on the way
-  to that refusal — naming `bardolier down-all` as the thing to run instead.
+- `bardolier down-all` — stop + remove all bardolier containers, across every
+  root. Containers don't belong to a root, so this stays global.
+- `bardolier eject [<root>]` — derives the volume from the named root's path
+  (the last ancestor directory sharing its `st_dev`, phase 17 — there is no
+  separate `ssd_volume` key to disagree with it) and first checks that it's
+  actually a removable volume (`diskutil info -plist`). It may not be: a
+  root's path is a fully supported, first-class mode when it's an ordinary
+  directory on the internal disk (§8), and `diskutil eject`-ing `/` or another
+  non-removable mount is not a smaller version of ejecting, it's the wrong
+  command. Not removable fails `EJECT_NOT_APPLICABLE` immediately — no project
+  is stopped on the way to that refusal — naming `bardolier down-all` as the
+  thing to run instead. With more than one configured root (phase 18), `[<root>]`
+  is unambiguous only when exactly one qualifies as a mounted, removable
+  volume; otherwise it is required, and its absence is `INVALID_ARGUMENT`
+  naming every configured root.
   Otherwise: `down-all`, then check host holders (Xcode, Simulator, shells
   cd'd into the SSD via `lsof`), then `diskutil eject`. If held, fail
   `EJECT_BLOCKED` with `{ holders: [...] }` and do not force.
@@ -325,9 +358,32 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   refusal, but with no engine left to stop, so it never advises `--stop-docker`
   again. If the runtime has let go and the unmount still fails, that refusal is
   somebody else's and is reported as it came.
-- `bardolier doctor` — environment check: Docker running, SSD mounted, base images
-  present, catalogue valid. Returns structured findings. (Useful first call for
-  the app on launch.)
+- `bardolier doctor` — environment check: Docker running, every configured root's
+  readable state (the `ssd` finding, id frozen — `ok` is false only when
+  *none* is readable), base images present, catalogue valid. Returns
+  structured findings. (Useful first call for the app on launch.) The `ssd`
+  finding carries a `roots` array — per-root `mounted`/`removable` (null when
+  unmounted, since there is nothing to ask `diskutil`) — so the app can tell
+  an actual SSD apart from an internal-disk root instead of saying "SSD" for
+  both.
+
+### Roots
+
+`roots` is list-valued (§8), which `config set` cannot edit — the same reason
+`catalogue` and `config get|set` got their own commands in Phase 6.
+
+- `bardolier root add <path> [--name <name>]` — register a root. `--name` defaults
+  to the path's basename. Names and paths must each be unique across the
+  list; a collision is `CONFIG_INVALID`. Errors: `INVALID_ARGUMENT` (an
+  unusable name), `CONFIG_INVALID`.
+- `bardolier root remove <name>` — forget a root. Never touches the directory or
+  anything in it — this is bookkeeping, not deletion. `roots` is never empty
+  (§8), so removing the only configured root is refused rather than silently
+  rematerialising the built-in default in its place — add a replacement root
+  first. Errors: `INVALID_ARGUMENT` for an unknown name, or for the only
+  configured root.
+- `bardolier root list` — every configured root, in order, with whether it is
+  currently readable. `roots[0]` is the default `new` targets.
 
 ### Images
 - `bardolier build [--archetype <a>] [--claude-code-version <v>]` — build base
@@ -355,24 +411,30 @@ changed to accommodate them.
 - `bardolier config get` — the effective configuration (§8): defaults, then the
   file, then the environment, plus the file path and which env vars overrode a
   value. Errors: `CONFIG_INVALID`.
-- `bardolier config set <key> <value>` — set one §8 key; an empty value clears it.
-  Paths are expanded on the way in, keys are written in a stable order, and the
-  effective config after the write is reported. Never validates that a path
-  exists — the SSD is routinely absent, and refusing to record where it will be
-  would make the setting unusable exactly when it is needed. Errors:
+- `bardolier config set <key> <value>` — set one single-valued §8 key
+  (`catalogue_path` or `terminal`); an empty value clears it. `roots` is
+  list-valued and not settable here — see `bardolier root add | remove | list`
+  below. Paths are expanded on the way in, keys are written in a stable order,
+  and the effective config after the write is reported. Never validates that a
+  path exists — a root is routinely absent, and refusing to record where it
+  will be would make the setting unusable exactly when it is needed. Errors:
   `INVALID_ARGUMENT`, `CONFIG_INVALID`.
 
 ## 7. `status` JSON schema (the app's primary contract)
 
 ```json
 {
-  "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" },
+  "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" }, // default root's path (roots[0])
+  "roots": [                          // every configured root (phase 18), additive
+    { "name": "ssd", "path": "/Volumes/ssd/claude-projects", "mounted": true }
+  ],
   "docker": { "available": true },
   "projects": [
     {
       "name": "myapp",
       "archetype": "web",
       "state": "running",              // running | stopped | partial
+      "root": "ssd",                    // configured root's name (phase 18, additive)
       "services": [
         {
           "key": "postgres",
@@ -404,18 +466,27 @@ Schema stability is the contract. Additive changes only once the app ships.
 ## 8. Configuration
 
 - Config file `~/.config/bardolier/config.yml` (internal disk — must be readable when
-  SSD is absent, so `doctor`/`status` can report "SSD not mounted").
-  Keys: `ssd_root`, `catalogue_path`, `terminal` (for the app's shell-open
-  preference, surfaced here for a single source). There is no `ssd_volume`
-  key (phase 17): the mount point `eject` unmounts is derived from `ssd_root`
-  by walking `st_dev` boundaries, so the two can never disagree.
-- CLI reads env override `BDLR_SSD_ROOT`.
-- The app never edits this file itself: it reads it with `bardolier config get` and
-  writes it with `bardolier config set`, so precedence and path expansion have
+  every root is absent, so `doctor`/`status` can report "not readable").
+  Keys: `roots` (list-valued, §3 — an ordered array of `{ name, path }`;
+  `roots[0]` is the default `new` targets; names and paths must each be
+  unique), `catalogue_path`, `terminal` (for the app's shell-open preference,
+  surfaced here for a single source). There is no `ssd_volume` key (phase 17):
+  a root's mount point is derived from its `path` by walking `st_dev`
+  boundaries, so the two can never disagree.
+- CLI reads env override `$BARDOLIER_ROOT` (phase 18; was `$BDLR_SSD_ROOT`),
+  which REPLACES `roots` wholesale with a single root named after the path's
+  basename — one variable, so every done-check stays hermetic with a temp
+  dir. `roots` itself is not settable through `config set` (it is
+  list-valued) — see `bardolier root add | remove | list` in §6.
+- The app never edits this file itself: it reads it with `bardolier config get`
+  and writes single-valued keys with `bardolier config set`, `roots` with
+  `bardolier root add | remove | list`, so precedence and path expansion have
   one implementation.
-- `ssd_root` may be any local directory — an external SSD is not required. The
-  project lifecycle (`new`/`up`/`down`/services/volumes) never assumes a
-  removable volume; only `eject` does, and it is simply unavailable
+- A root's path may be any local directory — an external SSD is not required.
+  The default when nothing is configured is one root at `~/bardolier-projects`:
+  a published tool must not assume `/Volumes/ssd` exists. The project
+  lifecycle (`new`/`up`/`down`/services/volumes) never assumes a removable
+  volume; only `eject` does, and it is simply unavailable
   (`EJECT_NOT_APPLICABLE`) when the derived volume isn't one. Use
   `bardolier down-all` to stop everything in that mode.
 

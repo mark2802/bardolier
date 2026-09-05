@@ -2,30 +2,41 @@
  * Configuration — `cli-spec.md` §8.
  *
  * The config file lives on the INTERNAL disk (`~/.config/bardolier/config.yml`) for
- * one reason: it must be readable while the SSD is unplugged, so `doctor` and
- * `status` can say "SSD not mounted" instead of failing. Nothing in this module
- * touches the SSD; loading never throws SSD_NOT_MOUNTED.
+ * one reason: it must be readable while every root is unplugged, so `doctor`
+ * and `status` can say "not readable" instead of failing. Nothing in this
+ * module touches a root's filesystem beyond `stat`; loading never throws
+ * ROOT_UNREADABLE or SSD_NOT_MOUNTED.
  *
  * Precedence, lowest to highest: built-in defaults → config file → environment.
- * §8 names `BDLR_SSD_ROOT`; `BARDOLIER_CONFIG` is an implementation addition
- * that relocates the file itself, which is what keeps tests and the
- * done-check hermetic on a machine that has a real config.
+ * Phase 18 replaces the single `ssd_root` key with `roots`, an ordered array
+ * of `{ name, path }` — projects now live in more than one place at once, and
+ * the first entry is the default `new` targets. `$BDLR_SSD_ROOT` becomes
+ * `$BARDOLIER_ROOT`, which REPLACES the whole list with one root named after
+ * the path's basename — one variable, so every done-check stays hermetic with
+ * a temp dir. This is the second and last spend of §5's additive-only rule
+ * (see phase 17 for the first).
  *
- * There is no `ssd_volume` key (phase 17): the mount point is derived from
- * `ssd_root` by `containingVolume` in `projects.ts`, so the two can never
+ * There is no `ssd_volume` key (phase 17): a root's mount point is derived
+ * from its `path` by `containingVolume` in `projects.ts`, so the two can never
  * disagree.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { BardolierError } from './errors.ts'
 import { assertValid, validate } from './schema.ts'
 
+/** One entry of `roots` — a name the user and the app refer to it by, plus its path. */
+export type RootConfig = {
+  readonly name: string
+  readonly path: string
+}
+
 export type Config = {
-  /** Directory holding project dirs. Read for discovery; never created here. */
-  readonly ssd_root: string
+  /** Ordered; `roots[0]` is the default `new` targets. Never empty. */
+  readonly roots: readonly RootConfig[]
   /** Explicit catalogue location, or null to use the §4.1 fallback chain. */
   readonly catalogue_path: string | null
   /** Terminal the APP uses for shell-open. The CLI never spawns one. */
@@ -34,7 +45,7 @@ export type Config = {
 
 /** The file's shape: every key optional, since a missing file is legal. */
 export type ConfigFile = Partial<{
-  ssd_root: string
+  roots: { name: string; path: string }[]
   catalogue_path: string
   terminal: string
 }>
@@ -44,20 +55,20 @@ export type LoadedConfig = {
   /** Absolute path consulted, whether or not it exists. */
   readonly path: string
   readonly exists: boolean
-  /** Env vars that overrode a value, e.g. `['BDLR_SSD_ROOT']`. */
+  /** Env vars that overrode a value, e.g. `['BARDOLIER_ROOT']`. */
   readonly overrides: readonly string[]
   /**
    * The inputs this load used, kept so a caller can reload the same way after
-   * writing (`config set`). Without them a reload would silently fall back to
-   * the real `process.env` and the real `$HOME` — which is exactly the seam
-   * `LoadOptions` exists to close.
+   * writing (`config set`, `root add|remove`). Without them a reload would
+   * silently fall back to the real `process.env` and the real `$HOME` — which
+   * is exactly the seam `LoadOptions` exists to close.
    */
   readonly home: string
   readonly env: Env
 }
 
-// Phase 18 is where this stops assuming a disk exists; for now it names one.
-export const DEFAULT_SSD_ROOT = '/Volumes/ssd/claude-projects'
+/** A published tool must not assume `/Volumes/ssd` exists. */
+export const DEFAULT_ROOT_PATH = '~/bardolier-projects'
 export const DEFAULT_TERMINAL = 'Terminal'
 
 export type Env = Readonly<Record<string, string | undefined>>
@@ -74,6 +85,32 @@ export function defaultConfigPath(env: Env = process.env, home = homedir()): str
   const xdg = env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? expandPath(xdg, home) : join(home, '.config')
   return join(base, 'bardolier', 'config.yml')
+}
+
+const ROOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+export function isValidRootName(name: string): boolean {
+  return ROOT_NAME_PATTERN.test(name)
+}
+
+/** A usable root name derived from a path's basename, for the env override and `root add` without `--name`. */
+export function nameFromPath(path: string): string {
+  const base = basename(path)
+  if (base.length > 0 && ROOT_NAME_PATTERN.test(base)) return base
+  const sanitized = base.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[.\-_]+/, '')
+  return sanitized.length > 0 ? sanitized : 'root'
+}
+
+/** Names unique, paths unique — a root that collided with itself would corrupt §5 and volume ownership alike. */
+function assertUniqueRoots(roots: readonly RootConfig[], where: string): void {
+  const names = new Set<string>()
+  const paths = new Set<string>()
+  for (const root of roots) {
+    if (names.has(root.name)) throw new BardolierError('CONFIG_INVALID', `${where}: duplicate root name \`${root.name}\`.`)
+    if (paths.has(root.path)) throw new BardolierError('CONFIG_INVALID', `${where}: duplicate root path ${root.path}.`)
+    names.add(root.name)
+    paths.add(root.path)
+  }
 }
 
 function readConfigFile(path: string): { file: ConfigFile; exists: boolean } {
@@ -101,6 +138,26 @@ function readConfigFile(path: string): { file: ConfigFile; exists: boolean } {
   return { file, exists: true }
 }
 
+/**
+ * The roots the FILE declares, defaulted and expanded but ignorant of any
+ * environment override — `root add`/`root remove` edit this list, not the
+ * effective one `$BARDOLIER_ROOT` might be standing in for.
+ *
+ * A file with no `roots` key materialises the built-in default: this is what
+ * makes `root add`'s first call turn the implicit default into an explicit
+ * `roots[0]` rather than losing it.
+ */
+export function currentRoots(path: string, home = homedir()): RootConfig[] {
+  const { file } = readConfigFile(path)
+  if (file.roots && file.roots.length > 0) {
+    const roots = file.roots.map((root) => ({ name: root.name, path: expandPath(root.path, home) }))
+    assertUniqueRoots(roots, path)
+    return roots
+  }
+  const expanded = expandPath(DEFAULT_ROOT_PATH, home)
+  return [{ name: nameFromPath(expanded), path: expanded }]
+}
+
 export type LoadOptions = {
   readonly path?: string
   readonly env?: Env
@@ -108,7 +165,7 @@ export type LoadOptions = {
 }
 
 /**
- * Load config. Safe with the SSD absent, safe with no config file at all.
+ * Load config. Safe with every root absent, safe with no config file at all.
  * Throws only CONFIG_INVALID, and only when a file exists but is unusable.
  */
 export function loadConfig(options: LoadOptions = {}): LoadedConfig {
@@ -118,15 +175,19 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
   const { file, exists } = readConfigFile(path)
 
   const overrides: string[] = []
-  const envRoot = env.BDLR_SSD_ROOT
-  if (envRoot) overrides.push('BDLR_SSD_ROOT')
-  // $BDLR_SSD_VOLUME is not read: there is no `ssd_volume` key left to override.
-
-  const root = expandPath(envRoot || file.ssd_root || DEFAULT_SSD_ROOT, home)
+  const envRoot = env.BARDOLIER_ROOT
+  let roots: RootConfig[]
+  if (envRoot) {
+    overrides.push('BARDOLIER_ROOT')
+    const expanded = expandPath(envRoot, home)
+    roots = [{ name: nameFromPath(expanded), path: expanded }]
+  } else {
+    roots = currentRoots(path, home)
+  }
 
   return {
     config: {
-      ssd_root: root,
+      roots,
       catalogue_path: file.catalogue_path ? expandPath(file.catalogue_path, home) : null,
       terminal: file.terminal || DEFAULT_TERMINAL,
     },
@@ -141,16 +202,36 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
 // ── Writing (`bardolier config set`, app-spec.md §12) ────────────────────────────
 
 /**
- * The keys a caller may set. Mirrors `config.schema.json`'s properties, and
- * `test/contracts.test.ts` holds the two together — a key the schema accepts
- * but this rejects would be settable by hand and not by the app, which is the
- * kind of split that makes Preferences lie.
+ * The keys a caller may set through `config set`. `roots` is list-valued and
+ * gets its own command surface (`root add | remove | list`, `commands/root.ts`)
+ * — the same reasoning phase 6 gave `catalogue` and `config get|set` their
+ * own commands rather than a text field the app would have to compose.
  */
-export const CONFIG_KEYS = ['ssd_root', 'catalogue_path', 'terminal'] as const
+export const CONFIG_KEYS = ['catalogue_path', 'terminal'] as const
 export type ConfigKey = (typeof CONFIG_KEYS)[number]
 
 export function isConfigKey(value: string): value is ConfigKey {
   return (CONFIG_KEYS as readonly string[]).includes(value)
+}
+
+const FILE_KEY_ORDER = ['roots', 'catalogue_path', 'terminal'] as const
+
+/** Validate against the schema, then write with a stable key order — round-trips to identical bytes. */
+function persist(path: string, next: ConfigFile): void {
+  const { valid, errors } = validate('config', next)
+  if (!valid) {
+    throw new BardolierError('CONFIG_INVALID', `Refusing to write ${path}: ${errors.join('; ')}`)
+  }
+  mkdirSync(dirname(path), { recursive: true })
+  const ordered: ConfigFile = {}
+  for (const key of FILE_KEY_ORDER) {
+    if (key === 'roots') {
+      if (next.roots !== undefined) ordered.roots = next.roots
+    } else if (next[key] !== undefined) {
+      ordered[key] = next[key]
+    }
+  }
+  writeFileSync(path, Object.keys(ordered).length === 0 ? '{}\n' : stringifyYaml(ordered), 'utf8')
 }
 
 export type ConfigWrite = {
@@ -165,12 +246,12 @@ export type ConfigWrite = {
  * Set or clear keys in the config file.
  *
  * The file is REWRITTEN from its parsed keys, so any comments in it are lost —
- * acceptable because the file is four keys the app also edits, and the
+ * acceptable because the file is a handful of keys the app also edits, and the
  * alternative (patching YAML text) is a parser this project does not need.
  * An empty value clears a key rather than storing an empty string, which the
  * schema forbids anyway; that is how Preferences returns to a default.
  *
- * Nothing here validates that a path exists. The SSD is routinely absent —
+ * Nothing here validates that a path exists. A root is routinely absent —
  * refusing to record where it will be would make the preference unusable
  * exactly when it is needed.
  */
@@ -194,24 +275,61 @@ export function writeConfig(path: string, updates: Readonly<Partial<Record<Confi
 
   if (changed.length === 0 && exists) return { path, created: false, changed: [] }
 
-  const { valid, errors } = validate('config', next)
-  if (!valid) {
-    throw new BardolierError('CONFIG_INVALID', `Refusing to write ${path}: ${errors.join('; ')}`)
-  }
-
-  try {
-    mkdirSync(dirname(path), { recursive: true })
-    // Ordered by CONFIG_KEYS rather than by insertion, so rewriting the file
-    // twice with the same values produces the same bytes.
-    const ordered: ConfigFile = {}
-    for (const key of CONFIG_KEYS) {
-      const value = next[key]
-      if (value !== undefined) ordered[key] = value
-    }
-    writeFileSync(path, Object.keys(ordered).length === 0 ? '{}\n' : stringifyYaml(ordered), 'utf8')
-  } catch (cause) {
-    throw new BardolierError('CONFIG_INVALID', `Cannot write ${path}: ${(cause as Error).message}`)
-  }
-
+  persist(path, next)
   return { path, created: !exists, changed }
+}
+
+// ── Roots (`bardolier root add | remove | list`) ──────────────────────────────────
+
+export type RootWrite = {
+  readonly path: string
+  readonly created: boolean
+}
+
+/** Append a root to the file, materialising the built-in default first if the file had none. */
+export function addRootToFile(path: string, root: RootConfig, home = homedir()): RootWrite {
+  const { file, exists } = readConfigFile(path)
+  const existing = currentRoots(path, home)
+  const byName = existing.find((r) => r.name === root.name)
+  if (byName) throw new BardolierError('CONFIG_INVALID', `A root named \`${root.name}\` already exists (${byName.path}).`)
+  const byPath = existing.find((r) => r.path === root.path)
+  if (byPath) throw new BardolierError('CONFIG_INVALID', `${root.path} is already registered as root \`${byPath.name}\`.`)
+
+  const next: ConfigFile = { ...file, roots: [...existing, root] }
+  persist(path, next)
+  return { path, created: !exists }
+}
+
+export type RootRemoval = {
+  readonly path: string
+  readonly removed: RootConfig
+}
+
+/** Forget a root by name. Never touches the directory it pointed at. */
+export function removeRootFromFile(path: string, name: string, home = homedir()): RootRemoval {
+  const { file } = readConfigFile(path)
+  const existing = currentRoots(path, home)
+  const index = existing.findIndex((r) => r.name === name)
+  if (index === -1) {
+    throw new BardolierError(
+      'INVALID_ARGUMENT',
+      `No root named \`${name}\`. Configured roots: ${existing.map((r) => r.name).join(', ')}.`,
+    )
+  }
+  // `roots` is never empty (see the `Config` type): forgetting the last one
+  // wouldn't leave zero roots, it would silently rematerialise the built-in
+  // default on the next load — a root nobody asked for, standing in for the
+  // one that was just removed. Add the replacement first.
+  if (existing.length === 1) {
+    throw new BardolierError(
+      'INVALID_ARGUMENT',
+      `\`${name}\` is the only configured root. Add another with \`bardolier root add\` before removing it.`,
+    )
+  }
+  const removed = existing[index]!
+  const remaining = existing.filter((_, i) => i !== index)
+
+  const next: ConfigFile = { ...file, roots: remaining }
+  persist(path, next)
+  return { path, removed }
 }

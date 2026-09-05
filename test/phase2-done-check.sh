@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 2 done-check — new → up → /work mounted and owned by the host user →
 # down (container gone, data kept) → delete, with `status` tracking each step.
-# The SSD is a temp dir (BDLR_SSD_ROOT, §8); the Docker half is real and builds
+# The SSD is a temp dir (BARDOLIER_ROOT, §8); the Docker half is real and builds
 # the base image if it is missing.
 #
 #   bash test/phase2-done-check.sh
@@ -39,7 +39,7 @@ mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
 export BDLR_SSD_VOLUME="$TMP/ssd"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -90,9 +90,11 @@ EXISTS="$($BARDOLIER new myapp --archetype web --json 2>/dev/null || true)"
 json_assert "$EXISTS" 'd.error && d.error.code === "PROJECT_EXISTS"' \
   && ok "a second new is PROJECT_EXISTS" || bad "duplicate new did not fail PROJECT_EXISTS"
 
-UNMOUNTED="$(BDLR_SSD_ROOT="$ABSENT" $BARDOLIER new nope --archetype web --json 2>/dev/null || true)"
-json_assert "$UNMOUNTED" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
-  && ok "new with the SSD absent is SSD_NOT_MOUNTED" || bad "new did not fail SSD_NOT_MOUNTED"
+UNMOUNTED="$(BARDOLIER_ROOT="$ABSENT" $BARDOLIER new nope --archetype web --json 2>/dev/null || true)"
+# Phase 18: an unreadable TARGET root is ROOT_UNREADABLE, not SSD_NOT_MOUNTED —
+# it names the one root this call cares about.
+json_assert "$UNMOUNTED" 'd.error && d.error.code === "ROOT_UNREADABLE"' \
+  && ok "new with the root absent is ROOT_UNREADABLE" || bad "new did not fail ROOT_UNREADABLE"
 [ ! -e "$ABSENT" ] && ok "no project directory was created on the internal disk" || bad "new created $ABSENT"
 
 BADTYPE="$($BARDOLIER new other --archetype toaster --json 2>/dev/null || true)"

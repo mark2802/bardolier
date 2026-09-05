@@ -22,7 +22,7 @@ import { BardolierError } from './errors.ts'
 import type { DockerContainer } from './docker.ts'
 import { COMPOSE_FILENAME, renderCompose } from './compose.ts'
 import { devContainerName, serviceContainerName } from './naming.ts'
-import { MANIFEST_FILENAME, discoverProjects, type DiscoveredProject } from './projects.ts'
+import { findProject, MANIFEST_FILENAME, discoverProjects, type DiscoveredProject } from './projects.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { ServiceCatalogue } from './model/catalogue.ts'
 import type { ProjectState } from './model/status.ts'
@@ -129,16 +129,19 @@ export function requireProject(ctx: Context, name: string | undefined): Discover
   if (!name) throw new BardolierError('INVALID_ARGUMENT', 'A project name is required.')
   const discovery = discoverProjects(ctx.config)
   if (!discovery.mounted) {
-    throw new BardolierError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
+    throw new BardolierError('SSD_NOT_MOUNTED', `No configured root is readable.`)
   }
-  const found = discovery.projects.find((p) => p.name === name)
+  const found = findProject(discovery, name)
   if (found) return found
 
   const broken = discovery.invalid.find((p) => p.name === name)
   if (broken) {
     throw new BardolierError('CONFIG_INVALID', `Project \`${name}\` has an unusable manifest: ${broken.reason}`)
   }
-  throw new BardolierError('PROJECT_NOT_FOUND', `No project named \`${name}\` under ${ctx.config.ssd_root}.`)
+  throw new BardolierError(
+    'PROJECT_NOT_FOUND',
+    `No project named \`${name}\` in any configured root (${ctx.config.roots.map((r) => r.path).join(', ')}).`,
+  )
 }
 
 /** Every name every running container answers to. */

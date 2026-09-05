@@ -3,12 +3,12 @@
  *
  * Resolution order, first hit wins:
  *   1. `catalogue_path` from config
- *   2. `$SSD_ROOT/services.yml`
+ *   2. `<default root>/services.yml`
  *   3. the bundled `cli/defaults/services.yml`
  *
  * Only an explicitly configured path is an error when missing — the user asked
- * for that file by name. The SSD copy is optional by design, so the CLI still
- * works with the SSD unplugged.
+ * for that file by name. The root copy is optional by design, so the CLI still
+ * works with every root unplugged.
  */
 
 import { readFileSync } from 'node:fs'
@@ -18,6 +18,7 @@ import { parse as parseYaml } from 'yaml'
 import type { Config } from './config.ts'
 import { BardolierError } from './errors.ts'
 import { assertValid } from './schema.ts'
+import { defaultRoot } from './projects.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 
 /** Which step of the §4.1 chain answered. Surfaced by `doctor`. */
@@ -64,7 +65,9 @@ export function resolveCatalogue(config: Config): ResolvedCatalogue {
     return { catalogue: parseCatalogue(text, config.catalogue_path), path: config.catalogue_path, origin: 'config' }
   }
 
-  const onSsd = join(config.ssd_root, 'services.yml')
+  // Only the default root is consulted (non-goal: no per-root catalogue,
+  // phase 18) — `services.yml` is one shared file, like the config file itself.
+  const onSsd = join(defaultRoot(config).path, 'services.yml')
   const ssdText = read(onSsd)
   if (ssdText !== null) return { catalogue: parseCatalogue(ssdText, onSsd), path: onSsd, origin: 'ssd' }
 

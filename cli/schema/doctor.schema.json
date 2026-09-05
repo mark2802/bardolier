@@ -34,6 +34,25 @@
           "type": "string",
           "description": "What to do about it. Present only when the finding is actionable.",
           "minLength": 1
+        },
+        "roots": {
+          "type": "array",
+          "description": "Per-root state. Present only on the `ssd` finding. Additive since phase 18.",
+          "items": { "$ref": "#/$defs/doctor_root" }
+        }
+      }
+    },
+    "doctor_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "mounted", "removable"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mounted": { "type": "boolean" },
+        "removable": {
+          "type": ["boolean", "null"],
+          "description": "Whether diskutil reports this as a removable, non-internal volume. Null when the root isn't currently mounted — there is nothing to ask, and the CLI never guesses."
         }
       }
     }

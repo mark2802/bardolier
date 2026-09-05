@@ -6,9 +6,15 @@
  * among the last three is the point: containers bind-mounting the SSD are
  * holders too, so they come down first; and the holder check happens after,
  * when what remains is genuinely the user's own Xcode or shell. The
- * removability check comes first of all — `ssd_root` may be a plain directory
- * on the internal disk (phase 10), and there is no point stopping every
- * project on the way to a `diskutil eject` that was never going to apply.
+ * removability check comes first of all — a root may be a plain directory on
+ * the internal disk (phase 10), and there is no point stopping every project
+ * on the way to a `diskutil eject` that was never going to apply.
+ *
+ * With more than one configured root (phase 18), `eject` targets exactly one:
+ * an explicit `[root]` argument, or — when only one configured root turns out
+ * to be an actually-removable, mounted volume — that one implicitly. Anything
+ * else (none, or more than one, removable) is INVALID_ARGUMENT naming every
+ * configured root, because there is no safe guess among disks.
  *
  * **It never forces.** A held volume is EJECT_BLOCKED carrying `holders`, and
  * the user decides what to close (CLAUDE.md: safety over convenience). Forcing
@@ -36,11 +42,12 @@
  */
 
 import type { Context } from '../context.ts'
+import type { RootConfig } from '../config.ts'
 import { BardolierError } from '../errors.ts'
 import { isActionableHolder, isRuntimeHolder } from '../device.ts'
 import { devContainerName, isBardolierContainer, serviceContainerName } from '../naming.ts'
 import { attachedKeys } from '../compose.ts'
-import { discoverProjects, probeSsd } from '../projects.ts'
+import { discoverProjects, probeRoot } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
 import type { DownAllOutput, DownAllProject, EjectHolder, EjectOutput } from '../model/ssd.ts'
 import { runDown } from './down.ts'
@@ -121,6 +128,43 @@ export type EjectOptions = {
    * close instead.
    */
   readonly stopDocker?: boolean
+  /** Which configured root to eject (phase 18). Required when more than one qualifies. */
+  readonly root?: string
+}
+
+/**
+ * Which root `eject` targets. An explicit name wins; otherwise a single
+ * configured root is unambiguous outright, and among several the only safe
+ * implicit pick is the one that is both mounted and an actually-removable
+ * volume — everything else must be named, because there is no safe guess
+ * among disks (a plain internal directory is never what `eject` should reach
+ * for on its own).
+ */
+async function pickEjectTarget(ctx: Context, name: string | undefined): Promise<RootConfig> {
+  const roots = ctx.config.roots
+  if (name !== undefined) {
+    const root = roots.find((r) => r.name === name)
+    if (!root) {
+      throw new BardolierError(
+        'INVALID_ARGUMENT',
+        `Unknown root \`${name}\`. Configured roots: ${roots.map((r) => r.name).join(', ')}.`,
+      )
+    }
+    return root
+  }
+  if (roots.length === 1) return roots[0]!
+
+  const removable: RootConfig[] = []
+  for (const root of roots) {
+    const probe = probeRoot(root)
+    if (probe.mounted && probe.volume && (await ctx.device.removable(probe.volume))) removable.push(root)
+  }
+  if (removable.length === 1) return removable[0]!
+
+  throw new BardolierError(
+    'INVALID_ARGUMENT',
+    `More than one root is configured; say which to eject: ${roots.map((r) => r.name).join(', ')}.`,
+  )
 }
 
 function toHolders(holders: readonly { pid: number; command: string; user: string | null; paths: readonly string[] }[]): EjectHolder[] {
@@ -139,16 +183,17 @@ function detailHolders(error: BardolierError): EjectHolder[] {
 }
 
 export async function runEject(ctx: Context, options: EjectOptions = {}): Promise<EjectOutput> {
-  const ssd = probeSsd(ctx.config)
+  const target = await pickEjectTarget(ctx, options.root)
+  const ssd = probeRoot(target)
   if (!ssd.mounted || !ssd.volume) {
-    throw new BardolierError('SSD_NOT_MOUNTED', `${ssd.root} is not readable; there is nothing to eject.`)
+    throw new BardolierError('SSD_NOT_MOUNTED', `${ssd.path} is not readable; there is nothing to eject.`)
   }
 
   if (!(await ctx.device.removable(ssd.volume))) {
-    // A local `ssd_root` (phase 10) is a fully supported mode, but `eject`
-    // means `diskutil eject` — asked of `/` or another ordinary directory,
-    // that is at best a no-op and at worst a request to unmount the wrong
-    // thing. Checked before down-all, so a refusal here touches no container.
+    // A local root (phase 10) is a fully supported mode, but `eject` means
+    // `diskutil eject` — asked of `/` or another ordinary directory, that is
+    // at best a no-op and at worst a request to unmount the wrong thing.
+    // Checked before down-all, so a refusal here touches no container.
     throw new BardolierError(
       'EJECT_NOT_APPLICABLE',
       `${ssd.volume} is not a removable volume, so there is nothing to eject. Use \`bardolier down-all\` to stop every project instead.`,
@@ -178,7 +223,7 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
     await ejectAfterEngineStop(ctx, ssd.volume, held)
   }
 
-  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [], docker_stopped: dockerStopped }
+  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [], docker_stopped: dockerStopped, root: target.name }
 }
 
 /**
@@ -358,7 +403,7 @@ async function allowed(ctx: Context, options: EjectOptions, volume: string, name
 export function renderEject(output: EjectOutput): string[] {
   const lines: string[] = []
   if (output.stopped.length > 0) lines.push(`Stopped ${output.stopped.join(', ')}.`)
-  lines.push(`Ejected ${output.volume}. Safe to unplug.`)
+  lines.push(`Ejected ${output.volume} (root: ${output.root}). Safe to unplug.`)
   if (output.docker_stopped) lines.push('  Stopped the Docker engine to release the volume — `docker desktop start` when you need it.')
   return lines
 }

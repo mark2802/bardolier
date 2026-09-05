@@ -63,4 +63,6 @@ export type EjectOutput = {
    * eject went. Optional in the schema: an older app build decodes without it.
    */
   docker_stopped: boolean
+  /** The configured root's name that was ejected. Additive since phase 18. */
+  root?: string
 }

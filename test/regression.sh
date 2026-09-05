@@ -19,13 +19,14 @@
 # Phase 14 is a one-argv-difference `docker exec`, no image work. Phase 15 is
 # the rename; its check rebuilds bardolier-web too, same reason as 11/13.
 # Phase 16 is the Swift half of the rename — no Docker at all. Phase 17 is a
-# config/eject reshape, real diskutil but no image work either.
+# config/eject reshape, real diskutil but no image work either. Phase 18 is
+# many roots — several temp dirs and manifests, no image work.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-LAST=17
+LAST=18
 THROUGH="$LAST"
 
 while [ $# -gt 0 ]; do
@@ -62,7 +63,7 @@ export BARDOLIER_REGRESSION=1
 # (`config set did not record the change`). The ladder therefore hands every
 # phase a clean slate rather than whatever the shell above it happened to
 # export.
-CLEAN_ENV=(env -u BARDOLIER_CONFIG -u BDLR_SSD_ROOT -u BDLR_SSD_VOLUME)
+CLEAN_ENV=(env -u BARDOLIER_CONFIG -u BARDOLIER_ROOT -u BDLR_SSD_VOLUME)
 
 pass=0
 fail=0

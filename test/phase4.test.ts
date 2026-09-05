@@ -242,7 +242,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
   test('with the SSD unmounted it refuses rather than calling everything an orphan', async () => {
     const box = sandbox()
     const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres') }] })
-    const ctx = makeContext(box, docker, { env: { BDLR_SSD_ROOT: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { env: { BARDOLIER_ROOT: `${box.root}-gone` } })
 
     await assert.rejects(
       () => collectOrphanedVolumes(ctx),
@@ -562,7 +562,7 @@ describe('eject (cli-spec.md §6)', () => {
     const box = sandbox()
     const docker = stubDocker({ running: ['bardolier-alpha'] })
     const device = stubDevice()
-    const ctx = makeContext(box, docker, { device, env: { BDLR_SSD_ROOT: `${box.root}-gone` } })
+    const ctx = makeContext(box, docker, { device, env: { BARDOLIER_ROOT: `${box.root}-gone` } })
 
     await assert.rejects(
       () => runEject(ctx),

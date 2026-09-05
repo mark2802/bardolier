@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/root-add.schema.json",
+  "title": "bardolier root add output",
+  "description": "What `bardolier root add` wrote (cli-spec.md §8, phase 18). Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "created", "added", "roots"],
+  "properties": {
+    "path": { "type": "string", "minLength": 1, "description": "The config file written." },
+    "created": { "type": "boolean", "description": "True when the file did not exist before this call." },
+    "added": { "$ref": "#/$defs/root" },
+    "roots": {
+      "type": "array",
+      "description": "Every configured root afterwards, in order.",
+      "items": { "$ref": "#/$defs/root" }
+    }
+  },
+  "$defs": {
+    "root": {
+      "type": "object",
+      "description": "One configured root. Duplicated verbatim in root-add/root-remove/root-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["name", "path", "mounted"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mounted": { "type": "boolean" }
+      }
+    }
+  }
+}

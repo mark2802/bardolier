@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/root-list.schema.json",
+  "title": "bardolier root list output",
+  "description": "Every configured root (cli-spec.md §8, phase 18). roots[0] is the default `new` targets. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["roots"],
+  "properties": {
+    "roots": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/root" }
+    }
+  },
+  "$defs": {
+    "root": {
+      "type": "object",
+      "description": "One configured root. Duplicated verbatim in root-add/root-remove/root-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["name", "path", "mounted"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mounted": { "type": "boolean" }
+      }
+    }
+  }
+}

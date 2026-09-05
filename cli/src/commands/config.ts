@@ -2,19 +2,20 @@
  * `bardolier config get | set` — `cli-spec.md` §8.
  *
  * Not in §6's original list, and here for the reason §1 gives: the app holds no
- * logic of its own, so Preferences (`app-spec.md` §12) changes the SSD path and
- * the terminal by calling the CLI rather than by writing `config.yml` behind
- * it. Precedence, path expansion and the "root defaults inside the volume"
- * rule all live in `config.ts`; a second writer in Swift would know some of
- * that and get the rest subtly wrong.
+ * logic of its own, so Preferences (`app-spec.md` §12) changes the catalogue
+ * path and the terminal by calling the CLI rather than by writing `config.yml`
+ * behind it. `roots` is list-valued and has its own surface instead
+ * (`bardolier root add | remove | list`, phase 18). Precedence and path expansion
+ * live in `config.ts`; a second writer in Swift would know some of that and
+ * get the rest subtly wrong.
  *
  * `get` reports the EFFECTIVE config — what the CLI will actually use — plus
- * the environment overrides, because a value forced by `$BDLR_SSD_ROOT` is one
+ * the environment overrides, because a value forced by `$BARDOLIER_ROOT` is one
  * the file cannot change, and a preferences pane that silently wrote it anyway
  * would be lying to the user.
  *
- * Neither command touches the SSD: the config file lives on the internal disk
- * precisely so it stays readable when the SSD is absent (§8).
+ * Neither command touches a root's disk: the config file lives on the
+ * internal disk precisely so it stays readable when every root is absent (§8).
  */
 
 import type { Context } from '../context.ts'
@@ -24,7 +25,6 @@ import type { ConfigGetOutput, ConfigSetOutput, EffectiveConfig } from '../model
 
 function effective(ctx: Context): EffectiveConfig {
   return {
-    ssd_root: ctx.config.ssd_root,
     catalogue_path: ctx.config.catalogue_path,
     terminal: ctx.config.terminal,
   }
@@ -84,7 +84,6 @@ export function runConfigSet(ctx: Context, request: ConfigSetRequest): ConfigSet
     created: write.created,
     changed: [...write.changed],
     config: {
-      ssd_root: reloaded.config.ssd_root,
       catalogue_path: reloaded.config.catalogue_path,
       terminal: reloaded.config.terminal,
     },

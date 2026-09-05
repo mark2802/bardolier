@@ -21,6 +21,8 @@ export type NewProject = {
   dir: string
   /** RFC 3339 UTC timestamp recorded in the manifest. */
   created: string
+  /** The configured root's name this project was created under (phase 18). */
+  root: string
 }
 
 export type NewOutput = {

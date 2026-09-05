@@ -407,7 +407,7 @@ describe('config contract (cli-spec.md §8)', () => {
     assert.ok(validate('config', {}).valid)
     assert.ok(
       validate('config', {
-        ssd_root: '/Volumes/ssd/claude-projects',
+        roots: [{ name: 'ssd', path: '/Volumes/ssd/claude-projects' }],
         catalogue_path: '/Volumes/ssd/services.yml',
         terminal: 'Terminal',
       }).valid,
@@ -431,9 +431,11 @@ describe('catalogue + config commands (app-spec.md §6, §8, §12)', () => {
     assert.deepEqual(get, set, 'the two copies have drifted')
   })
 
-  test('every settable key is a key the config file schema accepts', () => {
+  test('every settable key is a key the config file schema accepts, plus the list-valued `roots`', () => {
     const file = loadSchema('config') as { properties: Record<string, unknown> }
-    assert.deepEqual([...CONFIG_KEYS].sort(), Object.keys(file.properties).sort())
+    // `roots` is a real file key but not settable through `config set` — it is
+    // list-valued and has its own surface (`bardolier root add|remove|list`, phase 18).
+    assert.deepEqual([...CONFIG_KEYS, 'roots'].sort(), Object.keys(file.properties).sort())
   })
 
   test('`config set` reports changes only for keys it can actually set', () => {
@@ -449,7 +451,7 @@ describe('catalogue + config commands (app-spec.md §6, §8, §12)', () => {
     const valid = {
       path: '/home/me/.config/bardolier/config.yml',
       exists: false,
-      config: { ssd_root: '/Volumes/ssd/claude-projects', catalogue_path: null, terminal: 'Terminal' },
+      config: { catalogue_path: null, terminal: 'Terminal' },
       overrides: [],
     }
     assert.ok(validate('config-get', valid).valid, validate('config-get', valid).errors.join('\n'))
@@ -514,9 +516,10 @@ describe('command surface (cli-spec.md §6)', () => {
 
   /**
    * Every command §6 itself names. Phase 4 completed the original set; Phase
-   * 12 extended §6 with Ports (`port add/remove/list`) and Phase 13 with Deps
-   * (`deps add/remove/list`), both additively — the "declares nothing beyond
-   * §6" test below still holds because §6 itself grew.
+   * 12 extended §6 with Ports (`port add/remove/list`), Phase 13 with Deps
+   * (`deps add/remove/list`), and Phase 18 with Roots (`root add/remove/list`),
+   * all additively — the "declares nothing beyond §6" test below still holds
+   * because §6 itself grew.
    */
   const SPEC_COMMANDS = [
     'build',
@@ -533,6 +536,9 @@ describe('command surface (cli-spec.md §6)', () => {
     'port add',
     'port list',
     'port remove',
+    'root add',
+    'root list',
+    'root remove',
     'service add',
     'service list',
     'service remove',

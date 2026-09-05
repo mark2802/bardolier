@@ -49,8 +49,9 @@ import {
 } from './service.ts'
 import { collectPortList, renderPortAdd, renderPortList, renderPortRemove, runPortAdd, runPortRemove } from './port.ts'
 import { collectDepsList, renderDepsAdd, renderDepsList, renderDepsRemove, runDepsAdd, runDepsRemove } from './deps.ts'
+import { collectRootList, renderRootAdd, renderRootList, renderRootRemove, runRootAdd, runRootRemove } from './root.ts'
 
-export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Deps', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Images'] as const
+export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Deps', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Roots', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
 
 export type FlagSpec = {
@@ -170,20 +171,23 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['new'],
     group: 'Projects',
-    usage: 'new <name> --archetype <a> [--services a,b]',
+    usage: 'new <name> --archetype <a> [--services a,b] [--root <name>]',
     summary: 'Create a project: dir, manifest, compose, .gitignore, .dockerignore, CLAUDE.md.',
     flags: [
       { name: '--archetype', arg: '<a>', description: 'web | ios | android | library. Required.' },
       { name: '--services', arg: '<a,b>', description: 'Catalogue keys to attach immediately; ports assigned now.' },
+      { name: '--root', arg: '<name>', description: 'Which configured root to create it under. Defaults to the first.' },
     ],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_EXISTS', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
+    errors: ['ROOT_UNREADABLE', 'PROJECT_EXISTS', 'PROJECT_AMBIGUOUS', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE', 'INVALID_ARGUMENT'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('new'), 1)
+      const root = stringFlag(inv, '--root')
       return output(
         await runNew(createContext(), {
           name,
           archetype: stringFlag(inv, '--archetype'),
           services: stringFlag(inv, '--services'),
+          ...(root !== undefined ? { root } : {}),
         }),
         renderNew,
       )
@@ -207,7 +211,7 @@ export const COMMANDS: readonly CommandNode[] = [
     usage: 'status [<name>]',
     summary: 'Full status object(s) per cli-spec.md §7. No arg = all projects.',
     flags: [],
-    errors: ['PROJECT_NOT_FOUND'],
+    errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS'],
     run: async (inv) => {
       const name = atMostOneArg(inv, 'status', '<name>')
       return output(await collectStatus(createContext(), name), renderStatus)
@@ -219,7 +223,7 @@ export const COMMANDS: readonly CommandNode[] = [
     usage: 'up <name> [--no-shell]',
     summary: 'Bring the dev container and attached services up. Validates ports. Idempotent.',
     flags: [{ name: '--no-shell', description: "Suppress the app's shell-open after start. The CLI never spawns a terminal." }],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('up'), 1)
       return output(await runUp(createContext(), { name, noShell: boolFlag(inv, '--no-shell') }), renderUp)
@@ -236,7 +240,7 @@ export const COMMANDS: readonly CommandNode[] = [
         description: "Skip the handoff note. By default `down` records the repository's state and asks the agent in the dev container to summarise the session before it goes.",
       },
     ],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('down'), 1)
       return output(await runDown(createContext(), name, { noHandoff: boolFlag(inv, '--no-handoff') }), renderDown)
@@ -252,7 +256,7 @@ export const COMMANDS: readonly CommandNode[] = [
       { name: '--keep-data', description: "Keep the project's named volumes (default); they become orphans." },
       { name: '--purge', description: "Also remove the project's named volumes. Destroys data." },
     ],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'DOCKER_UNAVAILABLE', 'VOLUME_IN_USE'],
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'DOCKER_UNAVAILABLE', 'VOLUME_IN_USE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('delete'), 1)
       return output(
@@ -284,7 +288,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'service add <project> <svc>',
         summary: 'Attach a service, assign its host port, regenerate compose.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE'],
         run: async (inv) => {
           const [project, service] = exactArgs(inv, byPath('service add'), 2)
           return output(await runServiceAdd(createContext(), { project, service }), renderServiceAdd)
@@ -296,7 +300,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'service remove <project> <svc>',
         summary: 'Detach a service and release its port. KEEPS the volume — it becomes an orphan.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'SERVICE_NOT_ATTACHED'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'SERVICE_NOT_ATTACHED'],
         run: async (inv) => {
           const [project, service] = exactArgs(inv, byPath('service remove'), 2)
           return output(await runServiceRemove(createContext(), { project, service }), renderServiceRemove)
@@ -308,7 +312,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'service list <project>',
         summary: 'Attached services with their resolved host ports.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS'],
         run: (inv) => {
           const [project] = exactArgs(inv, byPath('service list'), 1)
           return output(collectServiceList(createContext(), project), renderServiceList)
@@ -346,7 +350,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'port add <project> <name> --container-port <n>',
         summary: 'Declare an extra port, assign its host port, regenerate compose.',
         flags: [{ name: '--container-port', arg: '<n>', description: 'Fixed port inside the container. Required.' }],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'INVALID_ARGUMENT'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE', 'INVALID_ARGUMENT'],
         run: async (inv) => {
           const [project, name] = exactArgs(inv, byPath('port add'), 2)
           return output(
@@ -361,7 +365,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'port remove <project> <name>',
         summary: 'Remove a declared extra port and release its host port.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'EXTRA_PORT_NOT_ATTACHED'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'EXTRA_PORT_NOT_ATTACHED'],
         run: async (inv) => {
           const [project, name] = exactArgs(inv, byPath('port remove'), 2)
           return output(await runPortRemove(createContext(), { project, name }), renderPortRemove)
@@ -373,7 +377,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'port list <project>',
         summary: 'Declared extra ports with their resolved host ports.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS'],
         run: (inv) => {
           const [project] = exactArgs(inv, byPath('port list'), 1)
           return output(collectPortList(createContext(), project), renderPortList)
@@ -398,7 +402,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'deps add <project> <package...>',
         summary: 'Declare one or more apt packages; built into a derived image on the next `up`.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'PACKAGE_ATTACHED', 'INVALID_ARGUMENT'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'PACKAGE_ATTACHED', 'INVALID_ARGUMENT'],
         run: async (inv) => {
           const [project, ...packages] = minArgs(inv, byPath('deps add'), 2)
           return output(await runDepsAdd(createContext(), { project, packages }), renderDepsAdd)
@@ -410,7 +414,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'deps remove <project> <package...>',
         summary: 'Remove one or more declared packages.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_RUNNING', 'PACKAGE_NOT_ATTACHED', 'INVALID_ARGUMENT'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'PACKAGE_NOT_ATTACHED', 'INVALID_ARGUMENT'],
         run: async (inv) => {
           const [project, ...packages] = minArgs(inv, byPath('deps remove'), 2)
           return output(await runDepsRemove(createContext(), { project, packages }), renderDepsRemove)
@@ -422,7 +426,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'deps list <project>',
         summary: 'Declared packages and the image the dev container builds/runs from.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND'],
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS'],
         run: (inv) => {
           const [project] = exactArgs(inv, byPath('deps list'), 1)
           return output(collectDepsList(createContext(), project), renderDepsList)
@@ -441,7 +445,7 @@ export const COMMANDS: readonly CommandNode[] = [
       { name: '--print', description: 'Human mode: print the command to run.' },
       { name: '--root', description: 'Open as root (`docker exec -u root`) instead of the image user. Ephemeral.' },
     ],
-    errors: ['PROJECT_NOT_FOUND', 'PROJECT_STOPPED', 'DOCKER_UNAVAILABLE'],
+    errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_STOPPED', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('shell'), 1)
       // Same payload either way; `--print` only chooses the human renderer, so
@@ -469,7 +473,8 @@ export const COMMANDS: readonly CommandNode[] = [
         flags: [],
         // SSD_NOT_MOUNTED is not in §6's list but is a safety requirement:
         // with no manifests to read, every volume would look reclaimable.
-        errors: ['SSD_NOT_MOUNTED', 'DOCKER_UNAVAILABLE'],
+        // ROOT_UNREADABLE is the same safety net for a PARTIAL view (phase 18).
+        errors: ['SSD_NOT_MOUNTED', 'ROOT_UNREADABLE', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {
           noArgs(inv, 'volumes orphaned')
           return output(await collectOrphanedVolumes(createContext()), renderOrphanedVolumes)
@@ -481,7 +486,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'volumes rm <name> [--force]',
         summary: 'Remove one orphaned volume. Confirms unless --force. Destroys data.',
         flags: [{ name: '--force', description: 'Skip the confirmation prompt.' }],
-        errors: ['SSD_NOT_MOUNTED', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
+        errors: ['SSD_NOT_MOUNTED', 'ROOT_UNREADABLE', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {
           const [name] = exactArgs(inv, byPath('volumes rm'), 1)
           return output(
@@ -509,18 +514,22 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['eject'],
     group: 'Lifecycle / SSD',
-    usage: 'eject [--stop-docker]',
-    summary: 'down-all, check host holders via lsof, then eject the SSD. Never forces.',
+    usage: 'eject [<root>] [--stop-docker]',
+    summary:
+      'down-all, check host holders via lsof, then eject a root\'s volume. Never forces. The root name is required unless exactly one configured root is a removable volume.',
     flags: [
       {
         name: '--stop-docker',
         description: "Stop the Docker engine without asking, if its VM is what holds the volume.",
       },
     ],
-    errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'DOCKER_UNAVAILABLE'],
+    errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'EJECT_NOT_APPLICABLE', 'INVALID_ARGUMENT', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
-      noArgs(inv, 'eject')
-      return output(await runEject(createContext(), { stopDocker: boolFlag(inv, '--stop-docker') }), renderEject)
+      const root = atMostOneArg(inv, 'eject', '<root>')
+      return output(
+        await runEject(createContext(), { ...(root !== null ? { root } : {}), stopDocker: boolFlag(inv, '--stop-docker') }),
+        renderEject,
+      )
     },
   },
   {
@@ -567,6 +576,55 @@ export const COMMANDS: readonly CommandNode[] = [
         run: (inv) => {
           const [key, value] = exactArgs(inv, byPath('config set'), 2)
           return output(runConfigSet(createContext(), { key, value }), renderConfigSet)
+        },
+      },
+    ],
+  },
+
+  // ── Roots ──────────────────────────────────────────────────────────────────
+  {
+    path: ['root'],
+    group: 'Roots',
+    usage: 'root <add | remove | list>',
+    summary: 'Where projects live (§8, phase 18) — an ordered list of {name, path}; roots[0] is the default `new` targets.',
+    flags: [],
+    errors: [],
+    run: group('root'),
+    children: [
+      {
+        path: ['root', 'add'],
+        group: 'Roots',
+        usage: 'root add <path> [--name <name>]',
+        summary: 'Register a root. Name defaults to the path\'s basename.',
+        flags: [{ name: '--name', arg: '<name>', description: "This root's name. Defaults to the path's basename." }],
+        errors: ['INVALID_ARGUMENT', 'CONFIG_INVALID'],
+        run: (inv) => {
+          const [path] = exactArgs(inv, byPath('root add'), 1)
+          return output(runRootAdd(createContext(), { path, name: stringFlag(inv, '--name') }), renderRootAdd)
+        },
+      },
+      {
+        path: ['root', 'remove'],
+        group: 'Roots',
+        usage: 'root remove <name>',
+        summary: 'Forget a root. Never touches the directory or anything in it.',
+        flags: [],
+        errors: ['INVALID_ARGUMENT'],
+        run: (inv) => {
+          const [name] = exactArgs(inv, byPath('root remove'), 1)
+          return output(runRootRemove(createContext(), { name }), renderRootRemove)
+        },
+      },
+      {
+        path: ['root', 'list'],
+        group: 'Roots',
+        usage: 'root list',
+        summary: 'Every configured root, with whether it is currently readable.',
+        flags: [],
+        errors: [],
+        run: (inv) => {
+          noArgs(inv, 'root list')
+          return output(collectRootList(createContext()), renderRootList)
         },
       },
     ],

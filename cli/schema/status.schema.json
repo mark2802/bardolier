@@ -25,7 +25,7 @@
         },
         "root": {
           "type": "string",
-          "description": "Configured $SSD_ROOT. Present and reportable even when mounted is false."
+          "description": "The default root's path (roots[0]). Present and reportable even when mounted is false. See the top-level `roots` array for every configured root (phase 18)."
         }
       }
     },
@@ -52,9 +52,26 @@
       "items": {
         "$ref": "#/$defs/orphanedVolume"
       }
+    },
+    "roots": {
+      "type": "array",
+      "description": "Every configured root's readable state. Additive since phase 18.",
+      "items": {
+        "$ref": "#/$defs/configured_root"
+      }
     }
   },
   "$defs": {
+    "configured_root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "mounted"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mounted": { "type": "boolean" }
+      }
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
@@ -130,6 +147,11 @@
           "items": {
             "$ref": "#/$defs/attached_extra_port"
           }
+        },
+        "root": {
+          "type": "string",
+          "description": "The configured root's name this project lives under. Additive since phase 18.",
+          "minLength": 1
         }
       }
     },

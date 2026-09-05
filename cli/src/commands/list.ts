@@ -16,13 +16,14 @@ import type { ListOutput } from '../model/list.ts'
 export async function collectList(ctx: Context): Promise<ListOutput> {
   const status = await collectStatus(ctx)
   if (!status.ssd.mounted) {
-    throw new BardolierError('SSD_NOT_MOUNTED', `The SSD is not mounted at ${ctx.config.ssd_root}.`)
+    throw new BardolierError('SSD_NOT_MOUNTED', `No configured root is readable.`)
   }
   return {
     projects: status.projects.map((project) => ({
       name: project.name,
       archetype: project.archetype,
       state: project.state,
+      root: project.root ?? status.ssd.root,
     })),
   }
 }

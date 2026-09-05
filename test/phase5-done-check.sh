@@ -15,8 +15,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-APP="app/claude-yard/claude-yard"
-PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
+APP="app/bardolier/bardolier"
+PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
 pass=0
 fail=0
 manual=0

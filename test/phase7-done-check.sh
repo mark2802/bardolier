@@ -16,8 +16,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-APP="app/claude-yard/claude-yard"
-PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
+APP="app/bardolier/bardolier"
+PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
 BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
@@ -38,8 +38,7 @@ MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$VOLUME"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -94,12 +93,11 @@ if node --input-type=module -e "
   import { createContext } from './cli/src/context.ts'
   import { BardolierError } from './cli/src/errors.ts'
 
-  const volume = process.env.BDLR_SSD_VOLUME
-  let holders = [{ pid: 431, command: 'Xcode', user: 'mark', paths: [volume + '/alpha'] }]
+  let holders = [{ pid: 431, command: 'Xcode', user: 'mark', paths: [process.env.BARDOLIER_ROOT + '/alpha'] }]
   const ejected = []
   const ctx = createContext({
     path: process.env.BARDOLIER_CONFIG,
-    env: { BDLR_SSD_VOLUME: volume, BDLR_SSD_ROOT: process.env.BDLR_SSD_ROOT },
+    env: { BARDOLIER_ROOT: process.env.BARDOLIER_ROOT },
     docker: {
       available: async () => false,
       runningContainers: async () => [],
@@ -127,7 +125,11 @@ if node --input-type=module -e "
   holders = []
   const output = await runEject(ctx)
   assert.equal(output.ejected, true)
-  assert.deepEqual(ejected, [volume])
+  // Not a literal path: phase 17 derives the volume by walking st_dev
+  // boundaries, so a plain temp dir resolves to whatever real mount point
+  // contains it — the invariant worth checking is that the device was
+  // reached exactly once, for the same volume the output reports.
+  assert.deepEqual(ejected, [output.volume])
 " 2>"$TMP/eject.log"; then
   ok "a held volume is EJECT_BLOCKED with holders named, and Retry ejects once it quits"
 else
@@ -146,15 +148,13 @@ if schema_assert status "$STATUS"; then ok "status --json still matches status.s
 
 # The ejected icon state (§11) is derived from status, so status has to keep
 # answering with the disk gone. It must never fail.
-export BDLR_SSD_VOLUME="$TMP/gone"
-export BDLR_SSD_ROOT="$TMP/gone/claude-projects"
+export BARDOLIER_ROOT="$TMP/gone/claude-projects"
 if GONE="$($BARDOLIER status --json)" && json_assert "$GONE" "d.ssd.mounted === false && Array.isArray(d.projects)"; then
   ok "with the disk gone status still answers — what the ejected icon reads (§11)"
 else
   bad "status failed once the SSD was unmounted"
 fi
-export BDLR_SSD_VOLUME="$VOLUME"
-export BDLR_SSD_ROOT="$MOUNTED"
+export BARDOLIER_ROOT="$MOUNTED"
 
 # ── 3. Sources (§7, §10, §13) ─────────────────────────────────────────────────
 head "3. Sources"
@@ -192,7 +192,7 @@ fi
 
 if grep -qE "INFOPLIST_KEY_NSAppleEventsUsageDescription = (YES|NO|\"\");?$" "$PBXPROJ"; then
   todo "NSAppleEventsUsageDescription is a boolean, not the sentence macOS shows. Set it to e.g."
-  todo "  \"claude-yard opens a shell in your terminal.\""
+  todo "  \"bardolier opens a shell in your terminal.\""
 elif grep -q "INFOPLIST_KEY_NSAppleEventsUsageDescription" "$PBXPROJ"; then
   ok "NSAppleEventsUsageDescription is a real sentence — shell-open can ask for permission"
 else
@@ -296,7 +296,7 @@ The half a terminal cannot check — the soak, with a real disk and a real Xcode
      First time, macOS asks for Automation permission — that dialog is the
      NSAppleEventsUsageDescription string. Deny it once on purpose: the shell
      still opens through the .command fallback and the notice says how to grant
-     it. (`tccutil reset AppleEvents com.mw.claude-yard` to be asked again.)
+     it. (`tccutil reset AppleEvents com.mw.bardolier` to be asked again.)
   4. PORTS. Expand a running project: click a service row — the connection
      string is on the clipboard; paste it into a GUI client and connect. It is
      copyable while the project runs, which is the only time it is useful.

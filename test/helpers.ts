@@ -412,7 +412,7 @@ export function makeContext(
   return createContext({
     path: sandbox.configPath,
     home: sandbox.home,
-    env: { BDLR_SSD_ROOT: sandbox.root, ...env },
+    env: { BARDOLIER_ROOT: sandbox.root, ...env },
     docker,
     ports: stubPorts(),
     // Ejecting is destructive and host-wide: a test that reaches the device

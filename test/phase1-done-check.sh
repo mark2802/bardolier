@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Phase 1 done-check — on an empty SSD, `status --json` is valid JSON with empty
 # projects/orphaned_volumes, and `doctor --json` tracks the SSD appearing and
-# disappearing. Both halves run against a temp dir via BDLR_SSD_ROOT (§8), so
+# disappearing. Both halves run against a temp dir via BARDOLIER_ROOT (§8), so
 # no real SSD is needed.
 #
 #   bash test/phase1-done-check.sh
@@ -43,7 +43,7 @@ json_assert() { # json_assert <json> <js body over `d`>
 # ── 1. status on an empty SSD ─────────────────────────────────────────────────
 head "1. \`status --json\` on an empty SSD"
 
-STATUS="$(BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER status --json)" || bad "status exited non-zero"
+STATUS="$(BARDOLIER_ROOT="$MOUNTED" $BARDOLIER status --json)" || bad "status exited non-zero"
 
 if node -e "JSON.parse(process.argv[1])" "$STATUS" 2>/dev/null; then
   ok "emits a single parseable JSON value"
@@ -80,7 +80,7 @@ json_assert "$STATUS" 'typeof d.docker.available === "boolean"' \
 # ── 2. status never fails on an absent SSD ────────────────────────────────────
 head "2. \`status --json\` with the SSD absent (reporting, not failing)"
 
-if UNPLUGGED="$(BDLR_SSD_ROOT="$ABSENT" $BARDOLIER status --json)"; then
+if UNPLUGGED="$(BARDOLIER_ROOT="$ABSENT" $BARDOLIER status --json)"; then
   ok "exits 0 with the SSD unplugged"
 else
   bad "status exited non-zero with the SSD unplugged"
@@ -92,11 +92,11 @@ json_assert "$UNPLUGGED" 'd.projects.length === 0 && d.orphaned_volumes.length =
   && ok "arrays stay empty rather than absent" || bad "arrays missing when unplugged"
 
 # `list`, by contrast, is specified to fail (§6).
-LIST_ERR="$(BDLR_SSD_ROOT="$ABSENT" $BARDOLIER list --json || true)"
+LIST_ERR="$(BARDOLIER_ROOT="$ABSENT" $BARDOLIER list --json || true)"
 json_assert "$LIST_ERR" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
   && ok "list fails SSD_NOT_MOUNTED where status does not" || bad "list did not fail SSD_NOT_MOUNTED"
 
-if BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER list --json >/dev/null; then
+if BARDOLIER_ROOT="$MOUNTED" $BARDOLIER list --json >/dev/null; then
   ok "list succeeds on an empty mounted SSD"
 else
   bad "list failed on an empty mounted SSD"
@@ -105,8 +105,8 @@ fi
 # ── 3. doctor tracks plug/unplug ──────────────────────────────────────────────
 head "3. \`doctor --json\` reports SSD mounted/absent"
 
-DOCTOR_UP="$(BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER doctor --json)"
-DOCTOR_DOWN="$(BDLR_SSD_ROOT="$ABSENT" $BARDOLIER doctor --json)"
+DOCTOR_UP="$(BARDOLIER_ROOT="$MOUNTED" $BARDOLIER doctor --json)"
+DOCTOR_DOWN="$(BARDOLIER_ROOT="$ABSENT" $BARDOLIER doctor --json)"
 
 if node --input-type=module -e "
   import { validate } from './cli/src/schema.ts'
@@ -130,7 +130,7 @@ json_assert "$DOCTOR_DOWN" 'd.ok === false' \
   && ok "top-level ok is false when a check fails" || bad "top-level ok should be false"
 
 # Exit code: a failing CHECK is an answer, not a failure to answer (model/doctor.ts).
-if BDLR_SSD_ROOT="$ABSENT" $BARDOLIER doctor --json >/dev/null; then
+if BARDOLIER_ROOT="$ABSENT" $BARDOLIER doctor --json >/dev/null; then
   ok "doctor exits 0 even with failing findings"
 else
   bad "doctor exited non-zero on failing findings"
@@ -145,9 +145,9 @@ json_assert "$DOCTOR_UP" 'd.findings.find(f => f.id === "catalogue").ok === true
 head "4. The read-only core mutates nothing"
 
 BEFORE="$(find "$TMP/ssd" | sort)"
-BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER status --json >/dev/null
-BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER doctor --json >/dev/null
-BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER list --json >/dev/null
+BARDOLIER_ROOT="$MOUNTED" $BARDOLIER status --json >/dev/null
+BARDOLIER_ROOT="$MOUNTED" $BARDOLIER doctor --json >/dev/null
+BARDOLIER_ROOT="$MOUNTED" $BARDOLIER list --json >/dev/null
 AFTER="$(find "$TMP/ssd" | sort)"
 if [ "$BEFORE" = "$AFTER" ]; then
   ok "status/doctor/list left the SSD tree untouched"
@@ -164,7 +164,7 @@ fi
 # ── 5. Human and machine output stay separate (§2) ────────────────────────────
 head "5. Renderers stay separate (§2)"
 
-HUMAN="$(BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER status)"
+HUMAN="$(BARDOLIER_ROOT="$MOUNTED" $BARDOLIER status)"
 if node -e "JSON.parse(process.argv[1])" "$HUMAN" 2>/dev/null; then
   bad "human status output is JSON — the renderers are not separate"
 else
@@ -172,7 +172,7 @@ else
 fi
 grep -q 'SSD' <<<"$HUMAN" && ok "human status names the SSD state" || bad "human status is missing the SSD state"
 
-BDLR_SSD_ROOT="$MOUNTED" $BARDOLIER doctor | grep -q 'Service catalogue' \
+BARDOLIER_ROOT="$MOUNTED" $BARDOLIER doctor | grep -q 'Service catalogue' \
   && ok "human doctor renders its findings" || bad "human doctor output is missing findings"
 
 # ── 6. Suites ─────────────────────────────────────────────────────────────────

@@ -17,8 +17,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-APP="app/claude-yard/claude-yard"
-PBXPROJ="app/claude-yard/claude-yard.xcodeproj/project.pbxproj"
+APP="app/bardolier/bardolier"
+PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
 BARDOLIER="node cli/bin/bardolier.js"
 pass=0
 fail=0
@@ -39,6 +39,7 @@ MOUNTED="$VOLUME/claude-projects"
 mkdir -p "$MOUNTED"
 
 export BARDOLIER_CONFIG="$TMP/config.yml"
+export BARDOLIER_ROOT="$MOUNTED"
 
 json_assert() { # json_assert <json> <js body over `d`>
   node -e "
@@ -84,20 +85,19 @@ else
   bad "config get mishandled a missing file"
 fi
 
-SET="$($BARDOLIER config set ssd_volume "$VOLUME" --json)"
+# `roots` moved to its own `root add|remove` surface (phase 18) — `config
+# set` now covers only the two scalar keys, `catalogue_path` and `terminal`.
+CATALOGUE_PATH="$TMP/services.yml"
+SET="$($BARDOLIER config set catalogue_path "$CATALOGUE_PATH" --json)"
 if schema_assert config-set "$SET"; then ok "config set --json matches config-set.schema.json"; else bad "config set --json"; fi
-if VOLUME="$VOLUME" json_assert "$SET" "d.created === true && d.changed.includes('ssd_volume') && d.config.ssd_volume === process.env.VOLUME"; then
+if CATALOGUE_PATH="$CATALOGUE_PATH" json_assert "$SET" "d.created === true && d.changed.includes('catalogue_path') && d.config.catalogue_path === process.env.CATALOGUE_PATH"; then
   ok "it wrote the key and reported the config after"
 else
   bad "config set did not record the change"
 fi
-# §8: the root defaults INSIDE the volume, so one preference moves both. That
-# rule lives in the CLI, which is the whole reason Preferences writes through it.
-if VOLUME="$VOLUME" json_assert "$SET" "d.config.ssd_root === process.env.VOLUME + '/claude-projects'"; then
-  ok "and the projects root followed the volume (§8), as Preferences relies on"
-else
-  bad "ssd_root did not default inside the new ssd_volume"
-fi
+# Clear it again — a catalogue_path pointing at a file that doesn't exist is
+# CONFIG_INVALID, and later sections need the bundled catalogue.
+$BARDOLIER config set catalogue_path "" --json >/dev/null
 
 $BARDOLIER config set terminal iTerm --json >/dev/null
 AGAIN="$($BARDOLIER config set terminal iTerm --json)"
@@ -189,13 +189,13 @@ fi
 # YES/NO is a misconfiguration that reaches the user as a dialog reading "YES".
 if grep -qE "INFOPLIST_KEY_NSAppleEventsUsageDescription = (YES|NO|\"\");?$" "$PBXPROJ"; then
   todo "NSAppleEventsUsageDescription is set to a boolean, not a sentence. Xcode → target → Info →"
-  todo "  set \"Privacy - AppleEvents Sending Usage Description\" to e.g. \"claude-yard opens a shell in your terminal.\""
+  todo "  set \"Privacy - AppleEvents Sending Usage Description\" to e.g. \"bardolier opens a shell in your terminal.\""
   todo "  It is the text macOS shows when asking for permission; \"YES\" is what the user would read."
 elif grep -q "INFOPLIST_KEY_NSAppleEventsUsageDescription" "$PBXPROJ"; then
   ok "NSAppleEventsUsageDescription is a real sentence — macOS can ask to allow shell-open"
 else
   todo "NSAppleEventsUsageDescription is not set. Xcode → target → Info → add"
-  todo "  \"Privacy - AppleEvents Sending Usage Description\" = \"claude-yard opens a shell in your terminal.\""
+  todo "  \"Privacy - AppleEvents Sending Usage Description\" = \"bardolier opens a shell in your terminal.\""
   todo "  Without it macOS terminates the app instead of prompting, the first time you Open shell."
 fi
 

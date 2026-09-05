@@ -252,12 +252,12 @@ describe('new (cli-spec.md §6, §10)', () => {
     assert.ok(!box.exists('myapp', 'CLAUDE.md'), 'a failed new must not seed anything')
   })
 
-  test('an unmounted SSD is SSD_NOT_MOUNTED — never a project on the internal disk', async () => {
+  test('an unreadable root is ROOT_UNREADABLE — never a project on the internal disk (phase 18)', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined }),
-      (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
+      (error: unknown) => error instanceof BardolierError && error.code === 'ROOT_UNREADABLE',
     )
     assert.ok(!existsSync(join(box.root, 'unplugged')))
   })
@@ -440,7 +440,7 @@ describe('up (cli-spec.md §6)', () => {
       () => runUp(makeContext(box), { name: 'ghost', noShell: false }),
       (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
     )
-    const unplugged = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
+    const unplugged = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'unplugged') } })
     await assert.rejects(
       () => runUp(unplugged, { name: 'myapp', noShell: false }),
       (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
@@ -742,7 +742,7 @@ describe('build (cli-spec.md §6, Images)', () => {
 
   test('build works with the SSD unplugged — images live on the internal disk', async () => {
     const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BDLR_SSD_ROOT: join(box.root, 'unplugged') } })
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'unplugged') } })
     const result = await runBuild(ctx, 'web')
     assert.equal(result.images[0]?.status, 'built')
   })
