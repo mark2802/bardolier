@@ -12,12 +12,11 @@ no persistent state beyond UI preferences.
 
 ## 1. Platform
 
-- SwiftUI `MenuBarExtra`, macOS. Built as its own Xcode project — created and
-  maintained by the human at the Mac; Claude writes `.swift` files into the
-  synchronized folder group and never touches the project file (`app/README.md`).
-- No sandbox entitlement that would block shelling out to `docker`/`bardolier`
-  (the app runs a helper process; App Sandbox would need to be off or carefully
-  configured — v1 targets a non-sandboxed local dev tool).
+SwiftUI `MenuBarExtra`, macOS. Its own Xcode project, created and maintained by
+the human at the Mac; Claude writes `.swift` files into the synchronized folder
+group and never touches the project file (`app/README.md`). The app shells out,
+so App Sandbox is off for v1 — a sandboxed build would have to be configured to
+spawn `bardolier`/`docker` at all.
 
 ## 2. Responsibilities (v1)
 
@@ -94,19 +93,17 @@ shows its host port and a copy-connection action.
 
 ## 7. Shell opening
 
-- The CLI (`bardolier shell <name> --json`) returns the container name and the exec
-  argv. The **app** launches the user's terminal running that command.
-- Terminal choice is a **Preference** (Terminal.app default; iTerm, Ghostty,
-  etc. optional). The app uses the configured terminal to run the exec command.
+- `bardolier shell <name> --json` returns the container name and the exec argv;
+  the **app** launches the user's terminal running that command.
+- The terminal is a **Preference** (Terminal.app default; iTerm, Ghostty, …).
 - When only a lesser route is available (macOS refusing the Automation
   permission), the app opens the shell anyway and says why in a banner that
   **survives refreshes** — opening the menu is a refresh, so an ordinary notice
-  would be wiped before it could be read. The user dismisses it, or a shell that
-  opens by the good route clears it.
-- **Start auto-opens a shell by default** (preference-controlled) so single-project
-  starts drop you straight in. When batch-starting (Close-all's inverse isn't a
-  thing, but multi-start via repeated clicks), the preference lets the user avoid
-  a stack of windows.
+  would be wiped before it could be read. The user dismisses it, or a shell
+  opened by the good route clears it.
+- **Start auto-opens a shell by default** (preference-controlled), so a
+  single-project start drops you straight in; turning it off avoids a stack of
+  windows when starting several.
 
 ## 8. New project window
 
@@ -128,32 +125,29 @@ Small modal:
 ## 10. Close all & eject
 
 0. If no configured root is a removable volume (`doctor`'s `ssd` finding,
-   `roots[].removable` — phase 18), the row reads plain **Close all** and
-   calls `bardolier down-all --json` directly rather than `eject`, which would
-   only ever answer `EJECT_NOT_APPLICABLE` — and does so before stopping
-   anything, so routing through it here would leave every project running
-   behind a button that claims to close them.
-1. `bardolier eject --json` (which itself runs down-all → holder check → diskutil).
-2. On `EJECT_BLOCKED`, render the returned `holders` list ("Xcode, Simulator
-   still hold the SSD — quit them") and offer **Retry**. Never force.
-2b. On `EJECT_BLOCKED` with `details.reason == "runtime-holds-volume"`, the
-   holder is Docker Desktop's own VM: there is nothing to quit and Retry cannot
-   clear it. Render it as its own state and offer **Stop Docker & eject**,
-   which is `bardolier eject --stop-docker` — the user consenting to the engine
-   stopping, not the app deciding to stop it.
-2c. On `reason == "runtime-holds-volume-after-stop"` — the same refusal after
-   that offer was taken and the CLI waited for the VM to let go — withdraw the
-   offer. The engine is already down, so the panel renders the CLI's own
-   sentence and leaves **Retry**; a button that repeats what just failed is a
-   loop, not a move.
-2d. On `EJECT_NOT_APPLICABLE` (`ssd_root` is a plain directory, not a
-   removable volume — phase 10), this isn't a failure to show in a banner:
-   render it once, then dim the menu row itself with the reason, the same
-   treatment a missing archetype Dockerfile gets. There is no Retry — it would
-   fail the same way every time.
-3. On success, switch the icon to the **ejected** state ("safe to unplug"). If
-   the payload says `docker_stopped`, say so: the engine has to be started
-   again before the next `up`.
+   `roots[].removable` — phase 18), the row reads plain **Close all** and calls
+   `bardolier down-all --json` directly. `eject` would only ever answer
+   `EJECT_NOT_APPLICABLE`, and does so before stopping anything, so routing
+   through it would leave every project running behind a button that claims to
+   close them.
+1. Otherwise `bardolier eject --json` (which runs down-all → holder check →
+   diskutil).
+2. On `EJECT_BLOCKED`, render the returned `holders` ("Xcode, Simulator still
+   hold the SSD — quit them") and offer **Retry**. Never force.
+   - `details.reason == "runtime-holds-volume"`: the holder is Docker Desktop's
+     own VM — nothing to quit, and Retry cannot clear it. Render it as its own
+     state and offer **Stop Docker & eject** (`bardolier eject --stop-docker`) —
+     the user consenting to the engine stopping, not the app deciding to.
+   - `reason == "runtime-holds-volume-after-stop"`: that offer was taken and the
+     CLI waited. Withdraw it, render the CLI's own sentence, leave **Retry**; a
+     button that repeats what just failed is a loop, not a move.
+   - `EJECT_NOT_APPLICABLE` (a root that is a plain directory — phase 10): not a
+     banner failure. Render it once, then dim the menu row with the reason, the
+     same treatment a missing archetype Dockerfile gets. No Retry — it would
+     fail identically every time.
+3. On success, switch the icon to **ejected** ("safe to unplug"). If the payload
+   says `docker_stopped`, say so: the engine must be started again before the
+   next `up`.
 
 ## 11. Icon states
 
@@ -163,22 +157,20 @@ disabled) · ejected (distinct, safe-to-unplug). Derive purely from the latest
 
 ## 12. Preferences
 
-- Roots: the configured list, each with a **Forget** button, plus a row to add
-  one — a path field, a **Choose…** button opening an `NSOpenPanel` (folders
-  only, "New Folder" enabled, since `root add` never creates the directory
-  itself), and a name field defaulted from the chosen folder's volume name
-  (a courtesy prefill; `root add` validates and can still default from the
-  path's basename itself) once a folder is picked.
-- Terminal app for shell-open.
-- Start-auto-opens-shell toggle (default ON).
+- **Roots**: the configured list, each with a **Forget** button, plus a row to
+  add one — a path field, a **Choose…** button opening an `NSOpenPanel` (folders
+  only, "New Folder" enabled, since `root add` never creates the directory), and
+  a name field prefilled from the chosen folder's volume name once a folder is
+  picked (a courtesy; `root add` can default from the basename itself).
+- Terminal app for shell-open, and a start-auto-opens-shell toggle (default ON).
 
 Roots are read with `bardolier root list` and written with `bardolier root
-add | remove` (`cli-spec.md` §6, §8 — list-valued, so `config set` cannot
-touch them); the terminal is read with `bardolier config get` and written with
-`bardolier config set`. Only the toggle is the app's own, since the CLI has no
-opinion about it. When `$BARDOLIER_ROOT` overrides the roots list, the panel
-says so — a preference that appears to save and then does nothing is worse
-than one that explains itself.
+add | remove` (`cli-spec.md` §6, §8 — list-valued, so `config set` cannot touch
+them); the terminal is read with `bardolier config get` and written with
+`bardolier config set`. Only the toggle is the app's own, the CLI having no
+opinion about it. When `$BARDOLIER_ROOT` overrides the roots list, the panel says
+so — a preference that appears to save and then does nothing is worse than one
+that explains itself.
 
 ## 13. Error handling
 
@@ -189,10 +181,9 @@ than one that explains itself.
 
 ## 14. What must be true before the app is built
 
-The CLI contract (commands, JSON schemas, error
-codes) is implemented and frozen, and the full lifecycle has been driven from the
-terminal. The app is written against that frozen contract, not in parallel with
-it.
+The CLI contract — commands, JSON schemas, error codes — is implemented and
+frozen, and the full lifecycle has been driven from the terminal. The app is
+written against that contract, not in parallel with it.
 
 ## 15. Implementation map (Swift)
 

@@ -51,8 +51,8 @@ grows to provide it.
 ## 3. On-disk layout
 
 Projects live in more than one **root** at once (phase 18) — typically an
-internal-disk root and an external SSD root, though the CLI treats every
-configured root the same way. Each root has this layout:
+internal-disk root and an external SSD root; the CLI treats every configured
+root the same way. Each root:
 
 ```
 <root>/                            # e.g. /Volumes/ssd/claude-projects
@@ -67,30 +67,27 @@ configured root the same way. Each root has this layout:
     work/CLAUDE.md                 # seeded, archetype-specific boundary (§10)
 ```
 
-**A project directory is not a repository** (phase 19). bardolier's own files sit
-at the top and the user's work lives in the four folders below them, so nothing
-this tool writes is ever inside a working tree: there is nothing to gitignore,
-and `git clean -xdf` in a repo under `work/` cannot reach `data/`. The four are
-created by `new` and re-ensured by every `up` — Docker would otherwise create a
-missing bind source itself, as root, leaving `home/` unwritable by the
-container's own uid. `data/` carries a `.metadata_never_index` marker so
-Spotlight does not index a multi-GB database and put `mds` on the volume.
-
-**Service data lives here, not in a named volume.** A volume would sit in
-`Docker.raw` on the internal disk however external the root was — the disk with
-the least room holding the data that grows fastest. Bind-mounted from an APFS
-external SSD (`noowners`), Postgres 17 and Mongo 7 both initialise clean and
-steady-state throughput is 0.69x native for writes, 0.88x for reads; bulk load
-is 0.34x, the one visible penalty.
-
-`roots` is an ordered array of `{ name, path }` (§8); `roots[0]` is the
-default `new` targets. A project name is unique across every root, not just
-within one — two roots each holding a project called `api` would collide on
-the container name and the home volume, both of which are global to Docker.
-
-Docker's image/layer store stays on the **internal** disk, as do the shared
-toolchain caches (§4.3) — rebuildable bytes every project shares. Project data
-lives under a root, inside the project directory that owns it.
+- **A project directory is not a repository** (phase 19). bardolier's files sit
+  above the four folders and inside no working tree: nothing to gitignore, and
+  `git clean -xdf` in a repo under `work/` cannot reach `data/`.
+- The four are created by `new` and re-ensured by every `up`. Docker would
+  otherwise create a missing bind source itself, as root, leaving `home/`
+  unwritable by the container's own uid.
+- `data/.metadata_never_index` keeps Spotlight off a multi-GB database, and so
+  `mds` off the volume — one less holder for `eject` to filter (§6).
+- **Service data is a bind mount, not a named volume.** A named volume lives in
+  `Docker.raw` on the internal disk however external the root is: the disk with
+  the least room holding the data that grows fastest. Bind-mounted from an APFS
+  external SSD (`noowners`), Postgres 17 and Mongo 7 initialise clean; steady
+  state is 0.69x native writes and 0.88x reads, bulk load 0.34x — the one
+  visible penalty.
+- `roots` is an ordered array of `{ name, path }` (§8); `roots[0]` is the default
+  `new` targets. A project name is unique across **every** root, not within one:
+  two roots each holding an `api` would collide on the container name and the
+  home volume, both global to Docker.
+- Docker's image/layer store stays on the internal disk, as do the shared
+  toolchain caches (§4.3) — rebuildable bytes every project shares. Project data
+  lives under a root, inside the project directory that owns it.
 
 ## 4. Data model
 
@@ -160,103 +157,87 @@ created: 2026-08-19T10:00:00Z
 | android   | `bardolier-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `bardolier-web` | full                         | none                   |
 
-The boundary of the table above is built into the images: the ios base ships no
-`xcodebuild`, `xcrun` or simulator, and the android base no `adb`, so a host-only
-step cannot be attempted in a container by mistake.
+That boundary is built into the images: the ios base ships no `xcodebuild`,
+`xcrun` or simulator, the android base no `adb`, so a host-only step cannot be
+attempted in a container by mistake.
 
-Base images carry the per-archetype toolchain, plus the two things every
-archetype needs: **Claude Code** — the agent the whole tool exists to host,
-installed as the pinned standalone binary to a system path rather than under
+Every base image also carries **Claude Code** — the agent the whole tool exists
+to host, installed as a standalone binary on a system path rather than under
 `$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
-ripgrep, jq, curl). See §6, Images.
+ripgrep, jq, curl). Versions: §6, Images.
 
-`bardolier-and` is built and run as `linux/amd64`: Google publishes the Linux
+**`bardolier-and` is built and run as `linux/amd64`.** Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
-that one image runs emulated. The pin lives in `cli/src/images.ts` and is read
-by both `build` and compose generation (§9), which must agree.
+that one image runs emulated. The pin lives in `cli/src/images.ts` and is read by
+both `build` and compose generation (§9), which must agree.
 
-`bardolier-and` also carries a SHARED dependency cache: `GRADLE_USER_HOME` is
-`/cache/gradle`, a named volume (`bardolier-gradle-cache`) mounted into every
-android dev container rather than a directory under the project's bind mount.
-The Android Gradle Plugin and its transitive dependencies are hundreds of
-megabytes of rebuildable data that is identical for every project, so it is kept
-once, on the internal disk beside the image layers, and off the SSD. Declared in
-`cli/src/images.ts` (`IMAGE_CACHE`) and read by compose generation (§9), `up`
-(which creates the volume) and the volume scan (§6), which treats it as claimed
-while any project's manifest names that base image.
-
-`bardolier-web` carries the same shape of cache for `uv`, the Python toolchain it
-gained so a project can run a Python API alongside its React frontend in the
-one dev container: `UV_CACHE_DIR=/cache/uv`, volume `bardolier-uv-cache`, same
-`IMAGE_CACHE` mechanism. `library` shares the image and the cache.
+**Shared toolchain caches.** `bardolier-and` sets `GRADLE_USER_HOME=/cache/gradle`,
+a named volume (`bardolier-gradle-cache`); `bardolier-web` sets
+`UV_CACHE_DIR=/cache/uv`, volume `bardolier-uv-cache`, for the Python toolchain it
+gained so an API and its React frontend run in one dev container. `library`
+shares the web image and its cache. Hundreds of megabytes of identical,
+re-downloadable dependencies belong once, on the internal disk beside the image
+layers — not per project on the SSD. Declared as `IMAGE_CACHE` in
+`cli/src/images.ts` and read by compose generation (§9), `up` (which creates the
+volume) and the volume scan (§6), which treats a cache as claimed while any
+manifest names its base image.
 
 ## 5. Port allocation (first-class)
 
 Requirements, in priority order:
-1. **Unique** across all projects and all services, **across every root**
-   (phase 18) — a project's root is otherwise invisible to the person reading
-   a connection string.
+1. **Unique** across all projects and services in **every** root (phase 18) — a
+   project's root is otherwise invisible to whoever reads a connection string.
 2. **Stable** — assigned once at service-add, persisted in `project.yml`, never
    reassigned on restart. Released only on service-remove or project-delete.
-3. **Host-exposed** — every service publishes its `host_port` to the Mac so GUI
-   debuggers (TablePlus, Postico, RedisInsight) can connect.
-4. **Readable bands** — each service allocated within its `host_port_base` band
+3. **Host-exposed** — every service publishes its `host_port`, so GUI debuggers
+   (TablePlus, Postico, RedisInsight) can connect.
+4. **Readable bands** — allocated within the service's `host_port_base`
    (postgres 5432→5433→5434…, redis 6379→6380…).
 
-Algorithm at service-add:
-1. Read the base port for the service from the catalogue.
-2. Scan **all** projects' `project.yml` **in every configured root** for host
-   ports already assigned (the manifests are the single source of truth — no
-   separate registry to desync). A root that cannot be read makes the scan
-   refuse (`ROOT_UNREADABLE`) rather than silently allocating from a partial
-   view — an unreadable root's assignments are simply unknowable, and handing
-   out one of its ports would be no different from never having scanned it.
-3. From `host_port_base` upward, pick the first port that is BOTH unassigned in
-   any manifest AND not currently bound on the host (probe the host socket).
+At service-add:
+1. Read the service's base port from the catalogue.
+2. Scan every project's `project.yml` in **every** configured root for assigned
+   ports — the manifests are the only registry, so there is nothing to desync. A
+   root that cannot be read refuses the scan (`ROOT_UNREADABLE`) rather than
+   allocating from a partial view: an unreadable root's assignments are
+   unknowable, and handing one out is no different from never having scanned.
+3. From `host_port_base` upward, take the first port both unassigned in any
+   manifest and unbound on the host (probe the socket).
 4. Persist it in this project's manifest.
 
-Adding a root does not re-allocate anything already assigned: uniqueness is
-enforced going forward, and a collision between two roots that were
-previously separate is a `doctor` finding, not silently repaired.
+Adding a root re-allocates nothing: uniqueness is enforced going forward, and a
+collision between two previously separate roots is a `doctor` finding, not a
+silent repair.
 
-At `up`: validate each recorded `host_port` is still bindable on the host. If a
-port was squatted by another process while the project was down, fail
-`PORT_UNAVAILABLE` with the offending port named — do not silently remap (a
-silent remap would break the user's saved connection strings).
+At `up`, every recorded `host_port` is re-validated as bindable. One squatted
+while the project was down fails `PORT_UNAVAILABLE` naming it — never a silent
+remap, which would break the user's saved connection strings.
 
-Dev app connects to services over the **internal Docker network** by service
-name (`postgres:5432`), matching prod. The host port is a debugging tap only.
-This is stated in CLAUDE.md so the agent never wires the app to `localhost`.
+The dev app reaches services over the Docker network by name (`postgres:5432`),
+as in prod. The host port is a debugging tap; `CLAUDE.md` states this so the
+agent never wires the app to `localhost`.
 
 ### 5.1 Extra ports (named, archetype-independent)
 
 A **named** port published from the dev container, independent of archetype —
-`extra_ports` in `project.yml`. Unlike `app_port` (§9), it is not fixed by the
-archetype; unlike a service, it has no catalogue entry, no image and no
-volume. It exists for two shapes of need, both closed by the same mechanism:
+`extra_ports` in `project.yml`. Unlike `app_port` (§9) it is not fixed by the
+archetype; unlike a service it has no catalogue entry, image or data directory.
+Two needs, one mechanism: a mobile client or a second UI app that must reach the
+project's own process directly, and a browser-reachable dev tool (a notebook
+server, a debugger UI) on `library`/`ios`/`android`, which otherwise publish
+nothing at all.
 
-- A second, real, host-published port a **mobile client or another browser
-  tab** must reach directly — the project's own backend, or a second
-  frontend/UI app, beside the one `app_port` already covers.
-- A **browser-reachable dev tool** (a notebook server, a debugger UI) on an
-  archetype that otherwise publishes nothing at all (`library`, `ios`,
-  `android`).
-
-`bardolier port add <project> <name> --container-port <n>` declares one: the
-caller states the container-side port, and the allocator finds a free host
-port starting there — same rule as `app_port`, no catalogue band to start
-from instead. Persisted as `extra_ports.<name>.{container_port,host_port}`,
-assigned once and stable for life like any other port in §5. `bardolier port
-remove <project> <name>` detaches it and releases the host port; `bardolier port
-list <project>` reports what is declared, manifest-only, no daemon consulted.
-Add/remove require the project stopped, exactly as service add/remove do (§6).
-
-Compose publishes every declared extra port from the dev container alongside
-`app_port` when present — the same `ports:` list, app_port first, then extra
-ports sorted by name (§9's determinism rule). `status` and `up`'s JSON report
-them as `extra_ports`, each with a ready-to-open `url`
-(`http://localhost:<host_port>`) for the same reason `connection_hint` exists
-for a service — the app renders it, it does not compose it.
+- `bardolier port add <project> <name> --container-port <n>` — the caller states
+  the container side and the allocator searches upward from that number, there
+  being no catalogue band to start from. Persisted as
+  `extra_ports.<name>.{container_port,host_port}`; assigned once and stable for
+  life, like any port in §5. `port remove` releases it, `port list` reports what
+  is declared (§6). Both require the project stopped.
+- Compose publishes them from the dev container after `app_port`, sorted by name
+  (§9's determinism rule). `status` and `up` report `extra_ports`, each with a
+  ready-to-open `url` (`http://localhost:<host_port>`) — the same reason a
+  service carries `connection_hint`: the app renders the string, it never
+  composes one.
 
 ## 6. Command surface
 
@@ -317,17 +298,15 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   container builds/runs from. Manifest-only, no daemon consulted.
 
 ### Shell
-- `bardolier shell <name> [--print] [--root]`
-  For a running project, resolves the dev container and returns the exec
-  invocation. With `--json`, returns `{ "container": "...", "exec": ["docker",
-  "exec","-it","<c>","bash"] }`. The **app** spawns the terminal; the CLI names
-  the command. `--print` (human mode) prints the command to run. Errors
+- `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
+  dev container and returns the exec invocation: `{ "container": "...", "exec":
+  ["docker","exec","-it","<c>","bash"] }`. The **app** spawns the terminal; the
+  CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
-  `--root` swaps the invocation to `["docker","exec","-u","root","-it","<c>",
-  "bash"]` — same container, same checks, one argv difference. It is
-  ephemeral: nothing installed while root survives a `down` any more than any
-  other runtime change (§6 Deps). Anything meant to persist belongs in
-  `extra_packages`, not this shell.
+  `--root` swaps in `["docker","exec","-u","root","-it","<c>","bash"]` — same
+  container, same checks, one argv difference. It is ephemeral: nothing installed
+  while root survives a `down`. Anything meant to persist belongs in
+  `extra_packages` (Deps, above).
 
 ### Volumes / disk
 - `bardolier volumes orphaned` — array of `{ name, kind, path, size_bytes,
@@ -344,79 +323,66 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `VOLUME_IN_USE` if still claimed.
 
 ### Lifecycle / SSD
-- `bardolier down-all` — stop + remove all bardolier containers, across every
-  root. Containers don't belong to a root, so this stays global.
-- `bardolier eject [<root>]` — derives the volume from the named root's path
-  (the last ancestor directory sharing its `st_dev`, phase 17 — there is no
-  separate `ssd_volume` key to disagree with it) and first checks that it's
-  actually a removable volume (`diskutil info -plist`). It may not be: a
-  root's path is a fully supported, first-class mode when it's an ordinary
-  directory on the internal disk (§8), and `diskutil eject`-ing `/` or another
-  non-removable mount is not a smaller version of ejecting, it's the wrong
-  command. Not removable fails `EJECT_NOT_APPLICABLE` immediately — no project
-  is stopped on the way to that refusal — naming `bardolier down-all` as the
-  thing to run instead. With more than one configured root (phase 18), `[<root>]`
-  is unambiguous only when exactly one qualifies as a mounted, removable
-  volume; otherwise it is required, and its absence is `INVALID_ARGUMENT`
-  naming every configured root.
-  Otherwise: `down-all`, then check host holders (Xcode, Simulator, shells
-  cd'd into the SSD via `lsof`), then `diskutil eject`. If held, fail
-  `EJECT_BLOCKED` with `{ holders: [...] }` and do not force.
-  A holder is only something the user can act on. The container runtime and the
-  OS's own volume agents — Spotlight's `mds`/`mds_stores` above all, which map an
-  indexed volume for as long as it is mounted — are excluded, because counting
-  them makes the command refuse forever with nothing to quit. They are
-  DiskArbitration clients, so the `diskutil eject` that follows is what actually
-  asks them to let go; if one dissents, its PID and name are parsed out of the
-  refusal into the same `holders` array — reduced to its last path component
-  first, since recent macOS reports a dissenter as a full executable path. A blocked eject therefore always names
-  something, including the root processes unprivileged `lsof` cannot see.
-  The runtime is the one holder with a third answer. Docker Desktop shares
-  `/Volumes` into its VM and keeps descriptors on the SSD for as long as that VM
-  lives, so a disk whose containers are all down can still be dissented — with
-  no window to close and no retry that ever succeeds, which made "quit Docker
-  Desktop" the standing price of an eject. When that (and only that) is what
-  refused, `eject` offers to stop the ENGINE (`docker desktop stop`) and try
-  again: with `--stop-docker`, or by confirming at the prompt. Declining is
-  `EJECT_BLOCKED` with `reason: "runtime-holds-volume"`, the runtime named in
-  `holders`, and the command to run. A successful eject reports
-  `docker_stopped`. This is not a force — nothing is unmounted from under
-  anything, and `docker desktop start` puts the engine back.
-  What follows the stop is a WAIT, not an immediate retry. `docker desktop
-  stop` returns when the engine reports itself down; the VM helper that
-  actually holds `/Volumes` is torn down after that and takes seconds about it,
-  so retrying at once loses the race and the user is told to go and do by hand
-  the thing that has just been done. `eject` polls `lsof` until the runtime is
-  no longer on the volume (bounded — 15s), then attempts the unmount, and
-  retries a dissent from the runtime a couple of times. A budget that runs out
-  is `EJECT_BLOCKED` with `reason: "runtime-holds-volume-after-stop"`: the same
-  refusal, but with no engine left to stop, so it never advises `--stop-docker`
-  again. If the runtime has let go and the unmount still fails, that refusal is
-  somebody else's and is reported as it came.
+- `bardolier down-all` — stop + remove all bardolier containers, across every root.
+  Containers don't belong to a root, so this stays global.
+- `bardolier eject [<root>]` — the volume is derived from the named root's path
+  (the last ancestor directory sharing its `st_dev`, phase 17); there is no
+  `ssd_volume` key that could disagree with it. `[<root>]` may be omitted only
+  when exactly one configured root is a mounted, removable volume
+  (`diskutil info -plist`); otherwise its absence is `INVALID_ARGUMENT` naming
+  every configured root (phase 18).
+  - **Not removable → `EJECT_NOT_APPLICABLE`, immediately**, before anything is
+    stopped, naming `bardolier down-all` as the command to run instead. A root on
+    the internal disk is a first-class mode (§8), and `diskutil eject`-ing `/`
+    is not a smaller version of ejecting — it is the wrong command.
+  - Otherwise: `down-all` → host holders (`lsof`) → `diskutil eject`. Held
+    means `EJECT_BLOCKED` with `{ holders: [...] }`. **Never forced.**
+  - **A holder is something the user can act on.** The container runtime and the
+    OS volume agents — `mds`/`mds_stores` above all, which map an indexed volume
+    for as long as it is mounted — are excluded, because counting them makes the
+    command refuse forever with nothing to quit. They are DiskArbitration
+    clients, so the `diskutil eject` that follows is itself the request to let
+    go; a dissenter's PID and name are parsed out of the refusal into the same
+    `holders` array, reduced to its last path component first (recent macOS
+    reports a full executable path). A blocked eject therefore always names
+    something, including root processes unprivileged `lsof` cannot see.
+  - **The runtime has a third answer.** Docker Desktop shares `/Volumes` into
+    its VM and holds descriptors for as long as that VM lives: nothing to quit,
+    no retry that works. When that alone refused, `eject` offers to stop the
+    engine (`docker desktop stop`) and try again — via `--stop-docker` or the
+    prompt. Declining is `EJECT_BLOCKED`, `reason: "runtime-holds-volume"`, the
+    runtime named in `holders`, and the command to run. Success reports
+    `docker_stopped`. Not a force: nothing is unmounted from under anything, and
+    `docker desktop start` puts the engine back.
+  - **Then wait for the signal, not the command.** `docker desktop stop` returns
+    before the VM helper holding `/Volumes` is torn down, so `eject` polls `lsof`
+    until the runtime is off the volume (bounded, 15s), unmounts, and retries a
+    runtime dissent a couple more times. A spent budget is `EJECT_BLOCKED`,
+    `reason: "runtime-holds-volume-after-stop"` — no engine left to stop, so it
+    never re-advises the flag just used. If the runtime has let go and the
+    unmount still fails, that refusal is somebody else's and is relayed as it
+    came.
 - `bardolier doctor` — environment check: Docker running, every configured root's
-  readable state (the `ssd` finding, id frozen — `ok` is false only when
-  *none* is readable), base images present, catalogue valid. Returns
-  structured findings. (Useful first call for the app on launch.) The `ssd`
-  finding carries a `roots` array — per-root `mounted`/`removable` (null when
-  unmounted, since there is nothing to ask `diskutil`) — so the app can tell
-  an actual SSD apart from an internal-disk root instead of saying "SSD" for
-  both.
+  readable state (the `ssd` finding, id frozen — `ok` is false only when *none*
+  is readable), base images present, catalogue valid. Structured findings; a
+  useful first call for the app on launch. The `ssd` finding carries a `roots`
+  array with per-root `mounted`/`removable` (null when unmounted — nothing to
+  ask `diskutil`), so the app can tell an actual SSD from an internal-disk root
+  instead of calling both "SSD".
 
 ### Roots
 
 `roots` is list-valued (§8), which `config set` cannot edit — the same reason
 `catalogue` and `config get|set` got their own commands in Phase 6.
 
-- `bardolier root add <path> [--name <name>]` — register a root. `--name` defaults
-  to the path's basename. Names and paths must each be unique across the
-  list; a collision is `CONFIG_INVALID`. Errors: `INVALID_ARGUMENT` (an
-  unusable name), `CONFIG_INVALID`.
+- `bardolier root add <path> [--name <name>]` — register a root; `--name` defaults
+  to the path's basename. Names and paths must each be unique across the list.
+  Errors: `INVALID_ARGUMENT` (unusable name), `CONFIG_INVALID` (collision).
 - `bardolier root remove <name>` — forget a root. Never touches the directory or
-  anything in it — this is bookkeeping, not deletion. `roots` is never empty
-  (§8), so removing the only configured root is refused rather than silently
-  rematerialising the built-in default in its place — add a replacement root
-  first. Errors: `INVALID_ARGUMENT` for an unknown name, or for the only
-  configured root.
+  anything in it: bookkeeping, not deletion. `roots` is never empty (§8), so
+  removing the only configured root is refused rather than silently
+  rematerialising the built-in default in its place — add a replacement first.
+  Errors: `INVALID_ARGUMENT` (unknown name, or the only root).
 - `bardolier root list` — every configured root, in order, with whether it is
   currently readable. `roots[0]` is the default `new` targets.
 
@@ -433,27 +399,25 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### App support
 
-Added in Phase 6 under §1 ("if the app needs something, a CLI command grows to
+Phase 6 additions under §1 ("if the app needs something, a CLI command grows to
 provide it"), not part of the original surface. Additive: no existing schema
-changed to accommodate them.
+changed.
 
-- `bardolier catalogue` — every service type the catalogue defines, with its image,
-  container port and host-port band, plus the `services.yml` that answered and
-  which step of §4.1's chain it came from. The app's Services submenu and
-  New-project window render this rather than keeping a copy of the catalogue.
-  Reports the BAND START only; an assigned port comes from a manifest.
+- `bardolier catalogue` — every service type the catalogue defines, with image,
+  container port and host-port BAND START (an assigned port comes from a
+  manifest), plus which `services.yml` answered and which step of §4.1's chain it
+  came from. The app's Services submenu and New-project window render this
+  instead of keeping a copy of the catalogue. Errors: `CONFIG_INVALID`.
+- `bardolier config get` — the effective configuration (§8): defaults, then file,
+  then environment, plus the file path and which env vars overrode a value.
   Errors: `CONFIG_INVALID`.
-- `bardolier config get` — the effective configuration (§8): defaults, then the
-  file, then the environment, plus the file path and which env vars overrode a
-  value. Errors: `CONFIG_INVALID`.
 - `bardolier config set <key> <value>` — set one single-valued §8 key
-  (`catalogue_path` or `terminal`); an empty value clears it. `roots` is
-  list-valued and not settable here — see `bardolier root add | remove | list`
-  below. Paths are expanded on the way in, keys are written in a stable order,
-  and the effective config after the write is reported. Never validates that a
-  path exists — a root is routinely absent, and refusing to record where it
-  will be would make the setting unusable exactly when it is needed. Errors:
-  `INVALID_ARGUMENT`, `CONFIG_INVALID`.
+  (`catalogue_path`, `terminal`); an empty value clears it. Paths are expanded on
+  the way in, keys written in a stable order, and the effective config reported
+  after the write. Never validates that a path exists — a root is routinely
+  absent, and refusing to record where it will be would make the setting
+  unusable exactly when it is needed. `roots` is list-valued: see Roots, above.
+  Errors: `INVALID_ARGUMENT`, `CONFIG_INVALID`.
 
 ## 7. `status` JSON schema (the app's primary contract)
 
@@ -502,116 +466,102 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 ## 8. Configuration
 
-- Config file `~/.config/bardolier/config.yml` (internal disk — must be readable when
-  every root is absent, so `doctor`/`status` can report "not readable").
-  Keys: `roots` (list-valued, §3 — an ordered array of `{ name, path }`;
-  `roots[0]` is the default `new` targets; names and paths must each be
-  unique), `catalogue_path`, `terminal` (for the app's shell-open preference,
-  surfaced here for a single source). There is no `ssd_volume` key (phase 17):
-  a root's mount point is derived from its `path` by walking `st_dev`
-  boundaries, so the two can never disagree.
-- CLI reads env override `$BARDOLIER_ROOT` (phase 18; was `$BDLR_SSD_ROOT`),
-  which REPLACES `roots` wholesale with a single root named after the path's
-  basename — one variable, so every done-check stays hermetic with a temp
-  dir. `roots` itself is not settable through `config set` (it is
-  list-valued) — see `bardolier root add | remove | list` in §6.
-- The app never edits this file itself: it reads it with `bardolier config get`
-  and writes single-valued keys with `bardolier config set`, `roots` with
-  `bardolier root add | remove | list`, so precedence and path expansion have
-  one implementation.
-- A root's path may be any local directory — an external SSD is not required.
-  The default when nothing is configured is one root at `~/bardolier-projects`:
-  a published tool must not assume `/Volumes/ssd` exists. The project
-  lifecycle (`new`/`up`/`down`/services/volumes) never assumes a removable
-  volume; only `eject` does, and it is simply unavailable
-  (`EJECT_NOT_APPLICABLE`) when the derived volume isn't one. Use
-  `bardolier down-all` to stop everything in that mode.
+- `~/.config/bardolier/config.yml`, on the internal disk — it must be readable
+  when every root is absent, so `doctor`/`status` can say so. Keys: `roots`
+  (§3 — ordered `{ name, path }`, `roots[0]` the default `new` targets, names
+  and paths each unique), `catalogue_path`, `terminal` (the app's shell-open
+  preference, kept here for a single source).
+- No `ssd_volume` key (phase 17): a root's mount point is derived from its
+  `path` by walking `st_dev` boundaries, so the two can never disagree.
+- `$BARDOLIER_ROOT` (phase 18; was `$BDLR_SSD_ROOT`) REPLACES `roots` wholesale
+  with a single root named after the path's basename — one variable, so a
+  done-check stays hermetic with a temp dir.
+- `roots` is list-valued and not settable through `config set`; see
+  `bardolier root add | remove | list` (§6). The app never edits the file itself,
+  so precedence and path expansion have one implementation.
+- **A root's path may be any local directory** — an external SSD is not
+  required, and the default when nothing is configured is one root at
+  `~/bardolier-projects`, since a published tool must not assume `/Volumes/ssd`
+  exists. Only `eject` assumes a removable volume, and it is simply unavailable
+  (`EJECT_NOT_APPLICABLE`) otherwise; `down-all` is the equivalent in that mode.
 
 ## 9. Compose generation rules
 
-- Generated file is deterministic and idempotent for a given manifest (stable
-  ordering, so regeneration produces no spurious diffs). It is rendered on every
-  `new`, `up` and service/port/deps change — never patched, and never read back
-  for facts, so a hand edit is lost rather than honoured. Writes go through
-  `workspace.ts`, which skips a write whose bytes already match the file on
-  disk: determinism made observable.
-- One user-defined network per project; services + dev container attached.
-- **Image selection rule** (Phase 13): the dev container's `image:` is
-  `<base_image>:latest` when `extra_packages` is empty, or the content-addressed
-  derived image `bardolier-deps-<base_image>:<hash>` otherwise — `hash` a short
-  sha256 of the base image plus the sorted package list, so two projects
-  declaring the same base image and packages resolve to the same tag and share
-  one build (`deps.ts`). `up` builds it (§6, Deps) before `docker compose up`,
-  since Compose references a local tag and never builds one itself.
-- Dev container: base image for the archetype, four RELATIVE binds — `./work`
-  → `/work` (also `working_dir`), `./data` → `/data` **read-only**, `./local` →
-  `/local`, `./home` → `CONTAINER_HOME` — and `sleep infinity`. `/data` is
-  read-only because writing into a live data directory from a second container
-  corrupts it; the service that owns one mounts the same bytes read-write.
-  Relative means resolved against the compose file's own directory, so the
-  file holds no absolute path and the project stays a self-contained,
-  relocatable folder. Plus `platform:` when the archetype's base image is pinned
-  to one architecture (§4.3), so it starts the way `build` built it. The key is
-  absent otherwise — an unpinned project's generated file must not change.
-- Dev container, cont.: plus the base image's shared toolchain cache volume
-  (§4.3) when it declares one, mounted at the image's own path. It is declared
-  `external: true` so Compose neither creates nor claims a volume every project
-  on that image shares — `up` creates it, labelled `bardolier.role: cache`. Both
-  keys are absent for an image with no cache, for the same reason `platform:`
-  is: an existing project's generated file must not change.
-- Dev container, cont.: its `$HOME` is the `./home` bind above, at the images'
-  shared `CONTAINER_HOME`. `down` removes the container, so a home in its
-  writable layer would lose the shell history, the dotfiles and the agent's
-  login on every stop. It is PER PROJECT, not shared like the toolchain cache:
-  it holds the user's own state, and Claude Code files its sessions by working
-  directory — every dev container works in `/work`, so one shared home would
-  file every project's sessions together and `claude --continue` would resume
-  the wrong one. Being inside the project directory is what attributes it: it
-  needs no label, and `delete` takes it with the folder.
-- Dev container, cont.: an `environment:` block in Compose's LIST form naming
-  the host variables the container may inherit — the agent's credentials and
-  git's identity variables. A bare name (no `=`) is passed through when the
-  environment running `compose up` has a value and left UNSET otherwise; an
-  empty-string token is a credential that fails rather than a login prompt. The
-  list is fixed and sorted, so the file is identical on a machine holding every
-  token and one holding none. `up` fills the `GIT_*` names from the host's own
-  `git config`, so a commit made in the container is attributed to the human
-  rather than failing on an unset `user.email`.
-- Services: image from catalogue, `./data/<catalogue key>` bound at the
+- **Deterministic and idempotent** for a given manifest (stable ordering, no
+  spurious diffs). Rendered on every `new`, `up` and service/port/deps change —
+  never patched, and never read back for facts, so a hand edit is lost rather
+  than honoured. Writes go through `workspace.ts`, which skips a write whose
+  bytes already match the file on disk: determinism made observable.
+- One user-defined network per project; services and dev container attached.
+- **Image selection** (phase 13): the dev container's `image:` is
+  `<base_image>:latest` when `extra_packages` is empty, else the
+  content-addressed `bardolier-deps-<base_image>:<hash>`, `hash` being a short
+  sha256 of the base image plus the sorted package list — so two projects
+  declaring the same pair resolve to one tag and share one build (`deps.ts`).
+  `up` builds it before `docker compose up`; Compose references a local tag and
+  never builds one itself.
+- **Four RELATIVE binds on the dev container** — resolved against the compose
+  file's own directory, so the file holds no absolute path and the project stays
+  a self-contained, relocatable folder: `./work` → `/work` (also `working_dir`),
+  `./data` → `/data` **read-only**, `./local` → `/local`, `./home` →
+  `CONTAINER_HOME`. Plus `sleep infinity`. `/data` is read-only because writing
+  a live data directory from a second container corrupts it; the service that
+  owns one mounts the same bytes read-write.
+- `platform:` only when the archetype's base image is pinned to one architecture
+  (§4.3), so it starts the way `build` built it. The shared cache volume only
+  when the image declares one (§4.3), mounted at the image's own path and
+  declared `external: true` — Compose must neither create nor claim what every
+  project on that image shares; `up` creates it, labelled `bardolier.role: cache`.
+  Both keys are absent otherwise: an existing project's file must not change.
+- **`$HOME` is the `./home` bind**, at the images' shared `CONTAINER_HOME`.
+  `down` removes the container, so a home in its writable layer would lose the
+  shell history, the dotfiles and the agent's login on every stop. It is PER
+  PROJECT, not shared like the toolchain cache: Claude Code files its sessions by
+  working directory and every dev container works in `/work`, so one shared home
+  would make `claude --continue` resume whichever project ran last. Being inside
+  the project directory attributes it — no label, and `delete` takes it with the
+  folder.
+- **`environment:` in Compose's LIST form**, naming the host variables the
+  container may inherit (the agent's credentials, git's identity). A bare name
+  (no `=`) passes a value through when the environment running `compose up` has
+  one and leaves it UNSET otherwise; `${NAME:-}` would inject an empty
+  credential — a failing login instead of a prompt. Fixed and sorted, so the
+  file is byte-identical on a Mac holding every token and one holding none. `up`
+  fills the `GIT_*` names from the host's own `git config`, so a commit made in
+  the container is attributed to the human rather than failing on an unset
+  `user.email`.
+- **Services**: image from the catalogue, `./data/<catalogue key>` bound at the
   catalogue's `mount`, `host_port:container_port` published, env interpolated
   (`{project}` → name).
 - The top-level `volumes:` block is therefore the shared toolchain cache and
-  nothing else — absent entirely for an image that declares none. A project
-  owns no named volume.
-- The dev container publishes NOTHING except its archetype's dev server, where
-  the archetype has one (`ARCHETYPE_APP_PORT`; `web` → 3000), plus any extra
-  ports declared on it (§5.1). `app_port` is a service-like allocation: fixed
-  inside the container so every project's server config is identical,
-  allocated from a band on the host so two web projects cannot clash, assigned
-  once and persisted as `app_port` (§5). `PORT` is set in the container to the
-  fixed side. A project created before the field existed is assigned one on
-  its next `up` — the only moment its manifest is being written anyway. This
-  and extra ports are the only exceptions to the rule that services' host
-  ports are debugging taps: a browser on the Mac cannot join the Docker
-  network, and a native client outside the project entirely cannot either.
-  Extra ports have no such retrofit — `port add` always writes both sides at
-  once — and publish in `ports:` sorted by name, after `app_port` when present.
+  nothing else, absent entirely for an image that declares none. A project owns
+  no named volume.
+- **The dev container publishes only its archetype's dev server**
+  (`ARCHETYPE_APP_PORT`; `web` → 3000) plus any extra ports declared on it
+  (§5.1). `app_port` is a service-like allocation: fixed inside the container so
+  every project's server config is identical, allocated from a host band so two
+  web projects cannot clash, assigned once and persisted (§5), with `PORT` set to
+  the fixed side. A project predating the field is assigned one on its next `up`,
+  the only moment its manifest is being written anyway. These are the only
+  exceptions to "a host port is a debugging tap": a browser on the Mac, or a
+  native client outside the project, cannot join the Docker network. Extra ports
+  get no such retrofit — `port add` writes both sides at once — and publish after
+  `app_port`, sorted by name.
 
 ## 10. Seeded files (by `new`)
 
 One file, `work/CLAUDE.md`: archetype-specific, describing where the agent is
-(§3's layout, `/data` read-only), the boundary rules (host vs container build),
-and for an archetype with a dev server (§9) the instruction to bind `0.0.0.0`
-rather than `localhost` — a server on the container's own loopback is
-unreachable from the Mac and looks like a broken port mapping.
+(§3's layout, `/data` read-only), the host-vs-container boundary, and — for an
+archetype with a dev server (§9) — the instruction to bind `0.0.0.0` rather than
+`localhost`, since a server on the container's own loopback is unreachable from
+the Mac and looks like a broken port mapping. It goes in `work/` because that is
+the agent's working directory, and because a repository cloned in beside it then
+never contains it.
 
-It goes in `work/` because that is the agent's working directory, and because a
-repository cloned in beside it then never contains it.
-
-There is no `.gitignore` and no `.dockerignore` (phase 19). There is no repo
-root to seed — bardolier's files are above `work/`, inside no working tree — and
-nothing has ever taken a build context from a project directory (`deps.ts`
-builds from a generated context under the config dir).
+No `.gitignore` and no `.dockerignore` (phase 19): there is no repo root to seed
+— bardolier's files sit above `work/`, inside no working tree — and nothing takes
+a build context from a project directory (`deps.ts` builds from a generated
+context under the config dir).
 
 ## 11. Testing expectations
 
@@ -626,30 +576,27 @@ builds from a generated context under the config dir).
 
 A project resumed after three weeks is a project whose state has been forgotten.
 `down` is the one moment when everything needed to describe that state is still
-true and still reachable — so the note is written there, into
+true and still reachable, so the note is written there, into
 `<project>/.bardolier/handoff.md`, and nowhere else.
 
 - **Two sources, failing independently.** The repositories, via `git` on the
-  host: `work/` may hold several (§3), so each direct subdirectory that is a
-  working tree is reported — branch, recent commits, what is still uncommitted
-  — and a project with none says so. And the agent's own
-  account, via `claude --print --continue` run INSIDE the dev container, which
-  is the half that knows what was being *attempted* — no amount of git
-  archaeology recovers that.
-- **Written before `compose down`.** The session being summarised lives in the
-  dev container and dies with it. Asking afterwards is asking nobody.
-- **`--continue` resolves correctly** only because each project has its own
-  `$HOME` and therefore its own Claude config dir (§9).
+  host: `work/` may hold several (§3), so every direct subdirectory that is a
+  working tree is reported — branch, recent commits, what is uncommitted — and a
+  project with none says so. And the agent's own account, via
+  `claude --print --continue` run INSIDE the dev container, the half that knows
+  what was being
+  *attempted*; no git archaeology recovers that.
+- **Written before `compose down`.** The session lives in the dev container and
+  dies with it; asking afterwards is asking nobody. `--continue` resolves
+  correctly only because each project has its own `$HOME` (§9).
 - **Best-effort is the contract.** No container, no agent, no session, no
-  credentials, a timeout, a read-only disk: each degrades to a smaller note or
-  to no note, and NONE fails the `down`. A stop that refused because it could
-  not write a memo would be worse than a tool that never wrote memos — the user
-  asked for a stop. A non-zero exit or empty output is not a summary; the note
-  says so rather than pasting a refusal under the heading.
-- **Appended, not overwritten.** Each stop adds a new entry, newest at the
-  bottom; none is ever rewritten or dropped — a quiet "just said hello" session
-  reporting no work honestly must not destroy a substantive entry above it, and
-  `.bardolier/` sits above `work/` and is inside no repository (§3), so there is
-  no git history underneath to fall back on.
+  credentials, a timeout, a read-only disk: each degrades the note or skips it,
+  and none fails the `down` — a stop that refused because it could not write a
+  memo would be worse than a tool that never wrote memos. A non-zero exit or
+  empty output is reported as such, not pasted under the heading as a summary.
+- **Appended, newest at the bottom; never rewritten or dropped.** A quiet "just
+  said hello" session must not destroy a substantive entry above it, and
+  `.bardolier/` sits above `work/`, inside no repository (§3), so there is no git
+  history underneath to fall back on.
 - `--no-handoff` skips it. `delete` always passes it — there is no point
   summarising a project a second before its directory is removed.
