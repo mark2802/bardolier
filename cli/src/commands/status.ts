@@ -21,6 +21,7 @@ import { scanVolumes } from '../volumes.ts'
 import { connectionHint } from '../catalogue.ts'
 import { appUrl } from '../services.ts'
 import { attachedExtraPorts } from '../extraports.ts'
+import { workDir } from '../layout.ts'
 import type { Status, StatusProject, StatusService } from '../model/status.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 
@@ -65,6 +66,7 @@ function buildProject(
     app_url: appUrl(manifest),
     extra_ports: attachedExtraPorts(manifest),
     root: project.root,
+    work_dir: workDir(project.dir),
   }
 }
 

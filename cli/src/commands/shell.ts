@@ -17,7 +17,7 @@
 
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { WORKDIR } from '../compose.ts'
+import { CONTAINER_WORK } from '../layout.ts'
 import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
@@ -56,7 +56,7 @@ export async function runShell(
     exec: options.root
       ? ['docker', 'exec', '-u', 'root', '-it', container, 'bash']
       : ['docker', 'exec', '-it', container, 'bash'],
-    workdir: WORKDIR,
+    workdir: CONTAINER_WORK,
   }
 }
 

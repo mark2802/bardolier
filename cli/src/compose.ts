@@ -8,8 +8,9 @@
  *
  * DETERMINISM is the property under test: same manifest, same bytes. That means
  * no timestamps, no `Object.keys` order dependence (services are sorted), and
- * no absolute paths — the bind mount is `.:/work`, relative to the file's own
- * directory, so the SSD mounting somewhere else cannot produce a diff.
+ * no absolute paths — every bind is relative to the file's own directory
+ * (`./work:/work`, `./data/postgres:…`), so the root mounting somewhere else
+ * cannot produce a diff.
  *
  * Container names come from `naming.ts`, the same module `status` matches
  * against. A rename there moves both sides at once, by construction.
@@ -18,18 +19,16 @@
 import { stringify as stringifyYaml } from 'yaml'
 import { BardolierError } from './errors.ts'
 import { CONTAINER_HOME, IMAGE_CACHE, IMAGE_PLATFORM } from './images.ts'
+import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR } from './layout.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import { extraPortNames } from './extraports.ts'
 import { selectedImage } from './deps.ts'
-import { composeProject, devContainerName, homeVolumeName, serviceContainerName } from './naming.ts'
+import { composeProject, devContainerName, serviceContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 import type { ImageCache } from './images.ts'
 
 export const COMPOSE_FILENAME = 'docker-compose.yml'
-
-/** Where the project directory is mounted inside the dev container. */
-export const WORKDIR = '/work'
 
 /** The compose service key for the dev container (its container_name is `bardolier-<project>`). */
 export const DEV_SERVICE = 'dev'
@@ -41,9 +40,6 @@ export const LABEL_SERVICE = 'bardolier.service'
 
 /** `bardolier.role` on the shared toolchain cache volume — it belongs to no project. */
 export const ROLE_CACHE = 'cache'
-
-/** `bardolier.role` on the dev container's persistent `$HOME` volume (`images.ts`). */
-export const ROLE_HOME = 'home'
 
 /**
  * Host environment the dev container inherits, if the host has it — `cli-spec.md`
@@ -100,32 +96,6 @@ const HEADER = [
 /** `{project}` interpolation, the one substitution the catalogue promises (§4.1). */
 function interpolate(template: string, project: string): string {
   return template.replaceAll('{project}', project)
-}
-
-/** Named volume for an attached service, e.g. `myapp_pgdata`. */
-export function volumeName(service: CatalogueService, project: string): string {
-  return interpolate(service.volume, project)
-}
-
-/**
- * Every named volume this project owns, sorted. Used by `delete --purge`.
- *
- * The dev container's `$HOME` is one of them: it holds the project's shell
- * history, its dotfiles and its Claude Code sessions, so it dies with the
- * project like any service's data — and, like any service's data, only under
- * `--purge`. A plain `delete` leaves it behind as a listed orphan.
- *
- * NOT the shared toolchain cache: that belongs to every project on the base
- * image, and taking it here would let one project's deletion cost every other
- * android project its Gradle download.
- */
-export function projectVolumes(manifest: ProjectManifest, catalogue: ServiceCatalogue): string[] {
-  const names: string[] = [homeVolumeName(manifest.name)]
-  for (const key of attachedKeys(manifest)) {
-    const definition = catalogue.services[key]
-    if (definition) names.push(volumeName(definition, manifest.name))
-  }
-  return names.sort()
 }
 
 /** Attached service keys in a stable (sorted) order — the determinism rule. */
@@ -185,21 +155,24 @@ function devService(manifest: ProjectManifest): ComposeService {
     // The dev container is a place to exec into, not a process to supervise.
     // `up` starts it and it waits; the agent's work happens through `exec`.
     command: ['sleep', 'infinity'],
-    working_dir: WORKDIR,
+    working_dir: CONTAINER_WORK,
     // `PORT` first, because it carries a value and the rest do not: it tells the
     // dev server which port to bind, so every project's server config is the
     // same fixed number however its host port was allocated. Then what the host
     // lends the container, if it has it (PASSTHROUGH_ENV).
     environment: [...(app ? [`PORT=${app.container}`] : []), ...PASSTHROUGH_ENV],
-    // The bind mount is relative: resolved against the compose file's own
-    // directory, which is the project directory, so the file stays independent
-    // of where the SSD mounts. The other two are named volumes on the internal
-    // disk — $HOME per project so a `down` does not erase the login and the
-    // shell history, and the toolchain cache shared by every project on this
-    // base image (`images.ts`).
+    // Four relative binds, resolved against the compose file's own directory,
+    // so the file stays independent of where the root mounts (§4.2, phase 19).
+    // `/data` is READ-ONLY here: the data is visible for inspection, but
+    // writing into a live data directory from a second container corrupts it —
+    // the service that owns it mounts the same path read-write below. Last is
+    // the toolchain cache, the one named volume left, shared by every project
+    // on this base image (`images.ts`).
     volumes: [
-      `.:${WORKDIR}`,
-      `${homeVolumeName(manifest.name)}:${CONTAINER_HOME}`,
+      `./${WORK_DIR}:${CONTAINER_WORK}`,
+      `./${DATA_DIR}:${CONTAINER_DATA}:ro`,
+      `./${LOCAL_DIR}:${CONTAINER_LOCAL}`,
+      `./${HOME_DIR}:${CONTAINER_HOME}`,
       ...(cache ? [`${cache.volume}:${cache.mount}`] : []),
     ],
     // §9's exceptions to "the dev container publishes nothing": the
@@ -235,7 +208,9 @@ function backingService(project: string, key: string, definition: CatalogueServi
   // host:container — the host side is the debugging tap (§5), the container
   // side is what the dev app connects to over the network.
   service.ports = [`${hostPort}:${definition.container_port}`]
-  service.volumes = [`${volumeName(definition, project)}:${definition.mount}`]
+  // The service's own data directory inside the project, named by its
+  // catalogue key — same disk as the project, outside any working tree.
+  service.volumes = [`./${DATA_DIR}/${key}:${definition.mount}`]
   service.labels = {
     [LABEL_PROJECT]: project,
     [LABEL_ROLE]: 'service',
@@ -260,13 +235,6 @@ export function composeDocument({ manifest, catalogue }: ComposeInput): Record<s
   const services: Record<string, ComposeService> = { [DEV_SERVICE]: devService(manifest) }
   const volumes: Record<string, unknown> = {}
 
-  // First, because the dev service is first: its $HOME. Compose creates and
-  // labels this one, exactly as it does a service's data volume — it IS the
-  // project's, unlike the shared cache at the bottom. Every project has one, so
-  // a `volumes:` block is no longer the sign that services are attached.
-  const home = homeVolumeName(project)
-  volumes[home] = { name: home, labels: { [LABEL_PROJECT]: project, [LABEL_ROLE]: ROLE_HOME } }
-
   for (const key of attachedKeys(manifest)) {
     const definition = catalogue?.services[key]
     if (!definition) {
@@ -278,17 +246,10 @@ export function composeDocument({ manifest, catalogue }: ComposeInput): Record<s
     const attachment = manifest.services?.[key]
     if (!attachment) continue
     services[key] = backingService(project, key, definition, attachment.host_port)
-
-    const volume = volumeName(definition, project)
-    volumes[volume] = {
-      name: volume,
-      // Labelled so Phase 4 can attribute an orphaned volume to the project it
-      // came from without keeping a second registry.
-      labels: { [LABEL_PROJECT]: project, [LABEL_SERVICE]: key },
-    }
   }
 
-  // Last, and deliberately not project-labelled: the toolchain cache is shared
+  // The only named volume a project's compose file still declares, and
+  // deliberately not project-labelled: the toolchain cache is shared
   // by every project on this base image, so Compose must neither create it nor
   // claim it — `external: true` means "mount what `up` already made". Without
   // that, the first android project's Compose stamps its own project label on

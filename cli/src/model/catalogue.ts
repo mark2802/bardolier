@@ -5,8 +5,10 @@
  * Resolution order (§4.1): `catalogue_path` from config, else
  * `$SSD_ROOT/services.yml`, else the bundled default in `cli/defaults/`.
  *
- * `{project}` is interpolated with the project name in `volume` and in `env`
- * values at compose-generation time (§9).
+ * `{project}` is interpolated with the project name in `env` values at
+ * compose-generation time (§9). A service's data is a directory named by its
+ * catalogue KEY under the project's `data/` (phase 19) — there is no `volume`
+ * field to disagree with it.
  */
 
 export type CatalogueService = {
@@ -17,9 +19,7 @@ export type CatalogueService = {
   container_port: number
   /** Start of this service's host-port band; the allocator counts up from here (§5). */
   host_port_base: number
-  /** Named volume; `{project}` interpolated. */
-  volume: string
-  /** Container path the volume mounts at. */
+  /** Container path the service's data directory mounts at. */
   mount: string
   /** Environment for the service container; values may contain `{project}`. */
   env?: Record<string, string>

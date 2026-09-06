@@ -172,7 +172,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['new'],
     group: 'Projects',
     usage: 'new <name> --archetype <a> [--services a,b] [--root <name>]',
-    summary: 'Create a project: dir, manifest, compose, .gitignore, .dockerignore, CLAUDE.md.',
+    summary: 'Create a project: dir, manifest, compose, work/ data/ local/ home/, work/CLAUDE.md.',
     flags: [
       { name: '--archetype', arg: '<a>', description: 'web | ios | android | library. Required.' },
       { name: '--services', arg: '<a,b>', description: 'Catalogue keys to attach immediately; ports assigned now.' },
@@ -249,21 +249,26 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['delete'],
     group: 'Projects',
-    usage: 'delete <name> [--force] [--keep-data | --purge]',
+    usage: 'delete <name> [--force] [--purge]',
     summary: 'Remove containers then the project dir. Releases its ports. Prompts unless --force.',
     flags: [
       { name: '--force', description: 'Skip the confirmation prompt.' },
-      { name: '--keep-data', description: "Keep the project's named volumes (default); they become orphans." },
-      { name: '--purge', description: "Also remove the project's named volumes. Destroys data." },
+      { name: '--purge', description: "Destroy the project's data (data/ and home/) with it. Required when it holds any." },
     ],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'DOCKER_UNAVAILABLE', 'VOLUME_IN_USE'],
+    errors: [
+      'SSD_NOT_MOUNTED',
+      'PROJECT_NOT_FOUND',
+      'PROJECT_AMBIGUOUS',
+      'PROJECT_HAS_DATA',
+      'DOCKER_UNAVAILABLE',
+      'VOLUME_IN_USE',
+    ],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('delete'), 1)
       return output(
         await runDelete(createContext(), {
           name,
           force: boolFlag(inv, '--force'),
-          keepData: boolFlag(inv, '--keep-data'),
           purge: boolFlag(inv, '--purge'),
           json: inv.json,
         }),
@@ -460,7 +465,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['volumes'],
     group: 'Volumes / disk',
     usage: 'volumes <orphaned | rm>',
-    summary: 'Inspect and reclaim named volumes no longer referenced by any compose file.',
+    summary: 'Inspect and reclaim volumes and data directories no project claims any more.',
     flags: [],
     errors: [],
     run: group('volumes'),
@@ -469,7 +474,7 @@ export const COMMANDS: readonly CommandNode[] = [
         path: ['volumes', 'orphaned'],
         group: 'Volumes / disk',
         usage: 'volumes orphaned',
-        summary: 'Volumes referenced by no current compose file, with sizes.',
+        summary: 'Named volumes and leftover data directories no manifest claims, with sizes.',
         flags: [],
         // SSD_NOT_MOUNTED is not in §6's list but is a safety requirement:
         // with no manifests to read, every volume would look reclaimable.
@@ -484,7 +489,7 @@ export const COMMANDS: readonly CommandNode[] = [
         path: ['volumes', 'rm'],
         group: 'Volumes / disk',
         usage: 'volumes rm <name> [--force]',
-        summary: 'Remove one orphaned volume. Confirms unless --force. Destroys data.',
+        summary: 'Remove one orphan — a volume or a data directory. Confirms unless --force. Destroys data.',
         flags: [{ name: '--force', description: 'Skip the confirmation prompt.' }],
         errors: ['SSD_NOT_MOUNTED', 'ROOT_UNREADABLE', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {

@@ -9,7 +9,8 @@
  */
 
 import { connectionHint } from './catalogue.ts'
-import { attachedKeys, volumeName } from './compose.ts'
+import { attachedKeys } from './compose.ts'
+import { serviceDataDir } from './layout.ts'
 import type { AttachedService } from './model/service.ts'
 import type { CatalogueService, ServiceCatalogue } from './model/catalogue.ts'
 import type { ProjectManifest } from './model/project.ts'
@@ -32,6 +33,7 @@ export function describeService(
   key: string,
   definition: CatalogueService,
   hostPort: number,
+  dir: string,
 ): AttachedService {
   return {
     key,
@@ -39,7 +41,7 @@ export function describeService(
     host_port: hostPort,
     container_port: definition.container_port,
     connection_hint: connectionHint(key, definition, hostPort, project),
-    volume: volumeName(definition, project),
+    data_dir: serviceDataDir(dir, key),
   }
 }
 
@@ -50,13 +52,17 @@ export function describeService(
  * invented values — the same rule `status` follows (§7), and `doctor`'s
  * manifest check is where the discrepancy is reported.
  */
-export function attachedServices(manifest: ProjectManifest, catalogue: ServiceCatalogue | null): AttachedService[] {
+export function attachedServices(
+  manifest: ProjectManifest,
+  catalogue: ServiceCatalogue | null,
+  dir: string,
+): AttachedService[] {
   const rows: AttachedService[] = []
   for (const key of attachedKeys(manifest)) {
     const definition = catalogue?.services[key]
     const attachment = manifest.services?.[key]
     if (!definition || !attachment) continue
-    rows.push(describeService(manifest.name, key, definition, attachment.host_port))
+    rows.push(describeService(manifest.name, key, definition, attachment.host_port, dir))
   }
   return rows
 }

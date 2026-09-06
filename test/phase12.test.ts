@@ -322,7 +322,7 @@ describe('extra ports elsewhere in the system', () => {
     await project(ctx, 'myapp')
     await runPortAdd(ctx, { project: 'myapp', name: 'notebook', containerPort: '8888' })
 
-    const result = await runDelete(ctx, { name: 'myapp', force: true, keepData: true, purge: false, json: false })
+    const result = await runDelete(ctx, { name: 'myapp', force: true, purge: false, json: false })
     assert.ok(result.released_ports.includes(8888))
   })
 

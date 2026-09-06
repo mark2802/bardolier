@@ -62,7 +62,7 @@ works on the macOS host for anything macOS-native.
 - **Determinism.** Compose generation is byte-stable for a given manifest.
 - **No partial mutation of running state.** Service add/remove require the
   project stopped and fail `PROJECT_RUNNING`. No hot-apply paths.
-- **Safety over convenience.** Detaching a service keeps its volume (it becomes
+- **Safety over convenience.** Detaching a service keeps its data (it becomes
   a listed orphan); deletion is explicit and confirmed; eject reports holders
   rather than forcing. Never destroy data to save a step.
 - **Disk frugality.** Images on the internal disk and shared; project data on
@@ -130,12 +130,22 @@ in its place — add a replacement root first.
 
 ## Behaviour that is easy to get wrong
 
+**The project directory is not a repository.** `cli/src/layout.ts` owns the
+four folders bardolier's files sit above — `work/` (`/work`, the agent's cwd and
+the only place a clone lives), `data/` (`/data`, **read-only** in the dev
+container: writing a live data directory from a second container corrupts it),
+`local/`, `home/` (`CONTAINER_HOME`). Nothing this tool writes is inside a
+working tree, so nothing needs ignoring and `git clean -xdf` cannot reach the
+data. `new` creates them and every `up` re-ensures them: Docker would create a
+missing bind source itself, as root, leaving `home/` unwritable by the
+container's own uid. `data/.metadata_never_index` keeps `mds` — a holder
+`eject` already has to filter — off the volume.
+
 **Generated vs seeded.** `docker-compose.yml` is rendered by `cli/src/compose.ts`
 on every `new`, `up` and service change — never patched, never read back for
-facts; a hand edit loses. The §10 seeds (`.gitignore`, `.dockerignore`, project
-`CLAUDE.md`) are written once and are the user's. Writes go through
-`cli/src/workspace.ts`, which skips a write when bytes match — determinism made
-observable.
+facts; a hand edit loses. The one §10 seed, `work/CLAUDE.md`, is written once
+and is the user's. Writes go through `cli/src/workspace.ts`, which skips a write
+when bytes match — determinism made observable.
 
 **Ports: chosen once, written once.** `cli/src/allocator.ts` scans every
 manifest under *every configured root* *and* probes the host socket — free
@@ -146,16 +156,24 @@ orphan scan below. The port persists in `project.yml` and is never revisited:
 because users have connection strings. Search starts at the catalogue's
 `host_port_base`, bounded to keep bands readable (§5). `cli/src/services.ts`
 joins manifest to catalogue, so `status` and `service list` cannot disagree.
+The catalogue has no `volume` key (phase 19): a service's data directory is its
+catalogue key.
 
-**An orphan is derived, never recorded.** `cli/src/volumes.ts` asks the
-manifests what is still claimed (resolved volume name, plus the
-`bardolier.project`/`bardolier.service` labels compose writes); everything else this
-tool made is reclaimable. Because being wrong destroys data, the scan refuses
-when it cannot read manifests: `SSD_NOT_MOUNTED` when *no* root is readable at
-all, `ROOT_UNREADABLE` when *some* are (phase 18 — never call another root's
-volumes orphaned just because this one answered), `CONFIG_INVALID` for a
-broken manifest; `status` catches all three and reports an empty list, because
-`status` must never fail.
+**An orphan is derived, never recorded, and has two kinds.** `cli/src/volumes.ts`
+asks the manifests what is still claimed. A **directory** orphan is `ls data/`
+minus the manifest's attached keys, named `<project>/<key>` — one root, no
+labels, no cross-root reasoning, because the project that holds it is the
+answer. A **volume** orphan is what is left of named volumes: the shared
+toolchain caches (claimed while any manifest names their base image) and
+whatever an older layout left behind. The volume half still needs EVERY
+manifest, so it keeps the refusals: `SSD_NOT_MOUNTED` when *no* root is readable
+at all, `ROOT_UNREADABLE` when *some* are (phase 18 — never call another root's
+cache orphaned just because this one answered), `CONFIG_INVALID` for a broken
+manifest; `status` catches all three and reports an empty list, because `status`
+must never fail. `volumes rm` takes either kind, and `delete` refuses
+`PROJECT_HAS_DATA` rather than taking a project's data silently — with the data
+inside the directory, "keep the data" cannot mean anything, so there is no
+`--keep-data`.
 
 **`eject` never forces, and a holder is someone you can act on.** With more
 than one configured root (phase 18), `eject [<root>]` needs a name unless
@@ -210,7 +228,7 @@ megabytes belong once, on the internal disk. Three readers must match the
 constant: the Dockerfile `ENV`, the mount `compose.ts` writes, and `up`, which
 creates the volume. Compose marks it `external: true` so no project stamps its
 labels on it. `volumes.ts` knows it by `bardolier.role: cache`: claimed while any
-manifest names that base image, never taken by `delete --purge`.
+manifest names that base image, and never touched by `delete`.
 `bardolier-web` carries the same for `uv`'s wheels (`bardolier-uv-cache`,
 `/cache/uv`) — a Python API and its React frontend run in one dev container,
 no second port published; the dev server proxies to it (Phase 11).
@@ -221,17 +239,17 @@ these images that is NOT pinned by default — `bardolier build` resolves
 `latest` at build time (`--claude-code-version <X.Y.Z>` pins an exact release
 when reproducibility matters more); every other component stays a fixed ARG.
 Not a catalogue service (the catalogue is for sibling containers with an
-image, port and volume), and not under `$HOME`, which is a mounted volume
-that would copy 236MB per project.
+image, port and data directory), and not under `$HOME`, which is a mounted
+directory that would copy 236MB per project.
 
-**`$HOME` is a volume, because `down` destroys the container.**
-`CONTAINER_HOME` = `/state/home`, with `bardolier-<project>-home` mounted there —
+**`$HOME` is a bind, because `down` destroys the container.**
+`CONTAINER_HOME` = `/state/home`, with the project's own `home/` mounted there —
 otherwise every stop loses shell history, dotfiles, and the `claude` login
 (`$HOME/.claude`). It is **per project**: Claude Code files sessions by working
 directory and every container works in `/work`, so one shared home would make
 `claude --continue` resume whichever project ran last. Four readers must agree
-(the constant and three Dockerfiles). `delete --purge` takes it; plain `delete`
-leaves it an orphan.
+(the constant and three Dockerfiles). Being inside the project directory is what
+attributes it, so it needs no label and `delete` takes it with the folder.
 
 **The host is lent, never copied.** `PASSTHROUGH_ENV` in `compose.ts` uses
 Compose's **list** form (bare `NAME`, no `=`) — the only shape meaning "pass
@@ -277,8 +295,9 @@ same reasoning as `IMAGE_CACHE`. `deps add`/`remove` require the project
 stopped, same as `service`/`port`.
 
 **`down` writes down where you were.** `cli/src/handoff.ts` writes
-`.bardolier/handoff.md` on every stop: repository state from `Git`, plus the agent's
-own account via `claude --print --continue` **inside the still-running dev
+`.bardolier/handoff.md` on every stop: the state of each repository under
+`work/*/` from `Git` (or a line saying there are none), plus the agent's own
+account via `claude --print --continue` **inside the still-running dev
 container** — after `compose down` there is nobody to ask. Everything is
 best-effort: missing container, agent, session or credentials, a timeout, or a
 read-only disk degrades the note and never fails the stop. A non-zero exit or

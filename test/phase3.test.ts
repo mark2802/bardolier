@@ -12,6 +12,7 @@
 
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 
 import { BardolierError } from '../cli/src/errors.ts'
@@ -185,7 +186,6 @@ describe('port allocation (cli-spec.md §5)', () => {
         '    image: "tight:1"',
         '    container_port: 9000',
         '    host_port_base: 65534',
-        '    volume: "{project}_tight"',
         '    mount: /data',
         '',
       ].join('\n'),
@@ -224,14 +224,14 @@ describe('service add (cli-spec.md §6)', () => {
       host_port: 5432,
       container_port: 5432,
       connection_hint: 'postgresql://localhost:5432',
-      volume: 'myapp_pgdata',
+      data_dir: join(box.root, 'myapp', 'data', 'postgres'),
     })
     assert.equal(result.compose_regenerated, true)
     assert.deepEqual(ports(box, 'myapp'), { postgres: 5432 })
 
     const compose = box.read('myapp', 'docker-compose.yml') ?? ''
     assert.match(compose, /5432:5432/)
-    assert.match(compose, /myapp_pgdata:\/var\/lib\/postgresql\/data/)
+    assert.match(compose, /\.\/data\/postgres:\/var\/lib\/postgresql\/data/)
     assert.match(compose, /container_name: bardolier-myapp-postgres/)
   })
 
@@ -329,7 +329,11 @@ describe('service remove (cli-spec.md §6)', () => {
 
     const { valid, errors } = validate('service-remove', result)
     assert.ok(valid, `service remove output failed its schema:\n${errors.join('\n')}`)
-    assert.deepEqual(result.removed, { key: 'postgres', host_port: 5432, volume: 'myapp_pgdata' })
+    assert.deepEqual(result.removed, {
+      key: 'postgres',
+      host_port: 5432,
+      data_dir: join(box.root, 'myapp', 'data', 'postgres'),
+    })
     assert.deepEqual(result.services, [])
     assert.deepEqual(ports(box, 'myapp'), {})
 
@@ -438,7 +442,7 @@ describe('service list (cli-spec.md §6)', () => {
 
     // Same rule `status` follows (§7): doctor is where the discrepancy is reported.
     assert.deepEqual(collectServiceList(ctx, 'myapp').services, [])
-    assert.deepEqual(attachedServices(readManifest(box, 'myapp'), ctx.catalogue().catalogue), [])
+    assert.deepEqual(attachedServices(readManifest(box, 'myapp'), ctx.catalogue().catalogue, box.path('myapp')), [])
   })
 
   test('an unknown project is PROJECT_NOT_FOUND', () => {
@@ -533,12 +537,11 @@ describe('add → up → status → down → remove → delete', () => {
 
     await runDown(ctx, 'myapp')
     const removed = await runServiceRemove(ctx, { project: 'myapp', service: 'postgres' })
-    assert.equal(removed.removed.volume, 'myapp_pgdata')
+    assert.equal(removed.removed.data_dir, join(box.root, 'myapp', 'data', 'postgres'))
 
     const deleted = await runDelete(ctx, {
       name: 'myapp',
       force: true,
-      keepData: false,
       purge: false,
       json: true,
     })
@@ -552,9 +555,9 @@ describe('add → up → status → down → remove → delete', () => {
     const ctx = makeContext(box)
     await runNew(ctx, { name: 'myapp', archetype: 'web', services: 'postgres,redis' })
 
-    const deleted = await runDelete(ctx, { name: 'myapp', force: true, keepData: true, purge: false, json: true })
+    const deleted = await runDelete(ctx, { name: 'myapp', force: true, purge: false, json: true })
     assert.deepEqual(deleted.released_ports, [5432, 6379])
-    assert.deepEqual(deleted.kept_volumes, ['bardolier-myapp-home', 'myapp_pgdata', 'myapp_redisdata'])
+    assert.deepEqual(deleted.kept_volumes, [], 'a project owns no named volume since phase 19')
 
     await project(ctx, 'next')
     const reused = await runServiceAdd(ctx, { project: 'next', service: 'postgres' })

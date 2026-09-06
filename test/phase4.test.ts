@@ -4,7 +4,8 @@
  * which is what makes the eject contract testable with no disk to unmount.
  *   - `shell` RESOLVES and never spawns; a stopped project is PROJECT_STOPPED.
  *   - an orphan is derived from the MANIFESTS: still attached is never offered,
- *     a detached service's volume always is.
+ *     a detached service's data directory always is (phase 19), and so is a
+ *     named volume nothing claims any more.
  *   - `volumes rm` confirms, and refuses VOLUME_IN_USE before asking Docker.
  *   - `eject` stops, checks holders, unmounts — and refuses with them named
  *     rather than forcing.
@@ -12,10 +13,13 @@
 
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { formatBytes, scanVolumes } from '../cli/src/volumes.ts'
+import { serviceDataDir } from '../cli/src/layout.ts'
 import { parseDockerSize } from '../cli/src/docker.ts'
 import { createSsdDevice, isRuntimeHolder, isSystemHolder, parseDissenter, parseLsof } from '../cli/src/device.ts'
 import { runNew } from '../cli/src/commands/new.ts'
@@ -50,9 +54,21 @@ afterEach(() => {
   while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
 })
 
-/** The labels the generated compose file puts on a service's volume (§9). */
+/** The labels an older layout's compose file put on a service's volume. */
 function labels(project: string, service: string) {
   return { 'bardolier.project': project, 'bardolier.service': service }
+}
+
+/**
+ * A service's data directory with something in it — what `up` leaves behind.
+ * Compose creates the bind source at start-up, so a project that never ran has
+ * no such directory and nothing to orphan.
+ */
+function seedServiceData(box: Sandbox, project: string, service: string, bytes = 1024): string {
+  const dir = serviceDataDir(box.path(project), service)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'DATA'), 'x'.repeat(bytes))
+  return dir
 }
 
 /** A project on disk, created the way a user would. */
@@ -160,45 +176,74 @@ describe('shell (cli-spec.md §6, Shell)', () => {
 // ── orphan derivation (§6, Volumes / disk; §7) ────────────────────────────────
 
 describe('orphaned volumes (cli-spec.md §6, §7)', () => {
-  test('a volume a project still attaches is not an orphan', async () => {
+  test('a data directory a project still attaches is not an orphan', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }] })
-    const ctx = makeContext(box, docker)
+    const ctx = makeContext(box, stubDocker())
     await project(ctx, 'alpha', 'postgres')
+    seedServiceData(box, 'alpha', 'postgres')
 
     const output = await collectOrphanedVolumes(ctx)
     assert.deepEqual(output.orphaned, [])
     assert.equal(output.total_bytes, 0)
   })
 
-  test('detaching the service makes its volume an orphan, attributed and sized', async () => {
+  test('detaching the service makes its data directory an orphan, attributed and sized', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }] })
-    const ctx = makeContext(box, docker)
+    const ctx = makeContext(box, stubDocker())
     await project(ctx, 'alpha', 'postgres')
+    const dir = seedServiceData(box, 'alpha', 'postgres', 1024)
 
     await runServiceRemove(ctx, { project: 'alpha', service: 'postgres' })
 
     const output = await collectOrphanedVolumes(ctx)
     assert.deepEqual(output.orphaned, [
-      { name: 'alpha_pgdata', size_bytes: 20971520, size_human: '20 MB', last_project: 'alpha' },
+      {
+        name: 'alpha/postgres',
+        kind: 'directory',
+        path: dir,
+        size_bytes: 1024,
+        size_human: '1 KB',
+        last_project: 'alpha',
+      },
     ])
-    assert.equal(output.total_human, '20 MB')
+    assert.equal(output.total_human, '1 KB')
     assert.ok(validate('volumes-orphaned', output).valid)
   })
 
-  test('deleting the project with --keep-data leaves the same orphan behind', async () => {
+  test('the Spotlight marker data/ is created with is never offered for reclaiming', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 1024 }] })
+    const ctx = makeContext(box, stubDocker())
+    await project(ctx, 'alpha')
+    assert.ok(existsSync(join(box.path('alpha'), 'data', '.metadata_never_index')))
+
+    assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
+  })
+
+  test('deleting the project takes its data with it — there is no orphan left', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker())
+    await project(ctx, 'alpha', 'postgres')
+    seedServiceData(box, 'alpha', 'postgres')
+
+    const deleted = await runDelete(ctx, { name: 'alpha', force: true, purge: true, json: true })
+    assert.deepEqual(deleted.kept_volumes, [])
+
+    assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
+  })
+
+  test('a named volume left by an older layout is ours, and nothing claims it', async () => {
+    // Nothing creates these any more (phase 19), but a machine that ran the
+    // old layout still has them — and hiding gigabytes from the one command
+    // that accounts for disk would be the wrong kind of quiet.
+    const box = sandbox()
+    const docker = stubDocker({ volumes: [{ name: 'old_pgdata', labels: labels('old', 'postgres'), size_bytes: 20971520 }] })
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha', 'postgres')
 
-    const deleted = await runDelete(ctx, { name: 'alpha', force: true, keepData: false, purge: false, json: true })
-    assert.deepEqual(deleted.kept_volumes, ['alpha_pgdata', 'bardolier-alpha-home'])
-
     const output = await collectOrphanedVolumes(ctx)
-    assert.deepEqual(output.orphaned.map((v) => v.name), ['alpha_pgdata'])
-    assert.equal(output.orphaned[0]?.last_project, 'alpha', 'the label is what attributes an orphan to a dead project')
+    assert.deepEqual(output.orphaned, [
+      { name: 'old_pgdata', kind: 'volume', path: null, size_bytes: 20971520, size_human: '20 MB', last_project: 'old' },
+    ])
   })
 
   test('a volume that is not ours is never listed, labelled or not', async () => {
@@ -210,12 +255,12 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
     assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
   })
 
-  test('an attachment the catalogue no longer defines still protects its volume', async () => {
-    // The volume NAME cannot be resolved without a catalogue entry, so only the
-    // labels can save it. Listing it would offer live data for deletion.
+  test('an attachment the catalogue no longer defines still protects its data', async () => {
+    // The claim comes from the MANIFEST, not the catalogue: a key the catalogue
+    // has forgotten is still attached, and listing its directory would offer
+    // live data for deletion.
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: 'alpha_kafkadata', labels: labels('alpha', 'kafka'), size_bytes: 4096 }] })
-    const ctx = makeContext(box, docker)
+    const ctx = makeContext(box, stubDocker())
     await project(ctx, 'alpha')
     box.writeProject('alpha', {
       name: 'alpha',
@@ -224,6 +269,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
       services: { kafka: { host_port: 9092 } },
       created: '2026-08-19T10:00:00.000Z',
     })
+    seedServiceData(box, 'alpha', 'kafka')
 
     assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
   })
@@ -280,7 +326,7 @@ describe('orphaned volumes (cli-spec.md §6, §7)', () => {
   test('sizes are only measured when there is something to size', async () => {
     const box = sandbox()
     let measured = 0
-    const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 1 }] })
+    const docker = stubDocker({ volumes: [] })
     const counting = { ...docker, volumeSizes: async () => (measured++, docker.volumeSizes()) }
     const ctx = makeContext(box, counting)
     await project(ctx, 'alpha', 'postgres')
@@ -324,6 +370,8 @@ describe('volumes rm (cli-spec.md §6)', () => {
     const output = await runVolumeRemove(ctx, { name: 'old_pgdata', force: false, json: false })
     assert.deepEqual(output, {
       volume: 'old_pgdata',
+      kind: 'volume',
+      path: null,
       removed: true,
       size_bytes: 20971520,
       size_human: '20 MB',
@@ -346,18 +394,35 @@ describe('volumes rm (cli-spec.md §6)', () => {
     assert.deepEqual(docker.calls, [], 'a declined removal still removed the volume')
   })
 
-  test('a volume a project still claims is VOLUME_IN_USE before Docker is asked', async () => {
+  test('a data directory a project still attaches is VOLUME_IN_USE before Docker is asked', async () => {
     const box = sandbox()
-    const docker = stubDocker({ volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 1 }] })
+    const docker = stubDocker()
     const ctx = makeContext(box, docker)
     await project(ctx, 'alpha', 'postgres')
+    seedServiceData(box, 'alpha', 'postgres')
 
     await assert.rejects(
-      () => runVolumeRemove(ctx, { name: 'alpha_pgdata', force: true, json: true }),
+      () => runVolumeRemove(ctx, { name: 'alpha/postgres', force: true, json: true }),
       (error: unknown) =>
         error instanceof BardolierError && error.code === 'VOLUME_IN_USE' && error.details?.project === 'alpha',
     )
     assert.deepEqual(docker.calls, [])
+    assert.ok(existsSync(serviceDataDir(box.path('alpha'), 'postgres')))
+  })
+
+  test('a detached data directory is removed by name or by path', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { confirm: stubConfirm(true) })
+    await project(ctx, 'alpha', 'postgres')
+    const dir = seedServiceData(box, 'alpha', 'postgres')
+    await runServiceRemove(ctx, { project: 'alpha', service: 'postgres' })
+
+    const output = await runVolumeRemove(ctx, { name: dir, force: true, json: true })
+    assert.equal(output.removed, true)
+    assert.equal(output.kind, 'directory')
+    assert.equal(output.volume, 'alpha/postgres')
+    assert.ok(validate('volumes-rm', output).valid)
+    assert.equal(existsSync(dir), false, 'the directory must be gone')
   })
 
   test('a name Docker does not have is VOLUME_NOT_FOUND', async () => {
@@ -631,36 +696,35 @@ describe('the lsof/diskutil seam', () => {
 describe('new → up → shell → down → remove → reclaim → delete → eject', () => {
   test('one story, end to end', async () => {
     const box = sandbox()
-    const docker = stubDocker({
-      startsAs: ['bardolier-alpha', 'bardolier-alpha-postgres'],
-      volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 20971520 }],
-    })
+    const docker = stubDocker({ startsAs: ['bardolier-alpha', 'bardolier-alpha-postgres'] })
     const device = stubDevice()
     const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true) })
 
     await project(ctx, 'alpha', 'postgres')
     const up = await runUp(ctx, { name: 'alpha', noShell: false })
     assert.equal(up.state, 'running')
+    // What the running postgres wrote into its bind source.
+    seedServiceData(box, 'alpha', 'postgres', 20971520)
 
     const shell = await runShell(ctx, 'alpha')
     assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
 
     const status = await collectStatus(ctx, 'alpha')
     assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)
-    assert.deepEqual(status.orphaned_volumes, [], 'an attached volume is not an orphan while the project is up')
+    assert.deepEqual(status.orphaned_volumes, [], 'attached data is not an orphan while the project is up')
 
     await runDownAll(ctx)
     await runServiceRemove(ctx, { project: 'alpha', service: 'postgres' })
 
     const orphaned = await collectOrphanedVolumes(ctx)
-    assert.deepEqual(orphaned.orphaned.map((v) => v.name), ['alpha_pgdata'])
+    assert.deepEqual(orphaned.orphaned.map((v) => v.name), ['alpha/postgres'])
     assert.equal(orphaned.total_human, '20 MB')
 
-    const reclaimed = await runVolumeRemove(ctx, { name: 'alpha_pgdata', force: true, json: true })
+    const reclaimed = await runVolumeRemove(ctx, { name: 'alpha/postgres', force: true, json: true })
     assert.equal(reclaimed.removed, true)
     assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
 
-    await runDelete(ctx, { name: 'alpha', force: true, keepData: false, purge: false, json: true })
+    await runDelete(ctx, { name: 'alpha', force: true, purge: false, json: true })
     assert.equal(box.exists('alpha'), false)
 
     device.setHolders([holder({ command: 'zsh' })])

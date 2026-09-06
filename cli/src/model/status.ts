@@ -58,6 +58,12 @@ export type StatusProject = {
   extra_ports?: AttachedExtraPort[]
   /** The configured root's name this project lives under. Additive since phase 18. */
   root?: string
+  /**
+   * `<dir>/work`, where repositories live and the dev container works (§4.2).
+   * Reported for the same reason `dir` is: the app must never compose a path.
+   * Additive since phase 19.
+   */
+  work_dir?: string
 }
 
 /** One configured root's readable state (phase 18). */
@@ -67,11 +73,20 @@ export type StatusRoot = {
   mounted: boolean
 }
 
+/** Both things `volumes orphaned` can offer to reclaim (phase 19). */
+export const ORPHAN_KINDS = ['volume', 'directory'] as const
+export type OrphanKind = (typeof ORPHAN_KINDS)[number]
+
 export type OrphanedVolume = {
+  /** A Docker volume name, or `<project>/<key>` for a data directory. */
   name: string
+  /** Additive since phase 19; absent means `volume`. */
+  kind?: OrphanKind
+  /** Host path of a `directory` orphan; null for a named volume. Additive since phase 19. */
+  path?: string | null
   size_bytes: number
   size_human: string
-  /** Project the volume belonged to, or null if it can't be attributed. */
+  /** Project it belonged to, or null if it can't be attributed. */
   last_project: string | null
 }
 

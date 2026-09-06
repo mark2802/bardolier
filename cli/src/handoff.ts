@@ -10,9 +10,10 @@
  *
  * Two sources, and they fail independently:
  *
- *   - THE REPOSITORY, from `ctx.git`. Free, instant, and true whether or not
- *     anyone ever ran an agent here. Branch, recent commits, what is still
- *     uncommitted.
+ *   - THE REPOSITORIES, from `ctx.git`. Free, instant, and true whether or not
+ *     anyone ever ran an agent here: branch, recent commits, what is still
+ *     uncommitted. `work/` may hold several (phase 19), so each is walked and
+ *     reported; a project with none says so.
  *   - THE AGENT'S OWN ACCOUNT, from `claude -p --continue` run inside the dev
  *     container. This is the half that knows what was being ATTEMPTED, which no
  *     amount of git archaeology recovers.
@@ -26,15 +27,16 @@
  * The file is APPENDED, never overwritten. A trivial "just said hello" session,
  * asked to summarise itself, honestly reports that nothing happened — and a
  * note that replaced the substantive entry above it with that would destroy
- * real history for no reason: `.bardolier/` is gitignored by default (`scaffold.ts`),
- * so there is usually no git history underneath to fall back on. Each `down`
- * adds one entry; none is ever rewritten or dropped.
+ * real history for no reason: `.bardolier/` sits above `work/` and is inside no
+ * repository, so there is no git history underneath to fall back on. Each
+ * `down` adds one entry; none is ever rewritten or dropped.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Context } from './context.ts'
 import type { GitFacts } from './git.ts'
+import { entries, workDir, WORK_DIR } from './layout.ts'
 import { devContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 
@@ -110,10 +112,43 @@ async function askAgent(ctx: Context, project: string): Promise<string | null> {
   return text.length > 0 ? text : null
 }
 
-function repositorySection(facts: GitFacts | null): string[] {
-  if (facts === null) return ['### The repository', '', 'Not a git repository.']
+/** One repository under `work/`, as `git` sees it. */
+type Repository = {
+  readonly name: string
+  readonly facts: GitFacts
+}
 
-  const lines = ['### The repository', '']
+/**
+ * Every git working tree under `work/` — or `work/` itself, when the user
+ * cloned into it rather than beside it.
+ *
+ * `work/` is the user's, so both shapes are real: one repository checked out as
+ * `work/` and several sitting in it. Asking about `work/` first settles which,
+ * and stops there — a repository's own subdirectories are its business, and
+ * walking into them would turn a stop into a filesystem crawl. A directory that
+ * is not a repository is skipped silently; a scratch folder is not a defect.
+ */
+async function repositories(ctx: Context, dir: string): Promise<Repository[]> {
+  const work = workDir(dir)
+  const itself = await ctx.git.facts(work)
+  if (itself !== null) return [{ name: '', facts: itself }]
+
+  const found: Repository[] = []
+  for (const name of entries(work).sort()) {
+    const path = join(work, name)
+    try {
+      if (!statSync(path).isDirectory()) continue
+    } catch {
+      continue
+    }
+    const facts = await ctx.git.facts(path)
+    if (facts !== null) found.push({ name, facts })
+  }
+  return found
+}
+
+function repositoryFacts(facts: GitFacts): string[] {
+  const lines: string[] = []
   lines.push(`- Branch: \`${facts.branch ?? '(detached or unborn)'}\``)
   lines.push(
     facts.status.length === 0
@@ -123,16 +158,27 @@ function repositorySection(facts: GitFacts | null): string[] {
   if (facts.diffstat !== null) lines.push(`- Since HEAD:${facts.diffstat.replace(/^\s*/, ' ')}`)
 
   if (facts.commits.length > 0) {
-    lines.push('', '#### Recent commits', '', '```')
+    lines.push('', '```')
     lines.push(...facts.commits)
     lines.push('```')
   }
   if (facts.status.length > 0) {
-    lines.push('', '#### Uncommitted', '', '```')
+    lines.push('', 'Uncommitted:', '', '```')
     lines.push(...facts.status.slice(0, MAX_STATUS_LISTED))
     const hidden = facts.status.length - MAX_STATUS_LISTED
     if (hidden > 0) lines.push(`… and ${hidden} more`)
     lines.push('```')
+  }
+  return lines
+}
+
+function repositorySection(repos: readonly Repository[]): string[] {
+  if (repos.length === 0) {
+    return ['### The repositories', '', `No git repositories under \`${WORK_DIR}/\`.`]
+  }
+  const lines = ['### The repositories']
+  for (const repo of repos) {
+    lines.push('', `#### ${WORK_DIR}/${repo.name}`.replace(/\/$/, ''), '', ...repositoryFacts(repo.facts))
   }
   return lines
 }
@@ -149,14 +195,14 @@ function header(project: string): string {
 }
 
 /** One stop's entry — everything a single note used to hold, now under its own timestamp. */
-function renderEntry(when: Date, summary: string | null, facts: GitFacts | null): string {
+function renderEntry(when: Date, summary: string | null, repos: readonly Repository[]): string {
   const lines = [`## ${when.toISOString()}`, '', '### Where the work was', '']
   lines.push(
     summary ??
       'No summary: there was no Claude Code session in the dev container to continue, ' +
         'or the agent could not be reached before the stop timed out.',
   )
-  lines.push('', ...repositorySection(facts))
+  lines.push('', ...repositorySection(repos))
   return `${lines.join('\n')}\n`
 }
 
@@ -177,7 +223,7 @@ export type HandoffRequest = {
 export async function writeHandoff(ctx: Context, request: HandoffRequest): Promise<Handoff | null> {
   const { manifest, dir, devRunning } = request
 
-  const facts = await ctx.git.facts(dir)
+  const repos = await repositories(ctx, dir)
   const summary = devRunning ? await askAgent(ctx, manifest.name) : null
 
   const path = handoffPath(dir)
@@ -187,12 +233,12 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
   // has never been a repository and has never run an agent. Once one exists,
   // every stop still appends: a trivial session's honest "nothing happened" is
   // itself worth recording, not a reason to drop the entry above it.
-  if (facts === null && summary === null && !existing) return null
+  if (repos.length === 0 && summary === null && !existing) return null
 
   try {
     mkdirSync(join(dir, HANDOFF_DIR), { recursive: true })
     const prefix = existing ? `${readFileSync(path, 'utf8').replace(/\n*$/, '\n')}\n---\n\n` : header(manifest.name)
-    writeFileSync(path, prefix + renderEntry(ctx.now(), summary, facts))
+    writeFileSync(path, prefix + renderEntry(ctx.now(), summary, repos))
     return { path, summarised: summary !== null }
   } catch {
     // A read-only or vanished SSD. The stop still succeeded; say nothing here

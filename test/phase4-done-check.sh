@@ -124,8 +124,6 @@ fi
 
 if [ "$DOCKER_OK" = "1" ]; then
   docker rm -f bardolier-alpha bardolier-alpha-postgres bardolier-beta bardolier-beta-redis >/dev/null 2>&1 || true
-  docker volume rm alpha_pgdata beta_redisdata >/dev/null 2>&1 || true
-  docker volume rm -f bardolier-alpha-home bardolier-beta-home >/dev/null 2>&1 || true
 
   if ! docker image inspect bardolier-web:latest >/dev/null 2>&1; then
     printf '    building bardolier-web (first run only, this takes a few minutes)…\n'
@@ -147,15 +145,20 @@ if [ "$DOCKER_OK" = "1" ]; then
   IN_CONTAINER="$(docker exec "$CONTAINER" bash -lc 'pwd' 2>/dev/null | tr -d '\r')"
   [ "$IN_CONTAINER" = "$WORKDIR" ] \
     && ok "running it lands a shell in $WORKDIR — the bind-mounted project dir" || bad "the exec command did not land in $WORKDIR (got '$IN_CONTAINER')"
-  docker exec "$CONTAINER" bash -lc 'test -f /work/project.yml' >/dev/null 2>&1 \
-    && ok "and the project's own manifest is visible from inside it" || bad "the project directory is not mounted at /work"
+  # `work/` is mounted, and the manifest above it deliberately is NOT (§3).
+  docker exec "$CONTAINER" bash -lc 'test -f /work/CLAUDE.md' >/dev/null 2>&1 \
+    && ok "and the seeded work/CLAUDE.md is visible from inside it" || bad "work/ is not mounted at /work"
+  docker exec "$CONTAINER" bash -lc 'test -e /work/project.yml' >/dev/null 2>&1 \
+    && bad "project.yml is reachable from the container" || ok "project.yml is above work/ and invisible from in there"
+  docker exec "$CONTAINER" bash -lc 'test -w /data' >/dev/null 2>&1 \
+    && bad "/data is writable from the dev container" || ok "/data is mounted read-only (§9)"
 
   STATUS="$($BARDOLIER status alpha --json)"
   schema_assert status "$STATUS" && ok "status still matches the §7 schema" || bad "status broke its schema"
   json_assert "$STATUS" "d.projects[0].state === 'running' && d.projects[0].services[0].host_port === $PORT" \
     && ok "status shows the project running on port $PORT" || bad "status does not report the running service and its port"
-  json_assert "$STATUS" 'd.orphaned_volumes.every(v => v.name !== "alpha_pgdata")' \
-    && ok "an attached volume is not listed as an orphan (§7)" || bad "a live volume was offered for reclaiming"
+  json_assert "$STATUS" 'd.orphaned_volumes.every(v => v.name !== "alpha/postgres")' \
+    && ok "attached data is not listed as an orphan (§7)" || bad "live data was offered for reclaiming"
 
   $BARDOLIER down alpha >/dev/null || bad "down alpha exited non-zero"
   STOPPED_SHELL="$($BARDOLIER shell alpha --json 2>/dev/null || true)"
@@ -171,35 +174,37 @@ if [ "$DOCKER_OK" = "1" ]; then
 
   ORPHANED="$($BARDOLIER volumes orphaned --json)" || bad "volumes orphaned exited non-zero"
   schema_assert volumes-orphaned "$ORPHANED" && ok "volumes orphaned --json validates against its schema" || bad "volumes orphaned output does not match its schema"
-  json_assert "$ORPHANED" 'd.orphaned.some(v => v.name === "alpha_pgdata")' \
-    && ok "the detached service's volume is now a listed orphan" || bad "the orphan did not appear"
-  json_assert "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha_pgdata").last_project === "alpha"' \
-    && ok "it is attributed to the project it came from (§7)" || bad "the orphan was not attributed"
-  json_assert "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha_pgdata").size_bytes > 0' \
-    && ok "with a real size read from Docker ($(json_value "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha_pgdata").size_human'))" || bad "the orphan has no measured size"
-  json_assert "$($BARDOLIER status --json)" 'd.orphaned_volumes.some(v => v.name === "alpha_pgdata")' \
+  json_assert "$ORPHANED" 'd.orphaned.some(v => v.name === "alpha/postgres" && v.kind === "directory")' \
+    && ok "the detached service's data directory is now a listed orphan" || bad "the orphan did not appear"
+  json_assert "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha/postgres").last_project === "alpha"' \
+    && ok "it is attributed to the project that holds it (§7)" || bad "the orphan was not attributed"
+  json_assert "$ORPHANED" "d.orphaned.find(v => v.name === 'alpha/postgres').path === '$MOUNTED/alpha/data/postgres'" \
+    && ok "and carries the path a human can go and look at" || bad "the orphan has no path"
+  json_assert "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha/postgres").size_bytes > 0' \
+    && ok "with a real size measured on disk ($(json_value "$ORPHANED" 'd.orphaned.find(v => v.name === "alpha/postgres").size_human'))" || bad "the orphan has no measured size"
+  json_assert "$($BARDOLIER status --json)" 'd.orphaned_volumes.some(v => v.name === "alpha/postgres")' \
     && ok "status reports the same orphan — one derivation, two commands" || bad "status and volumes orphaned disagree"
 
   NOTFOUND="$($BARDOLIER volumes rm no_such_volume --force --json 2>/dev/null || true)"
   json_assert "$NOTFOUND" 'd.error && d.error.code === "VOLUME_NOT_FOUND"' \
-    && ok "an unknown volume is VOLUME_NOT_FOUND" || bad "an unknown volume was accepted"
+    && ok "an unknown name is VOLUME_NOT_FOUND" || bad "an unknown name was accepted"
 
-  NOCONSENT="$($BARDOLIER volumes rm alpha_pgdata --json 2>/dev/null || true)"
+  NOCONSENT="$($BARDOLIER volumes rm alpha/postgres --json 2>/dev/null || true)"
   json_assert "$NOCONSENT" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
     && ok "under --json it refuses to guess at consent for a destructive removal" || bad "volumes rm destroyed data without confirmation"
-  docker volume inspect alpha_pgdata >/dev/null 2>&1 \
-    && ok "and the volume is still there" || bad "the refused removal removed it anyway"
+  [ -d "$MOUNTED/alpha/data/postgres" ] \
+    && ok "and the data is still there" || bad "the refused removal removed it anyway"
 
-  RECLAIMED="$($BARDOLIER volumes rm alpha_pgdata --force --json)" || bad "volumes rm exited non-zero"
+  RECLAIMED="$($BARDOLIER volumes rm alpha/postgres --force --json)" || bad "volumes rm exited non-zero"
   schema_assert volumes-rm "$RECLAIMED" && ok "volumes rm --json validates against its schema" || bad "volumes rm output does not match its schema"
-  json_assert "$RECLAIMED" 'd.removed === true && d.size_bytes > 0' \
+  json_assert "$RECLAIMED" 'd.removed === true && d.kind === "directory" && d.size_bytes > 0' \
     && ok "it reports what it reclaimed ($(json_value "$RECLAIMED" 'd.size_human'))" || bad "volumes rm reported the wrong outcome"
-  docker volume inspect alpha_pgdata >/dev/null 2>&1 \
-    && bad "the volume survived its own removal" || ok "the volume is gone"
-  json_assert "$($BARDOLIER volumes orphaned --json)" 'd.orphaned.every(v => v.name !== "alpha_pgdata")' \
-    && ok "and it is no longer listed" || bad "the reclaimed volume is still listed as an orphan"
+  [ -d "$MOUNTED/alpha/data/postgres" ] \
+    && bad "the directory survived its own removal" || ok "the data directory is gone"
+  json_assert "$($BARDOLIER volumes orphaned --json)" 'd.orphaned.every(v => v.name !== "alpha/postgres")' \
+    && ok "and it is no longer listed" || bad "the reclaimed orphan is still listed"
 else
-  skip "no daemon — orphan sizing and reclaiming need real volumes"
+  skip "no daemon — orphan sizing and reclaiming need real data on disk"
 fi
 
 # ── 4. In-use refusals (§6) ───────────────────────────────────────────────────
@@ -210,13 +215,13 @@ if [ "$DOCKER_OK" = "1" ]; then
   $BARDOLIER up beta --json >/dev/null || bad "up beta exited non-zero"
   $BARDOLIER down beta >/dev/null
 
-  INUSE="$($BARDOLIER volumes rm beta_redisdata --force --json 2>/dev/null || true)"
+  INUSE="$($BARDOLIER volumes rm beta/redis --force --json 2>/dev/null || true)"
   json_assert "$INUSE" 'd.error && d.error.code === "VOLUME_IN_USE" && d.error.details.project === "beta"' \
-    && ok "a volume beta still attaches is VOLUME_IN_USE, naming the project" || bad "a live volume was removable"
-  docker volume inspect beta_redisdata >/dev/null 2>&1 \
+    && ok "data beta still attaches is VOLUME_IN_USE, naming the project" || bad "live data was removable"
+  [ -d "$MOUNTED/beta/data/redis" ] \
     && ok "and its data is untouched" || bad "the refused removal destroyed data"
 else
-  skip "no daemon — the in-use refusal needs a real volume"
+  skip "no daemon — the in-use refusal needs real data on disk"
 fi
 
 UNMOUNTED="$(BARDOLIER_ROOT="$TMP/not-mounted" $BARDOLIER volumes orphaned --json 2>/dev/null || true)"
@@ -226,7 +231,9 @@ json_assert "$UNMOUNTED" 'd.error && d.error.code === "SSD_NOT_MOUNTED"' \
 # ── 5. delete, then down-all ──────────────────────────────────────────────────
 head "5. \`delete\` and \`down-all\`"
 
-DELETED="$($BARDOLIER delete alpha --force --json)" || bad "delete exited non-zero"
+# --purge: alpha has run, so its home/ holds the container's dotfiles and a
+# plain delete refuses PROJECT_HAS_DATA rather than destroying them (§6).
+DELETED="$($BARDOLIER delete alpha --force --purge --json)" || bad "delete exited non-zero"
 json_assert "$DELETED" 'd.deleted === true' && ok "alpha is deleted" || bad "delete reported the wrong outcome"
 [ ! -e "$MOUNTED/alpha" ] && ok "its directory is gone" || bad "the project directory survived"
 
@@ -244,8 +251,8 @@ if [ "$DOCKER_OK" = "1" ]; then
     && ok "down-all stopped it" || bad "down-all did not stop a running project"
   [ "$(docker ps --format '{{.Names}}' | grep -c '^bardolier-beta' || true)" = "0" ] \
     && ok "and no bardolier container is left running" || bad "a bardolier container survived down-all"
-  docker volume inspect beta_redisdata >/dev/null 2>&1 \
-    && ok "down-all kept the data, like down does" || bad "down-all removed a named volume"
+  [ -d "$MOUNTED/beta/data/redis" ] \
+    && ok "down-all kept the data, like down does" || bad "down-all destroyed project data"
 fi
 
 # ── 6. eject: blocked by a real holder, then clear ────────────────────────────

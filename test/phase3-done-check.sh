@@ -113,8 +113,8 @@ PORT_B="$(json_value "$ADD_B" 'd.added.host_port')"
 
 grep -q "$PORT_A:5432" "$MOUNTED/alpha/docker-compose.yml" \
   && ok "compose publishes host:container for the service (§9)" || bad "the compose file does not publish the port"
-grep -q 'alpha_pgdata:/var/lib/postgresql/data' "$MOUNTED/alpha/docker-compose.yml" \
-  && ok "the service carries its named volume (§9)" || bad "no named volume in the compose file"
+grep -q './data/postgres:/var/lib/postgresql/data' "$MOUNTED/alpha/docker-compose.yml" \
+  && ok "the service binds its own data directory (§9)" || bad "no data-directory bind in the compose file"
 grep -q 'POSTGRES_DB: alpha' "$MOUNTED/alpha/docker-compose.yml" \
   && ok "{project} is interpolated into the service env (§9)" || bad "service env was not interpolated"
 
@@ -244,17 +244,17 @@ if [ "$DOCKER_OK" = "1" ]; then
     && ok "and the manifest still records the same port" || bad "the manifest changed across a restart"
   tcp_connect "$PORT_A" && ok "the same port is reachable again after the restart" || bad "$PORT_A is not listening after the restart"
 
-  # ── remove: volume orphaned, port released ──────────────────────────────────
-  head "6. \`service remove\` orphans the volume and releases the port"
+  # ── remove: data directory orphaned, port released ──────────────────────────
+  head "6. \`service remove\` orphans the data directory and releases the port"
 
   $BARDOLIER down alpha >/dev/null
   REMOVED="$($BARDOLIER service remove alpha postgres --json)" || bad "service remove exited non-zero"
   schema_assert service-remove "$REMOVED" && ok "service remove --json validates against service-remove.schema.json" || bad "service remove output does not match its schema"
-  json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.volume === 'alpha_pgdata' && d.services.length === 0" \
-    && ok "it reports the released port and the kept volume" || bad "service remove reported the wrong outcome"
+  json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.data_dir === '$MOUNTED/alpha/data/postgres' && d.services.length === 0" \
+    && ok "it reports the released port and the kept data directory" || bad "service remove reported the wrong outcome"
 
-  docker volume inspect alpha_pgdata >/dev/null 2>&1 \
-    && ok "the data volume survives — it is now an orphan" || bad "detaching destroyed the volume"
+  [ -d "$MOUNTED/alpha/data/postgres" ] \
+    && ok "the data directory survives — it is now an orphan" || bad "detaching destroyed the data"
   [ -z "$(manifest_port alpha postgres)" ] \
     && ok "the manifest no longer claims the port" || bad "the manifest still records the removed service"
   grep -q 'postgres' "$MOUNTED/alpha/docker-compose.yml" \
@@ -274,8 +274,8 @@ if [ "$DOCKER_OK" != "1" ]; then
   # Offline equivalent of section 6: detach so there is a freed port to reuse.
   REMOVED="$($BARDOLIER service remove alpha postgres --json)" || bad "service remove exited non-zero"
   schema_assert service-remove "$REMOVED" && ok "service remove --json validates against service-remove.schema.json" || bad "service remove output does not match its schema"
-  json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.volume === 'alpha_pgdata'" \
-    && ok "it reports the released port and the kept volume" || bad "service remove reported the wrong outcome"
+  json_assert "$REMOVED" "d.removed.host_port === $PORT_A && d.removed.data_dir === '$MOUNTED/alpha/data/postgres'" \
+    && ok "it reports the released port and the kept data directory" || bad "service remove reported the wrong outcome"
 fi
 
 $BARDOLIER new epsilon --archetype web >/dev/null

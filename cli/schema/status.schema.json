@@ -90,7 +90,7 @@
         },
         "dir": {
           "type": "string",
-          "description": "The project's directory under $SSD_ROOT. Reported rather than composed so the app can reveal it in Finder without knowing the layout (§3).",
+          "description": "The project's directory under its root. Reported rather than composed so the app can reveal it in Finder without knowing the layout (§3). bardolier's own files sit here; work/ data/ local/ home/ sit under it (§4.2).",
           "minLength": 1
         },
         "archetype": {
@@ -151,6 +151,11 @@
         "root": {
           "type": "string",
           "description": "The configured root's name this project lives under. Additive since phase 18.",
+          "minLength": 1
+        },
+        "work_dir": {
+          "type": "string",
+          "description": "<dir>/work — where repositories live and the dev container works (§4.2). Reported for the same reason dir is: the app must never compose a path. Additive since phase 19.",
           "minLength": 1
         }
       }
@@ -243,7 +248,23 @@
       "properties": {
         "name": {
           "type": "string",
+          "description": "A Docker volume name, or <project>/<key> for a data directory.",
           "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory (phase 19). Absent means volume.",
+          "enum": [
+            "volume",
+            "directory"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Host path of a directory orphan; null for a named volume. Additive since phase 19."
         },
         "size_bytes": {
           "type": "integer",
@@ -258,7 +279,7 @@
             "string",
             "null"
           ],
-          "description": "Owning project, from the volume's bardolier.project label, or null when it can't be attributed."
+          "description": "Owning project — the volume's bardolier.project label, or the project the data directory sits in — or null when it can't be attributed."
         }
       }
     }

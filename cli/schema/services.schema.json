@@ -14,7 +14,7 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["display", "image", "container_port", "host_port_base", "volume", "mount"],
+        "required": ["display", "image", "container_port", "host_port_base", "mount"],
         "properties": {
           "display": { "type": "string", "minLength": 1 },
           "image": { "type": "string", "minLength": 1 },
@@ -25,14 +25,9 @@
             "minimum": 1024,
             "maximum": 65535
           },
-          "volume": {
-            "type": "string",
-            "description": "Named volume; {project} is interpolated with the project name.",
-            "minLength": 1
-          },
           "mount": {
             "type": "string",
-            "description": "Container path the named volume mounts at.",
+            "description": "Container path the service's data directory (<project>/data/<key>) mounts at.",
             "pattern": "^/"
           },
           "env": {

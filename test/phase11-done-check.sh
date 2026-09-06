@@ -76,7 +76,7 @@ else
   bad "the web project's compose file does not mount bardolier-uv-cache as an external volume"
 fi
 
-if grep -qi "proxy" "$DIR/CLAUDE.md"; then
+if grep -qi "proxy" "$DIR/work/CLAUDE.md"; then
   ok "its seeded CLAUDE.md says how a second process is reached (proxy, not a second port)"
 else
   bad "the seeded CLAUDE.md is missing the proxy-not-a-second-port note"

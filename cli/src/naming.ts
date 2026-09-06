@@ -26,19 +26,6 @@ export function serviceContainerName(project: string, service: string): string {
   return `${PREFIX}-${project}-${service}`
 }
 
-/**
- * The dev container's persistent `$HOME` volume: `bardolier-myapp-home`.
- *
- * Named here with everything else so the generator, the orphan scan and
- * `delete --purge` cannot disagree about what it is called. It shares the
- * service-container shape but can never collide with one: a catalogue key is a
- * service, and `home` is not something the catalogue may define
- * (`test/phase9.test.ts`).
- */
-export function homeVolumeName(project: string): string {
-  return `${PREFIX}-${project}-home`
-}
-
 /** True for any container this tool owns; used by `down-all` in Phase 4. */
 export function isBardolierContainer(name: string): boolean {
   return name.startsWith(`${PREFIX}-`)

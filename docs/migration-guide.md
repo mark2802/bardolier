@@ -19,6 +19,29 @@ something is `ios`/`android`-specific it says so.
 
 ---
 
+## The shape you are migrating into
+
+A bardolier project directory is **not a repository** (`cli-spec.md` §3). Its
+own files sit at the top; everything else lives in four bind-mounted folders:
+
+```
+<root>/<name>/
+  project.yml, docker-compose.yml, .bardolier/   bardolier's own, not yours
+  work/   → /work         the repositories, one directory each
+  data/   → /data:ro      service data, one directory per attached service
+  local/  → /local        neither repository nor service data
+  home/   → /state/home   the dev container's $HOME
+```
+
+Two consequences run through every step below. **The repo you are migrating
+becomes `work/<repo>/`**, not the project directory itself — so nothing
+bardolier writes is inside a working tree, there is nothing to gitignore, and a
+`git clean -xdf` cannot reach the data. And **service data is a directory on the
+same disk as the project**, visible from the Mac at `data/<svc>/`, rather than a
+Docker volume on the internal disk.
+
+---
+
 ## Part 1 — The steps that apply to nearly every migration
 
 ### 1. Survey the source project
@@ -33,8 +56,11 @@ Before touching anything, read (don't yet act on):
   whether it calls a backend directly or through its own dev server.
 - Backend manifest (`requirements.txt`/`pyproject.toml`/`package.json`/...) —
   language, pinned runtime version, any background-worker process.
-- Root-level dotfiles that will collide with what `bardolier new` seeds:
-  `.gitignore`, `.dockerignore`, `CLAUDE.md` (see step 5).
+- The repo's own `CLAUDE.md`, if it has one — nothing collides with it now,
+  but it does need reading against what `new` seeds beside it (step 5).
+- Anything large that is neither code nor service data — datasets, model
+  checkpoints, media, scratch notebooks. `local/` is where those go now, so
+  decide per item rather than dragging them into the working tree (step 4).
 - Whether there's a `.git` at all, and if so `git remote -v` and current
   branch, and whether anything local is uncommitted or unpushed — this is
   exactly what decides which of step 4's three cases applies.
@@ -58,8 +84,9 @@ Before touching anything, read (don't yet act on):
   - **It's some other official, pullable image** (queue, search, object
     store, mail-catcher, ...) → add a `services.yml` entry for it (same
     shape as the existing ones: `image`, `container_port`, `host_port_base`,
-    `volume`, `mount`, optional `env`). This is additive and shared across
-    every project, not a one-off.
+    `mount`, optional `env` — there is no `volume` key, the entry's own key
+    names its data directory). This is additive and shared across every
+    project, not a one-off.
   - **It's the project's own code** (an API, a worker) → it is never a
     catalogue service. It runs as a process inside the one dev container,
     same as the frontend. See step 8.
@@ -71,11 +98,18 @@ bardolier new <name> --archetype web --services <postgres,redis,...>
 ```
 
 This assigns ports and writes `project.yml`, a generated `docker-compose.yml`,
-and seeded `.gitignore` / `.dockerignore` / `CLAUDE.md`. Do this **before**
-moving the real source in — `new` refuses (`PROJECT_EXISTS`) if the directory
-already has anything in it, and it's the only thing that assigns ports.
+the four folders above, and one seeded file: `work/CLAUDE.md`. Do this
+**before** moving the real source in — `new` refuses (`PROJECT_EXISTS`) if a
+project of that name already exists in any root, and it's the only thing that
+assigns ports.
 
 ### 4. Get the source in — move, clone, or copy, depending what it is
+
+**It lands in `work/<repo>/`** — a directory per repository, beside the seeded
+`work/CLAUDE.md`, never the project directory itself. (`down`'s handoff note
+walks `work/*/`, so a tree dumped directly into `work/` is invisible to it.)
+Repos that used to be checked out side by side each become their own directory
+under `work/`; they share one container and one network.
 
 However it arrives, exclude anything regenerable that shouldn't cost SSD
 space: `node_modules`, `.venv`, `__pycache__`, build output (`.next`, `dist`,
@@ -86,7 +120,9 @@ to skip," though — a `.gitignore` also commonly excludes large raw datasets,
 model checkpoints, or media assets purely for size, not because they're
 regenerable. Check what a gitignored entry actually *is* before leaving it
 behind; anything irreplaceable still needs to move (by hand, not via git)
-even though git itself will never carry it.
+even though git itself will never carry it. Put that material in `local/`
+rather than back inside the working tree: same disk, mounted at `/local`, and
+no fresh clone or `git clean` can lose it.
 Which of the three below applies is exactly what step 1's `git remote -v`
 check was for.
 
@@ -110,29 +146,26 @@ check was for.
   untracked; either is fine, but it's the project owner's call, not a
   default this guide should make for you.
 
-### 5. Reconcile files that exist on both sides — merge, don't clobber
+### 5. Leave the repo's own files alone — nothing collides any more
 
-`bardolier new` just seeded three files the old project may already have:
+There is nothing to merge or clobber. bardolier seeds one file,
+`work/CLAUDE.md`, and the repo arrived as `work/<repo>/`, a directory below it:
 
-- **`.gitignore`** — keep the project's own (it's more complete for that
-  project); just add bardolier's one addition, `.bardolier/` (the handoff note,
-  regenerated on every stop — churn, not history).
-- **`.dockerignore`** — keep bardolier's seeded one unless the project had its
-  own at the root (rare, since most only had one per Dockerfile's own
-  directory).
-- **`CLAUDE.md`** — genuinely merge. Keep the project's own dev-workflow
-  content (test commands, conventions, architecture notes) and append
-  bardolier's seeded sections (environment boundary, dev-server/proxy note,
-  services, "managing this project"). One file, both halves.
+- **`.gitignore` / `.dockerignore`** — the repo's own, untouched. bardolier
+  adds no entry to either; its files are above `work/` and inside no working tree,
+  so there is nothing left to ignore.
+- **`CLAUDE.md`** — two files, not one. bardolier's `work/CLAUDE.md` says where
+  the agent is (the layout, `/data` read-only, service names, the boundary);
+  the repo's own `work/<repo>/CLAUDE.md` keeps its dev-workflow content
+  unchanged. Claude Code reads both — the parent and the one in the working
+  directory — so they layer instead of competing. Don't copy the repo's
+  content up, and don't paste bardolier's sections down into a file that is
+  about to be committed.
 
-**Check for a case-only collision before you do any of this.** On the
-default (case-insensitive) macOS/APFS filesystem, `claude.md` and
-`CLAUDE.md` are **the same file** — writing one after the other silently
-overwrites it, no error, no warning. Test it if unsure:
-`touch a.md A.MD && ls` — one file means the filesystem folded them. If the
-project has its own lowercase `claude.md` (or any other seeded filename in a
-different case), that's exactly this collision — merge deliberately per
-above rather than letting a plain copy decide the winner by accident.
+Read the repo's `CLAUDE.md` anyway, for one thing: instructions that assume
+the old shape — `docker compose up` from the repo root, `localhost:5432`
+connection strings, a build step that must run on the host. Those are wrong
+here, and correcting them is a real edit to that repo (step 6, Part 3).
 
 ### 6. Point the environment at service names, not `localhost`
 
@@ -143,6 +176,12 @@ Docker network. Reconcile any database/user names the project's code expects
 against what the catalogue actually provisions (it interpolates
 `{project}` for the database name, and won't set a user unless you told it
 to) — update the project's env, don't fight the catalogue.
+
+Nothing in the env should name a data *path*, either: each service's data
+directory is `data/<svc>/` in the project, bound at the catalogue's `mount`.
+It is readable from the Mac, and mounted **read-only** into the dev container —
+inspect it from in there, never write it, because a live database written from
+a second container corrupts.
 
 ### 7. Pin the toolchain version(s) to what the project already committed to
 
@@ -170,15 +209,22 @@ before `up`.
 ```
 bardolier up <name>
 ```
-Shell in (or let the app), install dependencies for whatever runs in the
-container (`uv sync` / `npm install`, per process), start each process by
-hand — this container is a devbox to exec into, nothing supervises processes
-for you. Then verify from the **Mac**, not from inside the container:
+Shell in (or let the app) — you land in `/work`, so `cd <repo>` first — and
+install dependencies for whatever runs in the container (`uv sync` /
+`npm install`, per repo, per process), then start each process by hand — this
+container is a devbox to exec into, nothing supervises processes for you.
+Then verify from the **Mac**, not from inside the container:
 `bardolier status <name>` for the URL, load it in a browser, confirm a page that
 hits the backend actually gets data, confirm the backend can reach its
 services by name (archetypes with a dev server; a `library` project instead
 just runs its scripts/test suite by hand inside the container and confirms
-they complete — there's no URL to load).
+they complete — there's no URL to load). `bardolier status` also reports `dir`
+and `work_dir`, so no path here needs composing by hand.
+
+Two checks worth doing once, because they are what the layout bought: after
+the first write, `ls <dir>/data/<svc>/` on the Mac shows the database's files
+on the project's own disk; and `git status` in `work/<repo>/` is clean, with no
+bardolier file to ignore.
 
 ### 10. Note anything the project needed that bardolier couldn't do
 
@@ -254,11 +300,15 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   in the same one dev container — not a bardolier concept, no extra ports unless
   Part 2 applies to it too.
 
-- **Existing volume data needs to survive the move**, rather than starting
-  fresh. Run a temporary container that mounts both the old bind-mounted (or
-  Docker-volume) data and the new catalogue-provisioned volume, and copy
-  between them (`tar`/`cp`) before the first real `up`. Do this once, before
-  anything writes to the fresh volume.
+- **Existing service data needs to survive the move**, rather than starting
+  fresh. The destination is a plain host directory now — `<dir>/data/<svc>/`,
+  created by `new`. If the old data was itself a bind mount, copy it in
+  directly on the Mac; if it was a Docker volume, run a throwaway container
+  mounting both the old volume and that directory and copy between them
+  (`tar`/`cp`). Either way copy the data directory's *contents*, not the
+  directory itself, and do it **before the first `up`**, while it is still
+  empty. Prefer a dump/restore across a major-version gap — the catalogue's
+  image may be newer than whatever wrote the files.
 
 - **The project has real migration tooling** (alembic, Prisma, knex, ...)
   that actually runs against the database (many projects declare one but
@@ -309,20 +359,21 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   anything shipping a `curl | sh` installer. It is neither an apt package
   (`deps add` is apt-only, and its derived image is shared by every project
   declaring the same set) nor big enough to be the toolchain gap below.
-  Installers default to `$HOME`, which here is the per-project `$HOME` volume:
-  it survives `down`, but not `delete --purge` or a `docker` prune of unused
-  volumes, and nothing records how to rebuild it. Route around it by
-  installing under the **project directory** instead — that's on the SSD and
-  survives both. Point the installer at it (`BUN_INSTALL=/work/.bun`, a clone
-  into `/work/.claude/skills/…`); symlink the `$HOME` paths the tool
-  hardcodes to their `/work` counterparts; and put any `PATH` it needs in the
-  project's `.claude/settings.json` `env` block — the generated compose file
-  cannot extend `PATH`, because `${PATH}` there substitutes the **Mac's**
-  value. Then leave a small re-link script beside the install: the symlinks
-  and the `.bashrc` line are the only parts still living in the volume, so
-  recovery after a prune is one command. This is a documented route-around,
-  not a bardolier capability — see "Persisting user-space tooling installed
-  inside the container" in `docs/migration-guide-gaps.md`.
+  Installers default to `$HOME`, and `$HOME` is the project's own `home/`
+  directory now (§3): same disk as the project, survives `down` and any Docker
+  prune, and a plain `delete` refuses (`PROJECT_HAS_DATA`) rather than taking
+  it. So let the installer put it there — the old advice to redirect
+  everything under `/work` and symlink back buys nothing any more, and it put
+  tool state inside a repository. Two things still need deciding. Anything
+  that is *work rather than tooling* (a checkout the tool clones, generated
+  assets you want on the Mac) is better under `/work` or `/local`, where it is
+  visible without exec'ing in. And any `PATH` the tool needs goes in the repo's
+  `.claude/settings.json` `env` block — the generated compose file cannot
+  extend `PATH`, because `${PATH}` there substitutes the **Mac's** value. What
+  is still missing is reproducibility: the install is a sequence of commands
+  typed once, and nothing records how to redo it on another machine — leave a
+  short script in `local/` saying what you ran. See "Persisting user-space
+  tooling installed inside the container" in `docs/migration-guide-gaps.md`.
 
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
@@ -342,7 +393,9 @@ the project in those updates.
 > Read `docs/migration-guide.md` and `docs/migration-guide-gaps.md` in full.
 > Then survey the project at `<PATH>` the same way Part 1, step 1 of the
 > guide describes (compose files, Dockerfiles, env files, package manifests,
-> dev scripts, any seeded-filename collisions) — read-only, don't change
+> dev scripts, instructions in the repo's own `CLAUDE.md` that assume the old
+> shape, large material that is neither code nor service data) — read-only,
+> don't change
 > anything there or in this repo yet.
 >
 > For everything you find that this project needs and the guide doesn't

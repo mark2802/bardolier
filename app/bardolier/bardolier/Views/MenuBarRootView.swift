@@ -449,15 +449,17 @@ struct ProjectRow: View {
         }
     }
 
-    /// Deleting keeps the data volumes unless the user says otherwise (§9,
-    /// CLAUDE.md: never destroy data to save a step).
+    /// The project's data lives inside its folder (phase 19), so deleting the
+    /// folder destroys it. Without the toggle the CLI refuses PROJECT_HAS_DATA
+    /// rather than taking it silently (CLAUDE.md: never destroy data to save a
+    /// step).
     private var deleteConfirmation: ConfirmationRequest {
         ConfirmationRequest(
             title: "Delete \(project.name)?",
-            detail: "Its containers and its folder on the SSD are removed, and its host ports are released. "
-                + "Data volumes are kept and become reclaimable orphans unless you say otherwise.",
+            detail: "Its containers and its whole project folder are removed, and its host ports are released. "
+                + "The folder holds its service data and the container's home, so this destroys them too.",
             confirmLabel: "Delete",
-            toggleLabel: "Also delete its data volumes",
+            toggleLabel: "Also delete its data",
             perform: { purge in
                 Task { await store.delete(project: project.name, purge: purge) }
             }

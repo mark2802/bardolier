@@ -134,7 +134,7 @@ else
   bad "the ios project's compose file does not use bardolier-ios"
 fi
 
-CLAUDE_MD="$IOS_DIR/CLAUDE.md"
+CLAUDE_MD="$IOS_DIR/work/CLAUDE.md"
 if grep -q "xcodebuild" "$CLAUDE_MD" && grep -qi "never run" "$CLAUDE_MD" && grep -q "swiftlint" "$CLAUDE_MD"; then
   ok "its seeded CLAUDE.md forbids xcodebuild/Simulator/signing and points at what does work here"
 else
@@ -208,7 +208,7 @@ if [ -n "$IOS_CONTAINER" ]; then
 
     # The reason HOST_UID/HOST_GID exist at all.
     if in_ios 'touch /work/written-by-the-agent' >/dev/null 2>&1; then
-      OWNER="$(stat -f '%u' "$IOS_DIR/written-by-the-agent" 2>/dev/null || echo '?')"
+      OWNER="$(stat -f '%u' "$IOS_DIR/work/written-by-the-agent" 2>/dev/null || echo '?')"
       if [ "$OWNER" = "$HOST_UID" ]; then
         ok "a file the container writes into /work comes back owned by you ($HOST_UID)"
       else
@@ -241,7 +241,7 @@ else
   bad "the android compose file does not mount bardolier-gradle-cache as an external volume"
 fi
 
-if grep -qi "emulator" "$AND_DIR/CLAUDE.md" && grep -q "adb" "$AND_DIR/CLAUDE.md"; then
+if grep -qi "emulator" "$AND_DIR/work/CLAUDE.md" && grep -q "adb" "$AND_DIR/work/CLAUDE.md"; then
   ok "its seeded CLAUDE.md keeps the emulator and adb on the host side (§10)"
 else
   bad "the android CLAUDE.md does not name the host-side boundary"
@@ -249,14 +249,14 @@ fi
 
 # A minimal but real Android application module: resources compiled by aapt2,
 # an APK linked, and a JVM unit test — the three things the archetype promises.
-mkdir -p "$AND_DIR/app/src/main" "$AND_DIR/app/src/test/java/com/example/droid"
-cat > "$AND_DIR/settings.gradle" <<'GRADLE'
+mkdir -p "$AND_DIR/work/app/src/main" "$AND_DIR/work/app/src/test/java/com/example/droid"
+cat > "$AND_DIR/work/settings.gradle" <<'GRADLE'
 pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement { repositories { google(); mavenCentral() } }
 rootProject.name = 'droid'
 include ':app'
 GRADLE
-cat > "$AND_DIR/app/build.gradle" <<'GRADLE'
+cat > "$AND_DIR/work/app/build.gradle" <<'GRADLE'
 plugins { id 'com.android.application' version '9.0.1' }
 android {
     namespace 'com.example.droid'
@@ -275,13 +275,13 @@ android {
 }
 dependencies { testImplementation 'junit:junit:4.13.2' }
 GRADLE
-cat > "$AND_DIR/app/src/main/AndroidManifest.xml" <<'XML'
+cat > "$AND_DIR/work/app/src/main/AndroidManifest.xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="droid" />
 </manifest>
 XML
-cat > "$AND_DIR/app/src/test/java/com/example/droid/MathTest.java" <<'JAVA'
+cat > "$AND_DIR/work/app/src/test/java/com/example/droid/MathTest.java" <<'JAVA'
 package com.example.droid;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
@@ -374,11 +374,11 @@ if [ -n "$AND_CONTAINER" ]; then
     fi
 
     APK=""
-    for candidate in "$AND_DIR"/app/build/outputs/apk/debug/*.apk; do
+    for candidate in "$AND_DIR"/work/app/build/outputs/apk/debug/*.apk; do
       [ -f "$candidate" ] && APK="$candidate" && break
     done
     if [ -n "$APK" ]; then
-      ok "an APK is on the SSD, written through the bind mount: $(basename "$APK")"
+      ok "an APK is in work/, written through the bind mount: $(basename "$APK")"
       OWNER="$(stat -f '%u' "$APK" 2>/dev/null || echo '?')"
       if [ "$OWNER" = "$HOST_UID" ]; then
         ok "and it belongs to you ($HOST_UID), not to root"

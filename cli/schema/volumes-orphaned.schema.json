@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/volumes-orphaned.schema.json",
   "title": "bardolier volumes orphaned output",
-  "description": "Named volumes no current project manifest claims, with sizes. cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app ships (Phase 5+).",
+  "description": "Everything no current project manifest claims, with sizes: named volumes, and projects' leftover data directories (phase 19). cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
   "required": ["orphaned", "total_bytes", "total_human"],
   "properties": {
     "orphaned": {
       "type": "array",
-      "description": "Reclaimable volumes, sorted by name.",
+      "description": "Reclaimable volumes and data directories, sorted by name.",
       "items": { "$ref": "#/$defs/orphanedVolume" }
     },
     "total_bytes": {
@@ -25,12 +25,25 @@
       "additionalProperties": false,
       "required": ["name", "size_bytes", "size_human", "last_project"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
+        "name": {
+          "type": "string",
+          "description": "A Docker volume name, or <project>/<key> for a data directory.",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory (phase 19). Absent means volume.",
+          "enum": ["volume", "directory"]
+        },
+        "path": {
+          "type": ["string", "null"],
+          "description": "Host path of a directory orphan; null for a named volume. Additive since phase 19."
+        },
         "size_bytes": { "type": "integer", "minimum": 0 },
         "size_human": { "type": "string", "minLength": 1 },
         "last_project": {
           "type": ["string", "null"],
-          "description": "Owning project, from the volume's bardolier.project label, or null when it can't be attributed."
+          "description": "Owning project — the volume's bardolier.project label, or the project the data directory sits in — or null when it can't be attributed."
         }
       }
     }

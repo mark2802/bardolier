@@ -115,11 +115,12 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["down", project])
     }
 
-    /// Delete a project. `purge` also destroys its named volumes; the default
-    /// keeps them as reclaimable orphans. CONFIRM WITH THE USER FIRST — this
-    /// always passes `--force`.
+    /// Delete a project. Its data lives inside the directory (phase 19), so a
+    /// plain delete refuses PROJECT_HAS_DATA once there is any and `purge` is
+    /// the only way through. CONFIRM WITH THE USER FIRST — this always passes
+    /// `--force`.
     func delete(project: String, purge: Bool = false) async throws -> DeleteOutput {
-        try await run(["delete", project, "--force"] + (purge ? ["--purge"] : ["--keep-data"]))
+        try await run(["delete", project, "--force"] + (purge ? ["--purge"] : []))
     }
 
     /// Attach a service. Fails PROJECT_RUNNING unless the project is stopped —
@@ -128,7 +129,7 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["service", "add", project, service])
     }
 
-    /// Detach a service. The data volume is KEPT and becomes a listed orphan.
+    /// Detach a service. The data directory is KEPT and becomes a listed orphan.
     func serviceRemove(project: String, service: String) async throws -> ServiceRemoveOutput {
         try await run(["service", "remove", project, service])
     }
@@ -152,6 +153,8 @@ nonisolated struct BardolierClient: Sendable {
     }
 
     /// Destroys data. CONFIRM WITH THE USER FIRST — this passes `--force`.
+    /// Reclaim one orphan — a named volume, or a `<project>/<key>` data
+    /// directory (phase 19). `volumes orphaned` names both kinds.
     func removeVolume(name: String) async throws -> VolumeRemoveOutput {
         try await run(["volumes", "rm", name, "--force"])
     }

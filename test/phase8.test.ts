@@ -264,12 +264,12 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
   })
 
   test('the seeded CLAUDE.md steers the agent the same way the image does (§10)', () => {
-    const ios = seededFiles('myapp', 'ios').find((file) => file.name === 'CLAUDE.md')?.contents ?? ''
+    const ios = seededFiles('myapp', 'ios').find((file) => file.name === 'work/CLAUDE.md')?.contents ?? ''
     assert.match(ios, /xcodebuild/, 'the ios note must name the command it is forbidding')
     assert.match(ios, /swiftlint/, 'and what the container CAN do instead')
     assert.match(ios, /logic tests/)
 
-    const android = seededFiles('myapp', 'android').find((file) => file.name === 'CLAUDE.md')?.contents ?? ''
+    const android = seededFiles('myapp', 'android').find((file) => file.name === 'work/CLAUDE.md')?.contents ?? ''
     assert.match(android, /Gradle builds and unit tests \*\*run in this container\*\*/)
     assert.match(android, /adb/, 'the android note must name adb, which the image does not carry')
   })
@@ -337,10 +337,9 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     // Nothing changes for the one image with no cache — no mount, no volumes key.
     const ios = renderCompose({ manifest: swiftbits(), catalogue: services })
     assert.ok(!ios.includes(CACHE) && !ios.includes(UV_CACHE), 'an image with no cache must not gain one')
-    // It DOES declare its own home volume — every project has one — but no
-    // `external: true`: nothing on that image is shared with anyone.
-    assert.match(ios, /\nvolumes:\n/)
-    assert.ok(!ios.includes('external: true'), 'an ios project shares no volume with anyone')
+    // And since phase 19 there is nothing else to declare: a project's data and
+    // its `$HOME` are directories inside it, so the cache was the last volume.
+    assert.doesNotMatch(ios, /\nvolumes:\n/, 'an image with no cache declares no volumes block at all')
 
     // Same manifest, same bytes (§9).
     assert.equal(android, renderCompose({ manifest: droid(), catalogue: services }))
@@ -387,7 +386,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     assert.equal(held.claimedBy.get(CACHE), 'droid')
 
     // The last android project goes, and with it the only reason to keep it.
-    await runDelete(ctx, { name: 'droid', force: true, keepData: true, purge: false, json: true })
+    await runDelete(ctx, { name: 'droid', force: true, purge: false, json: true })
     const freed = await scanVolumes(ctx)
     assert.deepEqual(freed.orphans.map((orphan) => orphan.name), [CACHE])
     // No project made it, so none is named as its last — the schema allows that
@@ -415,24 +414,20 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
     assert.deepEqual(docker.calls, [], 'Docker was never asked to remove it')
   })
 
-  test('`delete --purge` takes the project’s data and leaves the cache', async () => {
+  test('`delete --purge` takes the project’s data and never touches the cache', async () => {
     const box = sandbox()
-    const docker = stubDocker({
-      volumes: [
-        { name: CACHE, labels: { 'bardolier.role': 'cache' } },
-        { name: 'bardolier-droid-home', labels: { 'bardolier.project': 'droid', 'bardolier.role': 'home' } },
-        { name: 'droid_pgdata', labels: { 'bardolier.project': 'droid', 'bardolier.service': 'postgres' } },
-      ],
-    })
+    const docker = stubDocker({ volumes: [{ name: CACHE, labels: { 'bardolier.role': 'cache' } }] })
     const ctx = makeContext(box, docker)
     await runNew(ctx, { name: 'droid', archetype: 'android', services: 'postgres' })
 
-    await runDelete(ctx, { name: 'droid', force: true, keepData: false, purge: true, json: true })
-    const removed = docker.calls.filter((call) => call.kind === 'removeVolume').map((call) => call.name)
+    await runDelete(ctx, { name: 'droid', force: true, purge: true, json: true })
+
+    assert.equal(box.exists('droid'), false, 'the data and the home went with the directory (phase 19)')
     assert.deepEqual(
-      removed,
-      ['bardolier-droid-home', 'droid_pgdata'],
-      'purge destroys what the project owns — its home included — not what it shares',
+      docker.calls.filter((call) => call.kind === 'removeVolume'),
+      [],
+      'the cache is shared by every project on the image; purging one must not take it',
     )
+    assert.deepEqual(await docker.volumeNames(), [CACHE])
   })
 })

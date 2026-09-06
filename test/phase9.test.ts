@@ -5,9 +5,10 @@
  * reach what it served, or remember any of it after the stop.
  *   - THE AGENT IS IN THE IMAGE and outside `$HOME`, a mounted volume that
  *     would copy anything left under it once per project.
- *   - `$HOME` IS A VOLUME, one per project, at the path `CONTAINER_HOME` and
- *     all three Dockerfiles agree on. `down` removes the container, so a home
- *     in its writable layer loses the login and the history every time.
+ *   - `$HOME` IS A BIND, one per project (`home/`, phase 19), at the path
+ *     `CONTAINER_HOME` all three Dockerfiles agree on. `down` removes the
+ *     container, so a home in its writable layer loses the login and the
+ *     history every time.
  *   - THE HOST IS LENT, NOT COPIED: the generated file names the variables and
  *     carries no values, so it is identical with and without them.
  *   - THE DEV SERVER IS REACHABLE — §9's one exception to "publishes nothing",
@@ -19,12 +20,14 @@
 import { test, describe, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 
 import { CONTAINER_HOME, baseImages } from '../cli/src/images.ts'
 import { PASSTHROUGH_ENV, renderCompose } from '../cli/src/compose.ts'
 import { ARCHETYPE_APP_PORT } from '../cli/src/model/archetype.ts'
-import { devContainerName, homeVolumeName } from '../cli/src/naming.ts'
+import { devContainerName } from '../cli/src/naming.ts'
+import { HOME_DIR } from '../cli/src/layout.ts'
 import { assignedPorts } from '../cli/src/allocator.ts'
 import { HANDOFF_DIR, HANDOFF_FILENAME, SUMMARY_PROMPT, summaryArgv } from '../cli/src/handoff.ts'
 import { runNew } from '../cli/src/commands/new.ts'
@@ -126,23 +129,27 @@ describe('Claude Code is part of every base image', () => {
 // ── $HOME survives the stop (§9) ─────────────────────────────────────────────
 
 describe('the dev container home', () => {
-  test('is mounted from a per-project named volume', () => {
+  test('is bound from the project’s own home/ folder', () => {
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    assert.ok(doc.services.dev.volumes.includes(`${homeVolumeName('myapp')}:${CONTAINER_HOME}`))
+    assert.ok(doc.services.dev.volumes.includes(`./${HOME_DIR}:${CONTAINER_HOME}`))
   })
 
-  test('is the project’s own, labelled so the orphan scan can attribute it', () => {
+  test('it is inside the project, so it needs no label to be attributed', () => {
+    // Phase 19: the home moved from a labelled named volume into `home/`. The
+    // project directory IS the attribution, and `delete` takes it with the dir.
+    // (bardolier-web still declares the shared `uv` cache, which belongs to no
+    // project — the point is that no volume is named after this one.)
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    const volume = doc.volumes[homeVolumeName('myapp')]
-    assert.equal(volume.labels['bardolier.project'], 'myapp')
-    assert.equal(volume.labels['bardolier.role'], 'home')
-    // NOT external: unlike the shared toolchain cache, this one is created and
-    // owned by this project's Compose (images.ts).
-    assert.equal(volume.external, undefined)
+    assert.deepEqual(Object.keys(doc.volumes ?? {}), ['bardolier-uv-cache'])
   })
 
-  test('two projects never share one', () => {
-    assert.notEqual(homeVolumeName('alpha'), homeVolumeName('beta'))
+  test('two projects never share one — each binds its own directory', async () => {
+    const box = sandbox()
+    const ctx = context(box, { docker: stubDocker() })
+    await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
+    await runNew(ctx, { name: 'beta', archetype: 'web', services: undefined })
+    assert.ok(box.exists('alpha', HOME_DIR))
+    assert.ok(box.exists('beta', HOME_DIR))
   })
 })
 
@@ -273,6 +280,8 @@ describe('the handoff note', () => {
     })
     const ctx = context(box, { docker, git: options.git ?? stubGit(SOME_FACTS) })
     box.writeProject('myapp', manifest('myapp'))
+    // `work/` is where the repositories are (phase 19); the note walks it.
+    mkdirSync(join(box.path('myapp'), 'work', 'lexer'), { recursive: true })
     return { docker, ctx }
   }
 
@@ -301,6 +310,54 @@ describe('the handoff note', () => {
     assert.match(note, /Finish the lexer\./)
     assert.match(note, /feature\/parser/, 'the repository half is there too')
     assert.match(note, /abc1234 Teach the lexer about comments/)
+  })
+
+  test('walks work/*/ and reports each repository it finds', async () => {
+    const box = sandbox()
+    // `work/` itself is not a repo here; the clones sit in it. Only a
+    // path-aware stub can tell those two shapes apart.
+    const clones: Git = {
+      identity: async () => ({ name: 'Mark', email: 'mark@example.com' }),
+      facts: async (dir) => (/work\/(lexer|parser)$/.test(dir) ? SOME_FACTS : null),
+    }
+    const { ctx } = await stoppedProject(box, { exec: answered('### Next steps\nFinish the lexer.'), git: clones })
+    mkdirSync(join(box.path('myapp'), 'work', 'parser'), { recursive: true })
+    // Not a directory, and so not a repository: `work/` is the user's.
+    writeFileSync(join(box.path('myapp'), 'work', 'notes.md'), '# scratch\n')
+
+    await runDown(ctx, 'myapp')
+
+    const note = box.read('myapp', HANDOFF_DIR, HANDOFF_FILENAME) ?? ''
+    assert.match(note, /#### work\/lexer/)
+    assert.match(note, /#### work\/parser/)
+    assert.ok(!note.includes('notes.md'), 'a loose file is not a repository')
+  })
+
+  test('a repository cloned AS work/ is the one repository, not zero', async () => {
+    // `git clone … work` is as ordinary as cloning beside it, and a note that
+    // said "no repositories" there would be wrong about the whole project.
+    const box = sandbox()
+    const { ctx } = await stoppedProject(box, { exec: answered('### Next steps\nShip it.') })
+
+    await runDown(ctx, 'myapp')
+
+    const note = box.read('myapp', HANDOFF_DIR, HANDOFF_FILENAME) ?? ''
+    assert.match(note, /#### work$/m)
+    assert.match(note, /feature\/parser/)
+  })
+
+  test('a project with no repository says so rather than saying nothing', async () => {
+    const box = sandbox()
+    const { ctx } = await stoppedProject(box, {
+      exec: answered('### Next steps\nStill deciding.'),
+      git: stubGit(null),
+    })
+
+    await runDown(ctx, 'myapp')
+
+    const note = box.read('myapp', HANDOFF_DIR, HANDOFF_FILENAME) ?? ''
+    assert.match(note, /No git repositories under `work\/`\./)
+    assert.match(note, /Still deciding\./, 'the agent half survives on its own')
   })
 
   test('asks with --continue, so the answer comes from the session that happened', () => {
@@ -338,6 +395,7 @@ describe('the handoff note', () => {
     // Nothing running: there is no container to exec into.
     const docker = stubDocker({ exec: answered('should never be asked') })
     const ctx = context(box, { docker, git: stubGit(SOME_FACTS) })
+    mkdirSync(join(box.path('myapp'), 'work', 'lexer'), { recursive: true })
 
     await runDown(ctx, 'myapp')
 
@@ -387,7 +445,7 @@ describe('the handoff note', () => {
     const { docker, ctx } = await stoppedProject(box, { exec: answered('a summary') })
     const { runDelete } = await import('../cli/src/commands/delete.ts')
 
-    await runDelete(ctx, { name: 'myapp', force: true, keepData: true, purge: false, json: true })
+    await runDelete(ctx, { name: 'myapp', force: true, purge: false, json: true })
 
     assert.ok(!docker.calls.some((call) => call.kind === 'exec'))
   })

@@ -31,7 +31,7 @@ COMMANDS=(
   "status [<name>]"
   "up <name> [--no-shell]"
   "down <name>"
-  "delete <name> [--force] [--keep-data | --purge]"
+  "delete <name> [--force] [--purge]"
   "service add <project> <svc>"
   "service remove <project> <svc>"
   "service list <project>"

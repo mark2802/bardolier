@@ -8,9 +8,10 @@
  * activity rendering — would have to model the in-between. Stopping first keeps
  * "the manifest describes what is running" true at all times.
  *
- * Detaching KEEPS the data volume. It becomes a listed orphan, reclaimable
- * through `volumes rm` (Phase 4). Removing a service is a wiring change; losing
- * a database to it would be a data loss the user never asked for.
+ * Detaching KEEPS the data directory. It becomes a listed orphan of the project
+ * that holds it, reclaimable through `volumes rm` (Phase 4). Removing a service
+ * is a wiring change; losing a database to it would be a data loss the user
+ * never asked for.
  *
  * `list` is Docker-free by design — manifest plus catalogue, no daemon — so it
  * answers while Docker is down. Live state comes from `status` (§7).
@@ -22,7 +23,8 @@
 
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { attachedKeys, renderCompose, volumeName } from '../compose.ts'
+import { attachedKeys, renderCompose } from '../compose.ts'
+import { serviceDataDir } from '../layout.ts'
 import { allocatePorts, type PortRequest } from '../allocator.ts'
 import { attachedServices, describeService } from '../services.ts'
 import { validate } from '../schema.ts'
@@ -122,8 +124,8 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
 
   return {
     project: manifest.name,
-    added: describeService(manifest.name, key, definition, hostPort),
-    services: attachedServices(next, catalogue),
+    added: describeService(manifest.name, key, definition, hostPort, dir),
+    services: attachedServices(next, catalogue, dir),
     compose_path: composePath(dir),
     compose_regenerated: regenerated.changed,
   }
@@ -134,7 +136,7 @@ export function renderServiceAdd(output: ServiceAddOutput): string[] {
   return [
     `Attached ${added.display} (${added.key}) to ${output.project}.`,
     `  host port: ${added.host_port} → :${added.container_port}   ${added.connection_hint}`,
-    `  volume:    ${added.volume}`,
+    `  data dir:  ${added.data_dir}`,
     `  compose:   ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`,
     '',
     `The host port is a debugging tap. Inside the project, connect to \`${added.key}:${added.container_port}\`.`,
@@ -165,15 +167,13 @@ export async function runServiceRemove(ctx: Context, request: ServiceRequest): P
   delete remaining[key]
   const next: ProjectManifest = { ...manifest, services: remaining }
 
-  // The volume name comes from the catalogue. A service the catalogue has
-  // forgotten can still be detached — that is how a project gets unstuck — it
-  // just cannot be told where its data went.
-  let volume: string | null = null
+  // The catalogue is consulted only to describe what is LEFT. The detached
+  // service's data directory is named by its key, so a service the catalogue
+  // has forgotten can still be detached — that is how a project gets unstuck —
+  // and can still be told where its data went.
   let catalogue: ServiceCatalogue | null = null
   try {
     catalogue = ctx.catalogue().catalogue
-    const definition = catalogue.services[key]
-    if (definition) volume = volumeName(definition, manifest.name)
   } catch {
     catalogue = null
   }
@@ -182,8 +182,8 @@ export async function runServiceRemove(ctx: Context, request: ServiceRequest): P
 
   return {
     project: manifest.name,
-    removed: { key, host_port: attachment.host_port, volume },
-    services: attachedServices(next, catalogue),
+    removed: { key, host_port: attachment.host_port, data_dir: serviceDataDir(dir, key) },
+    services: attachedServices(next, catalogue, dir),
     compose_path: composePath(dir),
     compose_regenerated: regenerated.changed,
   }
@@ -195,11 +195,7 @@ export function renderServiceRemove(output: ServiceRemoveOutput): string[] {
     `Detached ${removed.key} from ${output.project}.`,
     `  released host port ${removed.host_port} — free for the next \`service add\`.`,
   ]
-  if (removed.volume) {
-    lines.push(`  kept volume ${removed.volume}; it is now an orphan (\`bardolier volumes orphaned\`).`)
-  } else {
-    lines.push('  its volume was kept, but the catalogue no longer defines the service, so its name is unknown.')
-  }
+  lines.push(`  kept ${removed.data_dir}; it is now an orphan (\`bardolier volumes orphaned\`).`)
   lines.push(`  compose: ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`)
   return lines
 }
@@ -211,7 +207,7 @@ export function collectServiceList(ctx: Context, name: string | undefined): Serv
   const catalogue = catalogueIfNeeded(ctx, project.manifest)
   return {
     project: project.name,
-    services: attachedServices(project.manifest, catalogue),
+    services: attachedServices(project.manifest, catalogue, project.dir),
   }
 }
 
@@ -223,7 +219,7 @@ export function renderServiceList(output: ServiceListOutput): string[] {
   for (const service of output.services) {
     lines.push(`  ${service.display} (${service.key})`)
     lines.push(`    host :${service.host_port} → :${service.container_port}   ${service.connection_hint}`)
-    lines.push(`    volume ${service.volume}`)
+    lines.push(`    data ${service.data_dir}`)
   }
   return lines
 }

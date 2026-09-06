@@ -38,6 +38,7 @@ import type { UpOutput, UpService } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 import { composePath, observeProject, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
+import { ensureProjectDirs } from '../layout.ts'
 
 /** The catalogue is needed only when something is attached (§4.1 chain can fail). */
 function catalogueFor(ctx: Context, manifest: ProjectManifest): ServiceCatalogue | null {
@@ -177,6 +178,11 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
 
   // Before the compose file is rendered from it — the port is one of its inputs.
   await ensureAppPort(ctx, manifest, dir)
+
+  // Every `up`, not only `new`: a hand-deleted directory heals here, and a
+  // service attached since the last start gets its data directory. Letting
+  // Docker create a bind source is what this avoids (§4.2, `layout.ts`).
+  ensureProjectDirs(dir, attachedKeys(manifest))
 
   const catalogue = catalogueFor(ctx, manifest)
   const regenerated = regenerateCompose(dir, manifest, catalogue)

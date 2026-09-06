@@ -23,51 +23,59 @@ under `$HOME`, self-updates, and keeps mutable config and state there; it is
 a per-project (or per-user) choice, not something every project on the base
 image should carry.
 
-**Why it doesn't work today:** the three mechanisms that persist something
-each answer a different question, and none of them answers this one.
-`extra_packages` (§6 Deps) is apt-only — one `apt-get install` line in an
-image that is content-addressed and shared by every project declaring the
-same set, so it cannot hold a `git clone` plus an install script, and should
-not hold a per-user preference. The base images hold toolchains, pinned and
+**Why it doesn't work today** (narrowed by phase 19): the mechanisms that
+persist something each answer a different question. `extra_packages` (§6
+Deps) is apt-only — one `apt-get install` line in an image that is
+content-addressed and shared by every project declaring the same set, so it
+cannot hold a `git clone` plus an install script, and should not hold a
+per-user preference. The base images hold toolchains, pinned and
 checksum-verified, which is right for a runtime every project on that image
 needs and wrong for one project's choice; and because `$HOME` is a mounted
-volume, anything installed there at image-build time is masked at runtime
-anyway. That leaves the per-project `$HOME` volume, which is where such a
-tool lands by default: it survives `down`/`up` as intended, but it is
-destroyed by `delete --purge` and by a `docker` prune of unused volumes, and
-**nothing anywhere records how to rebuild it**. The install is a sequence of
-commands typed into a shell once; after a prune, the only trace left is
-whatever the tool appended to files under `/work` — which survives and now
-refers to something that is gone.
+directory, anything installed there at image-build time is masked at runtime
+anyway.
 
-**Shape a future phase would need to decide:** whether the answer is a
-durable *path* (a second bind mount from inside the project directory, e.g.
-`./.bardolier/packages:/packages`, always mounted like `$HOME`, with the
-directory on the SSD so no Docker operation can take it — plus a
-`PACKAGES_DIR` constant and `ENV PATH=…` in the base images, since compose
-cannot extend `PATH` without substituting the host's); or a re-runnable
-*recipe* (a manifest-declared provision script in the project directory that
-`up` runs inside the container behind a marker guard, mirroring the way
-`down` already runs the agent through `docker exec` for the handoff note);
-or both. The path makes the install survive; the recipe makes it
-reproducible on a new machine or a new project. Which one leads depends on
-which shape recurs — a second tool of the same kind argues for the path, an
-install that must be re-run against a moving upstream argues for the recipe.
-Also open: whether a re-downloadable browser/asset cache such tools pull down
-belongs here at all, or in a shared named volume under the `IMAGE_CACHE`
-pattern (disk frugality says the latter; prune-immunity says the former).
+Phase 19 answered the **durability** half of this gap and no more. `$HOME` is
+now the project's own `home/` directory (`cli-spec.md` §3), on the same disk
+as the project: an install there survives `down`, survives any `docker`
+prune, and a plain `delete` refuses (`PROJECT_HAS_DATA`) rather than taking
+it. What remains is that **nothing records how to rebuild it**. The install is
+a sequence of commands typed into a shell once; a second machine, a
+re-created project, or `delete --purge` starts from nothing, and the only
+trace is whatever the tool appended to files under `/work` — which is
+committed, and points at something that isn't there. `$HOME` being
+per-project (deliberately: Claude Code files sessions by working directory)
+makes that recurring rather than one-off — every project wanting the tool
+installs it again by hand.
 
-**Routed around today by:** installing the tool under the project directory
-rather than `$HOME` — see the "installed by its own installer script" bullet
-in Part 3 of `docs/migration-guide.md`. That route-around leaves a re-link
-script in the project's own files, which is precisely the cost of not having
+**Shape a future phase would need to decide:** with the durable path now part
+of the layout, what is left is a re-runnable *recipe* — a manifest-declared
+provision script in the project directory that `up` runs inside the container
+behind a marker guard, mirroring the way `down` already runs the agent
+through `docker exec` for the handoff note. Open within that: what makes it
+re-run (a marker in `home/`, a hash of the script, an explicit command); and
+how it fails, since a provisioning step that breaks `up` would be worse than
+the hand install it replaces — best-effort with a warning, like the handoff
+note, is the likely answer. Two smaller ones ride along. `PATH` still cannot
+come from compose (`${PATH}` there substitutes the Mac's value), so a
+provisioned tool's bin directory needs somewhere to be declared. And a
+re-downloadable browser/asset cache such tools pull down probably belongs in
+a shared named volume under the `IMAGE_CACHE` pattern rather than once per
+project — disk frugality, and it is not project data.
+
+**Routed around today by:** letting the installer put the tool where it wants
+it (`$HOME`, i.e. the project's `home/`) and leaving a short script in
+`local/` recording what was run — see the "installed by its own installer
+script" bullet in Part 3 of `docs/migration-guide.md`. That script, written
+by hand and re-run by hand per project, is precisely the cost of not having
 the capability.
 
 **First seen:** re-running a project whose container-local agent tooling had
 been installed by hand; a Docker cleanup removed the per-project `$HOME`
 volume, and the routing block the installer had appended to the project's
-own `CLAUDE.md` — which lives under `/work` and survived — was left pointing
-at commands that no longer existed.
+own `CLAUDE.md` — which lived under `/work` and survived — was left pointing
+at commands that no longer existed. Phase 19 removed that particular failure
+mode: the volume is a directory in the project now. It did not remove the
+part that hurt, which was reconstructing the install from memory.
 
 ---
 

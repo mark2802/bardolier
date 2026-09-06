@@ -62,8 +62,11 @@ head "1. \`new\` creates the project (§6, §10)"
 NEW="$($BARDOLIER new myapp --archetype web --json)" || bad "new exited non-zero"
 schema_assert new "$NEW" && ok "new --json validates against new.schema.json" || bad "new output does not match its schema"
 
-for file in project.yml docker-compose.yml .gitignore .dockerignore CLAUDE.md; do
-  [ -f "$MOUNTED/myapp/$file" ] && ok "seeded $file" || bad "MISSING: $file"
+for file in project.yml docker-compose.yml work/CLAUDE.md; do
+  [ -f "$MOUNTED/myapp/$file" ] && ok "wrote $file" || bad "MISSING: $file"
+done
+for dir in work data local home; do
+  [ -d "$MOUNTED/myapp/$dir" ] && ok "created $dir/" || bad "MISSING: $dir/"
 done
 
 node --input-type=module -e "
@@ -80,9 +83,9 @@ node --input-type=module -e "
 
 grep -q 'DO NOT EDIT' "$MOUNTED/myapp/docker-compose.yml" \
   && ok "the compose file says it is generated (§9)" || bad "compose file has no generated-file warning"
-grep -q 'xcodebuild\|in the container' "$MOUNTED/myapp/CLAUDE.md" \
+grep -q 'xcodebuild\|in the container' "$MOUNTED/myapp/work/CLAUDE.md" \
   && ok "seeded CLAUDE.md carries the archetype boundary note (§10)" || bad "CLAUDE.md has no boundary note"
-grep -q 'postgres:5432' "$MOUNTED/myapp/CLAUDE.md" \
+grep -q 'postgres:5432' "$MOUNTED/myapp/work/CLAUDE.md" \
   && ok "seeded CLAUDE.md points at the Docker network, not localhost (§5)" || bad "CLAUDE.md does not steer away from localhost"
 
 # Error paths.
@@ -120,8 +123,8 @@ node --input-type=module -e "
 AFTER="$(shasum "$MOUNTED/myapp/docker-compose.yml" | cut -d' ' -f1)"
 [ "$BEFORE" = "$AFTER" ] && ok "the bytes are identical across regenerations" || bad "the compose file changed on regeneration"
 
-grep -q '\.:/work' "$MOUNTED/myapp/docker-compose.yml" \
-  && ok "the dev container bind-mounts the project dir at /work" || bad "no /work bind mount"
+grep -q '\./work:/work' "$MOUNTED/myapp/docker-compose.yml" \
+  && ok "the dev container bind-mounts work/ at /work" || bad "no /work bind mount"
 grep -q "$TMP" "$MOUNTED/myapp/docker-compose.yml" \
   && bad "the compose file hard-codes the SSD path" || ok "no absolute SSD path leaks into the compose file"
 
@@ -159,7 +162,6 @@ fi
 
 if [ "$DOCKER_OK" = "1" ]; then
   docker rm -f bardolier-myapp >/dev/null 2>&1 || true
-  docker volume rm -f bardolier-myapp-home bardolier-second-home >/dev/null 2>&1 || true
 
   if ! docker image inspect bardolier-web:latest >/dev/null 2>&1; then
     printf '    building bardolier-web (first run only, this takes a few minutes)…\n'
@@ -199,8 +201,8 @@ if [ "$DOCKER_OK" = "1" ]; then
     || bad "/work is owned by $CONTAINER_UID:$CONTAINER_GID, expected $(id -u):$(id -g)"
 
   docker exec bardolier-myapp sh -c 'echo hello > /work/from-container.txt' 2>/dev/null || true
-  if [ -f "$MOUNTED/myapp/from-container.txt" ]; then
-    OWNER="$(stat -f '%u' "$MOUNTED/myapp/from-container.txt" 2>/dev/null || stat -c '%u' "$MOUNTED/myapp/from-container.txt")"
+  if [ -f "$MOUNTED/myapp/work/from-container.txt" ]; then
+    OWNER="$(stat -f '%u' "$MOUNTED/myapp/work/from-container.txt" 2>/dev/null || stat -c '%u' "$MOUNTED/myapp/work/from-container.txt")"
     [ "$OWNER" = "$(id -u)" ] \
       && ok "a file written in the container lands on the host owned by you" \
       || bad "container-written file is owned by $OWNER on the host"
@@ -219,7 +221,7 @@ if [ "$DOCKER_OK" = "1" ]; then
   [ -z "$(docker ps -a --filter name='^bardolier-myapp$' --format '{{.Names}}')" ] \
     && ok "down removed the container" || bad "the container survived down"
 
-  [ -f "$MOUNTED/myapp/from-container.txt" ] && [ -f "$MOUNTED/myapp/project.yml" ] \
+  [ -f "$MOUNTED/myapp/work/from-container.txt" ] && [ -f "$MOUNTED/myapp/project.yml" ] \
     && ok "data persists across down" || bad "down destroyed project data"
 
   json_assert "$($BARDOLIER status myapp --json)" 'd.projects[0].state === "stopped" && d.projects[0].dev_container === null' \
@@ -232,21 +234,19 @@ fi
 # ── 5. delete ─────────────────────────────────────────────────────────────────
 head "5. \`delete\` is explicit and confirmed"
 
-REFUSED="$($BARDOLIER delete myapp --json 2>/dev/null || true)"
+REFUSED="$($BARDOLIER delete myapp --purge --json 2>/dev/null || true)"
 json_assert "$REFUSED" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
   && ok "delete --json without --force refuses rather than prompting into stdout (§2)" \
   || bad "delete under --json did not refuse"
 [ -d "$MOUNTED/myapp" ] && ok "the refused delete left the project alone" || bad "the refused delete removed the project"
 
-CONTRADICTION="$($BARDOLIER delete myapp --force --keep-data --purge --json 2>/dev/null || true)"
-json_assert "$CONTRADICTION" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
-  && ok "--keep-data and --purge together are refused" || bad "contradictory data flags were accepted"
-
 GHOST="$($BARDOLIER delete ghost --force --json 2>/dev/null || true)"
 json_assert "$GHOST" 'd.error && d.error.code === "PROJECT_NOT_FOUND"' \
   && ok "deleting an unknown project is PROJECT_NOT_FOUND" || bad "delete of an unknown project did not fail correctly"
 
-DELETED="$($BARDOLIER delete myapp --force --json)" || bad "delete exited non-zero"
+# --purge, because the container that just ran left files in home/ and a plain
+# delete refuses PROJECT_HAS_DATA rather than destroying them (§6, phase 19).
+DELETED="$($BARDOLIER delete myapp --force --purge --json)" || bad "delete exited non-zero"
 schema_assert delete "$DELETED" && ok "delete --json validates against delete.schema.json" || bad "delete output does not match its schema"
 json_assert "$DELETED" 'd.deleted === true' && ok "delete reports success" || bad "delete did not report success"
 [ ! -e "$MOUNTED/myapp" ] && ok "the project directory is gone" || bad "the project directory survived delete"

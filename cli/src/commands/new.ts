@@ -27,6 +27,7 @@ import { allocateAppPort, allocatePorts } from '../allocator.ts'
 import { describeService } from '../services.ts'
 import { parseServiceList, resolveServices } from './service.ts'
 import { seededFiles } from '../scaffold.ts'
+import { ensureProjectDirs, PROJECT_DIRS } from '../layout.ts'
 import { defaultRoot, discoverProjects, findProject, probeRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, writeManifest } from '../workspace.ts'
 import { validate } from '../schema.ts'
@@ -129,7 +130,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
       const hostPort = allocated.get(key)
       if (hostPort === undefined) throw new BardolierError('INTERNAL_ERROR', `The allocator returned no port for \`${key}\`.`)
       services[key] = { host_port: hostPort }
-      attached.push(describeService(name, key, definition, hostPort))
+      attached.push(describeService(name, key, definition, hostPort, dir))
     }
     manifest.services = services
   }
@@ -142,6 +143,10 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   }
 
   mkdirSync(dir, { recursive: false })
+  // Before anything is bind-mounted from them (§4.2): a source Docker has to
+  // create itself comes back root-owned, or — on Docker Desktop — inside the
+  // VM rather than on the disk the project is on.
+  ensureProjectDirs(dir, definitions.map(({ key }) => key))
   writeManifest(dir, manifest)
 
   const seeded: string[] = []
@@ -169,6 +174,7 @@ export function renderNew(output: NewOutput): string[] {
     `Created ${project.name} [${project.archetype}] at ${project.dir}`,
     `  manifest: ${output.manifest_path}`,
     `  compose:  ${output.compose_path}  (generated — do not edit)`,
+    `  layout:   ${PROJECT_DIRS.map((name) => `${name}/`).join('  ')}`,
     `  seeded:   ${output.seeded.join(', ')}`,
   ]
   if (output.services.length > 0) {

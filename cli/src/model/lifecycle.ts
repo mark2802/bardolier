@@ -96,8 +96,14 @@ export type DeleteOutput = {
   dir: string
   /** Host ports the project no longer holds — free for the next allocation (§5). */
   released_ports: number[]
-  /** Named volumes removed under `--purge`. */
+  /**
+   * Named volumes removed under `--purge`, and left behind without it.
+   *
+   * Both are empty since phase 19: a project's data lives inside its directory
+   * and goes with it, and the only named volume left is the toolchain cache,
+   * which belongs to every project on the base image and to none of them. The
+   * fields stay because the app decodes them (§7's additive-only rule).
+   */
   removed_volumes: string[]
-  /** Named volumes left behind under `--keep-data`; they become listed orphans. */
   kept_volumes: string[]
 }

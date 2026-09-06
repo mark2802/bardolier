@@ -1,45 +1,41 @@
 /**
- * Orphaned-volume derivation — `cli-spec.md` §6 (Volumes / disk), §7.
+ * Orphan derivation — `cli-spec.md` §6 (Volumes / disk), §7.
  *
- * An orphan is a volume this tool created that NOTHING now claims. "Claims" is
- * answered from the manifests under `$SSD_ROOT` and nowhere else: `project.yml`
- * is the truth, the compose file is generated from it, and a second registry of
- * volumes would be one more thing to desync (CLAUDE.md, one source of truth).
+ * An orphan is something this tool made that NOTHING now claims. Since phase 19
+ * there are two kinds, derived two different ways, because they are two
+ * different risks:
  *
- * A volume is claimed when either
- *   - its NAME is one the catalogue would generate for a service some manifest
- *     still attaches, or
- *   - its `bardolier.project` / `bardolier.service` LABELS name a project that still
- *     attaches that service key.
+ *   - A DIRECTORY under a project's own `data/`. Claimed while the manifest
+ *     beside it still attaches that catalogue key; reclaimable once it does
+ *     not. This is `ls data/` minus the manifest's keys — no labels, no
+ *     Docker, and no cross-root reasoning: the answer needs only the one root
+ *     that holds the project, so another root being unplugged cannot make it
+ *     wrong.
+ *   - A NAMED VOLUME. Only the shared toolchain caches are still made
+ *     (`images.ts`), claimed while ANY manifest names their base image, so this
+ *     scan still needs EVERY manifest and keeps its refusals. Volumes left by
+ *     an older layout still carry our labels and are still listed — leaving
+ *     them out would hide gigabytes from the one command whose job is to
+ *     account for them.
  *
- * The second rule is not redundant. A manifest can attach a service the
- * catalogue no longer defines; its volume name is then unknowable, and without
- * the label rule that live volume would be listed as reclaimable. Being wrong
- * in that direction destroys data, so both rules are asked and either protects.
- *
- * A toolchain cache volume (`bardolier.role: cache`, `images.ts`) is the one volume
- * this tool makes that belongs to no project: it is shared by every project on
- * one base image, so it is claimed while ANY manifest names that image, and
- * reclaimable once none does. It is still ours — leaving it out entirely would
- * hide gigabytes of rebuildable data from the one command whose job is to
- * account for them.
- *
- * Two refusals guard the same edge:
- *   - With the SSD unmounted there are no manifests to consult, so EVERY bardolier
- *     volume would look orphaned. That is SSD_NOT_MOUNTED, never an empty
- *     claim-set.
- *   - An unreadable manifest is a project whose attachments cannot be known, so
- *     the scan refuses (CONFIG_INVALID) rather than under-reporting what is
+ * Three refusals guard the same edge, and they exist because being wrong here
+ * destroys data:
+ *   - No root readable at all: every bardolier volume would look orphaned. That
+ *     is SSD_NOT_MOUNTED, never an empty claim-set.
+ *   - Some but not all roots readable: a PARTIAL view would call another
+ *     root's cache orphaned. ROOT_UNREADABLE.
+ *   - An unreadable manifest is a project whose attachments cannot be known,
+ *     so the scan refuses (CONFIG_INVALID) rather than under-reporting what is
  *     claimed. `doctor` is where that gets diagnosed.
  */
 
+import { rmSync } from 'node:fs'
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
-import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, LABEL_SERVICE, ROLE_CACHE, volumeName } from './compose.ts'
-import { discoverProjects, rootUnreadableError, unreadableRoots } from './projects.ts'
-import { homeVolumeName } from './naming.ts'
+import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, ROLE_CACHE } from './compose.ts'
+import { dataDir, directorySize, serviceDataDir, subdirectories } from './layout.ts'
+import { discoverProjects, rootUnreadableError, unreadableRoots, type DiscoveredProject } from './projects.ts'
 import type { DockerVolume } from './docker.ts'
-import type { ResolvedCatalogue } from './catalogue.ts'
 import type { OrphanedVolume } from './model/status.ts'
 
 /** Rendered when Docker cannot say how big a volume is. */
@@ -63,12 +59,21 @@ export function formatBytes(bytes: number): string {
   return `${rounded} ${UNITS[unit]}`
 }
 
+/**
+ * How a data directory is named in the orphan list and to `volumes rm`:
+ * `<project>/<key>`. A Docker volume name can never contain a slash, so the two
+ * kinds share one namespace without colliding.
+ */
+export function dataOrphanName(project: string, key: string): string {
+  return `${project}/${key}`
+}
+
 export type VolumeScan = {
-  /** Volume name → the project that still claims it. Absent = nothing claims it. */
+  /** Orphan name → the project that still claims it. Absent = nothing claims it. */
   readonly claimedBy: ReadonlyMap<string, string>
   /** Every volume Docker reports, by name. */
   readonly all: ReadonlyMap<string, DockerVolume>
-  /** bardolier-owned volumes nothing claims, sorted by name. */
+  /** Everything ours that nothing claims, both kinds, sorted by name. */
   readonly orphans: readonly OrphanedVolume[]
 }
 
@@ -78,7 +83,7 @@ export function volumeOwner(volume: DockerVolume): string | null {
   return project && project.length > 0 ? project : null
 }
 
-/** True for the shared toolchain cache volume, which has no owning project. */
+/** True for a shared toolchain cache volume, which has no owning project. */
 export function isCacheVolume(volume: DockerVolume): boolean {
   return volume.labels[LABEL_ROLE] === ROLE_CACHE
 }
@@ -89,13 +94,13 @@ export function isBardolierVolume(volume: DockerVolume): boolean {
 }
 
 type Claims = {
-  /** Volume name → owning project, for names the catalogue can resolve. */
+  /** Cache volume name → a project that still builds on its base image. */
   readonly names: ReadonlyMap<string, string>
-  /** `"<project> <service>"` for every attachment any manifest declares. */
-  readonly attachments: ReadonlySet<string>
+  /** Every project whose manifest could be read. */
+  readonly projects: readonly DiscoveredProject[]
 }
 
-/** Everything the manifests under every configured root claim. One walk, both rules. */
+/** Everything the manifests under every configured root claim. One walk. */
 function claimsFromManifests(ctx: Context): Claims {
   const discovery = discoverProjects(ctx.config)
   if (!discovery.mounted) {
@@ -118,45 +123,53 @@ function claimsFromManifests(ctx: Context): Claims {
   }
 
   const names = new Map<string, string>()
-  const attachments = new Set<string>()
-  // Resolved once, and only when something is attached: a project with no
-  // services needs no catalogue at all.
-  let catalogue: ResolvedCatalogue | null = null
-
   for (const project of discovery.projects) {
-    // The dev container's $HOME is claimed by the project existing at all — it
-    // needs no attachment and no catalogue, which is why it is asserted here
-    // rather than in the loop below. Deleting the project is what releases it.
-    names.set(homeVolumeName(project.name), project.name)
-
     // The cache is claimed by the base image, not by any attachment — a bare
     // android project with no services still builds with it. `projects` is
     // sorted, so the project named in a VOLUME_IN_USE refusal is stable.
     const cache = cacheFor(project.manifest)
     if (cache && !names.has(cache.volume)) names.set(cache.volume, project.name)
-
-    const keys = attachedKeys(project.manifest)
-    if (keys.length === 0) continue
-    catalogue ??= ctx.catalogue()
-    for (const key of keys) {
-      attachments.add(`${project.name} ${key}`)
-      const definition = catalogue.catalogue.services[key]
-      if (definition) names.set(volumeName(definition, project.name), project.name)
-    }
   }
 
-  return { names, attachments }
+  return { names, projects: discovery.projects }
 }
 
 /**
- * Scan Docker's volumes against the manifests.
+ * The data directories one project holds that its manifest no longer attaches.
  *
- * Sizes cost a `docker system df -v`, so they are fetched only when there is an
- * orphan to size — the common case (nothing to reclaim) stays a single cheap
- * `volume ls`.
+ * Only SUBDIRECTORIES, because only a directory is what a service's mount
+ * makes. That is also what keeps the Spotlight marker `data/` is created with,
+ * and any other loose file someone drops in, out of a destructive command's
+ * list.
+ */
+function dataOrphans(project: DiscoveredProject): OrphanedVolume[] {
+  const attached = new Set(attachedKeys(project.manifest))
+  const rows: OrphanedVolume[] = []
+  for (const name of subdirectories(dataDir(project.dir))) {
+    if (attached.has(name)) continue
+    const path = serviceDataDir(project.dir, name)
+    const bytes = directorySize(path)
+    rows.push({
+      name: dataOrphanName(project.name, name),
+      kind: 'directory',
+      path,
+      size_bytes: bytes,
+      size_human: formatBytes(bytes),
+      last_project: project.name,
+    })
+  }
+  return rows
+}
+
+/**
+ * Scan for both kinds of orphan.
+ *
+ * Volume sizes cost a `docker system df -v`, so they are fetched only when
+ * there is a volume orphan to size — the common case (nothing to reclaim)
+ * stays a single cheap `volume ls`.
  */
 export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
-  const { names, attachments } = claimsFromManifests(ctx)
+  const { names, projects } = claimsFromManifests(ctx)
   const volumes = await ctx.docker.volumes()
 
   const all = new Map<string, DockerVolume>()
@@ -165,11 +178,7 @@ export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
 
   for (const volume of volumes) {
     all.set(volume.name, volume)
-    const owner = volumeOwner(volume)
-    const service = volume.labels[LABEL_SERVICE] ?? ''
-    const byName = names.get(volume.name)
-    const byLabel = owner !== null && service.length > 0 && attachments.has(`${owner} ${service}`) ? owner : undefined
-    const claimant = byName ?? byLabel
+    const claimant = names.get(volume.name)
     if (claimant !== undefined) {
       claimedBy.set(volume.name, claimant)
       continue
@@ -180,17 +189,40 @@ export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
   }
 
   const sizes = candidates.length > 0 ? await ctx.docker.volumeSizes() : new Map<string, number>()
-  const orphans = candidates
-    .map((volume): OrphanedVolume => {
-      const bytes = sizes.get(volume.name)
-      return {
-        name: volume.name,
-        size_bytes: bytes ?? 0,
-        size_human: bytes === undefined ? UNKNOWN_SIZE : formatBytes(bytes),
-        last_project: volumeOwner(volume),
-      }
-    })
-    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  const orphans: OrphanedVolume[] = candidates.map((volume): OrphanedVolume => {
+    const bytes = sizes.get(volume.name)
+    return {
+      name: volume.name,
+      kind: 'volume',
+      path: null,
+      size_bytes: bytes ?? 0,
+      size_human: bytes === undefined ? UNKNOWN_SIZE : formatBytes(bytes),
+      last_project: volumeOwner(volume),
+    }
+  })
 
+  for (const project of projects) {
+    for (const key of attachedKeys(project.manifest)) {
+      claimedBy.set(dataOrphanName(project.name, key), project.name)
+    }
+    orphans.push(...dataOrphans(project))
+  }
+
+  orphans.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   return { claimedBy, all, orphans }
+}
+
+/**
+ * Destroy one reclaimed orphan, whichever kind it is.
+ *
+ * A directory is removed from the host filesystem; a volume goes through
+ * Docker, which may still refuse (a container the scan cannot see can hold it)
+ * and whose refusal wins.
+ */
+export async function removeOrphan(ctx: Context, orphan: OrphanedVolume): Promise<void> {
+  if (orphan.kind === 'directory') {
+    if (orphan.path) rmSync(orphan.path, { recursive: true, force: true })
+    return
+  }
+  await ctx.docker.removeVolume(orphan.name)
 }

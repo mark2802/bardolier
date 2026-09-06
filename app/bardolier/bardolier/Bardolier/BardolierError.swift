@@ -29,6 +29,7 @@ nonisolated struct BardolierErrorCode: BardolierToken {
     static let projectNotFound = BardolierErrorCode(rawValue: "PROJECT_NOT_FOUND")
     static let projectRunning = BardolierErrorCode(rawValue: "PROJECT_RUNNING")
     static let projectStopped = BardolierErrorCode(rawValue: "PROJECT_STOPPED")
+    static let projectHasData = BardolierErrorCode(rawValue: "PROJECT_HAS_DATA")
     static let serviceUnknown = BardolierErrorCode(rawValue: "SERVICE_UNKNOWN")
     static let serviceAttached = BardolierErrorCode(rawValue: "SERVICE_ATTACHED")
     static let serviceNotAttached = BardolierErrorCode(rawValue: "SERVICE_NOT_ATTACHED")
@@ -61,6 +62,7 @@ nonisolated struct BardolierErrorCode: BardolierToken {
         case .projectNotFound: return "No such project."
         case .projectRunning: return "Stop the project to change its services."
         case .projectStopped: return "The project isn’t running."
+        case .projectHasData: return "The project holds data; deleting it destroys that too."
         case .serviceUnknown: return "That service isn’t in the catalogue."
         case .serviceAttached: return "That service is already attached."
         case .serviceNotAttached: return "That service isn’t attached."

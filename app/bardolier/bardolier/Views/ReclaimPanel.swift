@@ -4,8 +4,9 @@
 //
 //  Reclaim disk (app-spec.md §9).
 //
-//  The list is `status`'s `orphaned_volumes` — volumes no manifest claims any
-//  more, which the CLI DERIVES rather than records (CLAUDE.md). Nothing here
+//  The list is `status`'s `orphaned_volumes` — named volumes and leftover
+//  service data directories (phase 19) no manifest claims any more, which the
+//  CLI DERIVES rather than records (CLAUDE.md). Nothing here
 //  decides what is reclaimable; it renders what was reported and asks the CLI
 //  to remove what the user picks.
 //
@@ -72,7 +73,7 @@ struct ReclaimPanel: View {
     private var emptyMessage: String {
         store.isDegraded
             ? "Orphans can only be listed with the SSD mounted and Docker running."
-            : "Nothing to reclaim. Detached services and deleted projects leave their volumes here."
+            : "Nothing to reclaim. Detaching a service leaves its data directory here."
     }
 
     private var totalBytes: Int {
@@ -114,7 +115,7 @@ struct ReclaimPanel: View {
     private var deleteAllConfirmation: ConfirmationRequest {
         let volumes = store.orphanedVolumes
         return ConfirmationRequest(
-            title: "Delete all \(volumes.count) orphaned volumes?",
+            title: "Delete all \(volumes.count) orphans?",
             detail: "\(BardolierFormat.bytes(totalBytes)) of data is destroyed. "
                 + "A volume that turns out to still be in use is skipped and reported.",
             confirmLabel: "Delete all",

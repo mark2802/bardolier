@@ -140,7 +140,7 @@ describe('service catalogue resolution (cli-spec.md §4.1)', () => {
     const box = sandbox()
     box.writeFile(
       join('ssd', 'claude-projects', 'services.yml'),
-      'services:\n  minio:\n    display: MinIO\n    image: minio/minio\n    container_port: 9000\n    host_port_base: 9000\n    volume: "{project}_minio"\n    mount: /data\n',
+      'services:\n  minio:\n    display: MinIO\n    image: minio/minio\n    container_port: 9000\n    host_port_base: 9000\n    mount: /data\n',
     )
     const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_ROOT: box.root } })
     const resolved = resolveCatalogue(config)

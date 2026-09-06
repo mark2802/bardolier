@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/service-remove.schema.json",
   "title": "bardolier service remove output",
-  "description": "What `bardolier service remove` detached. The data volume is KEPT and becomes a listed orphan. cli-spec.md §6 (Services), §5.",
+  "description": "What `bardolier service remove` detached. The data directory is KEPT and becomes a listed orphan. cli-spec.md §6 (Services), §5.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "removed", "services", "compose_path", "compose_regenerated"],
@@ -11,7 +11,7 @@
     "removed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "host_port", "volume"],
+      "required": ["key", "host_port", "data_dir"],
       "properties": {
         "key": { "type": "string", "minLength": 1 },
         "host_port": {
@@ -20,9 +20,9 @@
           "minimum": 1024,
           "maximum": 65535
         },
-        "volume": {
-          "type": ["string", "null"],
-          "description": "The kept volume, or null when the catalogue no longer defines the service."
+        "data_dir": {
+          "type": "string",
+          "description": "The kept data directory, <project>/data/<key>. It becomes a listed orphan of this project (phase 19); the catalogue is not consulted to name it."
         }
       }
     },
@@ -39,7 +39,7 @@
       "type": "object",
       "description": "An attached service: the manifest's host port joined with the catalogue's identity. cli-spec.md §4.1, §4.2, §5. This block is duplicated verbatim in new/service-add/service-remove/service-list; test/contracts.test.ts asserts the copies stay identical.",
       "additionalProperties": false,
-      "required": ["key", "display", "host_port", "container_port", "connection_hint", "volume"],
+      "required": ["key", "display", "host_port", "container_port", "connection_hint", "data_dir"],
       "properties": {
         "key": { "type": "string", "minLength": 1 },
         "display": { "type": "string", "minLength": 1 },
@@ -51,7 +51,11 @@
         },
         "container_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "connection_hint": { "type": "string", "minLength": 1 },
-        "volume": { "type": "string", "minLength": 1 }
+        "data_dir": {
+          "type": "string",
+          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "minLength": 1
+        }
       }
     }
   }

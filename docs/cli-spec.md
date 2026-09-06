@@ -32,7 +32,8 @@ grows to provide it.
   stdout is `{ "error": { "code": "<STABLE_CODE>", "message": "<human>" } }`.
 - **Stable error codes** (not exhaustive): `SSD_NOT_MOUNTED`,
   `PROJECT_EXISTS`, `PROJECT_NOT_FOUND`, `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`,
-  `PROJECT_STOPPED`, `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`, `SERVICE_NOT_ATTACHED`,
+  `PROJECT_STOPPED`, `PROJECT_HAS_DATA`, `SERVICE_UNKNOWN`, `SERVICE_ATTACHED`,
+  `SERVICE_NOT_ATTACHED`,
   `EXTRA_PORT_ATTACHED`, `EXTRA_PORT_NOT_ATTACHED`,
   `PACKAGE_ATTACHED`, `PACKAGE_NOT_ATTACHED`,
   `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
@@ -57,19 +58,38 @@ configured root the same way. Each root has this layout:
   <project>/
     project.yml                    # manifest (source of truth per project)
     docker-compose.yml             # GENERATED from project.yml — never hand-edit
-    .gitignore                     # seeded
-    .dockerignore                  # seeded
-    CLAUDE.md                      # seeded, archetype-specific boundary
-    <source code>
+    .bardolier/                    # handoff.md (§12)
+    work/    → /work               repositories, cloned or inited by the user
+    data/    → /data:ro            service data, one directory per attached service
+    local/   → /local              neither repository nor service data
+    home/    → /state/home         the dev container's $HOME
+    work/CLAUDE.md                 # seeded, archetype-specific boundary (§10)
 ```
+
+**A project directory is not a repository** (phase 19). bardolier's own files sit
+at the top and the user's work lives in the four folders below them, so nothing
+this tool writes is ever inside a working tree: there is nothing to gitignore,
+and `git clean -xdf` in a repo under `work/` cannot reach `data/`. The four are
+created by `new` and re-ensured by every `up` — Docker would otherwise create a
+missing bind source itself, as root, leaving `home/` unwritable by the
+container's own uid. `data/` carries a `.metadata_never_index` marker so
+Spotlight does not index a multi-GB database and put `mds` on the volume.
+
+**Service data lives here, not in a named volume.** A volume would sit in
+`Docker.raw` on the internal disk however external the root was — the disk with
+the least room holding the data that grows fastest. Bind-mounted from an APFS
+external SSD (`noowners`), Postgres 17 and Mongo 7 both initialise clean and
+steady-state throughput is 0.69x native for writes, 0.88x for reads; bulk load
+is 0.34x, the one visible penalty.
 
 `roots` is an ordered array of `{ name, path }` (§8); `roots[0]` is the
 default `new` targets. A project name is unique across every root, not just
 within one — two roots each holding a project called `api` would collide on
 the container name and the home volume, both of which are global to Docker.
 
-Docker's image/layer store stays on the **internal** disk. Only project data and
-named volumes live under a root.
+Docker's image/layer store stays on the **internal** disk, as do the shared
+toolchain caches (§4.3) — rebuildable bytes every project shares. Project data
+lives under a root, inside the project directory that owns it.
 
 ## 4. Data model
 
@@ -78,6 +98,8 @@ named volumes live under a root.
 Single editable file (location in config; default `<default root>/services.yml`
 — the default root only, not per-root, phase 18's non-goals — falling back to
 a bundled default). Adding a service type = adding an entry, no code change.
+There is no `volume` key: a service's data directory is its catalogue KEY, under
+the project's own `data/` (§3, phase 19).
 
 ```yaml
 services:
@@ -86,8 +108,7 @@ services:
     image: "postgres:17"
     container_port: 5432        # fixed port inside the container/network
     host_port_base: 5432        # start of this service's host-port band
-    volume: "{project}_pgdata"  # named volume; {project} interpolated
-    mount: "/var/lib/postgresql/data"
+    mount: "/var/lib/postgresql/data"   # where <project>/data/postgres binds
     env:
       POSTGRES_PASSWORD: "dev"
       POSTGRES_DB: "{project}"
@@ -96,14 +117,12 @@ services:
     image: "redis:7"
     container_port: 6379
     host_port_base: 6379
-    volume: "{project}_redisdata"
     mount: "/data"
   mongo:
     display: "MongoDB"
     image: "mongo:7"
     container_port: 27017
     host_port_base: 27017
-    volume: "{project}_mongodata"
     mount: "/data/db"
 ```
 
@@ -143,8 +162,8 @@ created: 2026-08-19T10:00:00Z
 Base images carry the per-archetype toolchain, plus the two things every
 archetype needs: **Claude Code** — the agent the whole tool exists to host,
 installed as the pinned standalone binary to a system path rather than under
-`$HOME`, which is a mounted volume (§9) — and the working kit (git, ripgrep, jq,
-curl). See CLAUDE.md.
+`$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
+ripgrep, jq, curl). See CLAUDE.md.
 
 `bardolier-and` is built and run as `linux/amd64`: Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
@@ -240,8 +259,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Projects
 - `bardolier new <name> --archetype <a> [--services a,b] [--root <name>]`
-  Creates dir, manifest, compose, `.gitignore`, `.dockerignore`, `CLAUDE.md`,
-  under the named root (default: the first configured root — §8).
+  Creates dir, manifest, compose, the four folders of §3, and
+  `work/CLAUDE.md`, under the named root (default: the first configured root
+  — §8).
   Assigns ports for any initial services. Errors: `ROOT_UNREADABLE` (the
   target root, or another root the port allocation cannot see past),
   `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
@@ -257,16 +277,20 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   reports the exec command; see §6 shell).
 - `bardolier down <name> [--no-handoff]` — stop + remove this project's containers.
   Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
-- `bardolier delete <name>` — remove containers, then the project dir. Prompts unless
-  `--force`. Releases the project's ports. Named volumes: see `--keep-data`
-  (default) vs `--purge` (also removes this project's volumes).
+- `bardolier delete <name> [--force] [--purge]` — remove containers, then the
+  project dir. Prompts unless `--force`. Releases the project's ports. The
+  project's data is INSIDE the directory (§3), so removing the directory
+  destroys it and "keep the data" cannot mean anything — there is no
+  `--keep-data`. A project whose `data/` or `home/` holds anything fails
+  `PROJECT_HAS_DATA`, naming what would go and its size; `--purge` is the only
+  way through. `--force` governs the prompt, never the data.
 
 ### Services
 - `bardolier service add <project> <svc>` — attach; assign host port; regenerate
   compose. Errors `PROJECT_RUNNING`, `SERVICE_ATTACHED`, `SERVICE_UNKNOWN`.
-- `bardolier service remove <project> <svc>` — detach; regenerate compose; **keep the
-  volume** (it becomes an orphan). Release the host port. Errors
-  `PROJECT_RUNNING`, `SERVICE_NOT_ATTACHED`.
+- `bardolier service remove <project> <svc>` — detach; regenerate compose; **keep
+  `data/<svc>`** (it becomes an orphan of this project). Release the host port.
+  Errors `PROJECT_RUNNING`, `SERVICE_NOT_ATTACHED`.
 - `bardolier service list <project>` — attached services + resolved host ports.
 
 ### Ports
@@ -301,13 +325,18 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `extra_packages`, not this shell.
 
 ### Volumes / disk
-- `bardolier volumes orphaned` — array of `{ name, size_bytes, size_human,
-  last_project }` for volumes not referenced by any current compose file
-  under any configured root. Errors `SSD_NOT_MOUNTED` (no root readable at
-  all) and `ROOT_UNREADABLE` (some, but not all, roots readable — a partial
-  view is refused rather than calling another root's volumes orphaned).
-- `bardolier volumes rm <name>` — remove one orphaned volume (confirm unless
-  `--force`). Errors `VOLUME_IN_USE` if still referenced.
+- `bardolier volumes orphaned` — array of `{ name, kind, path, size_bytes,
+  size_human, last_project }` for everything ours nothing claims. Two `kind`s
+  (phase 19): a `directory` under some project's `data/` whose key its manifest
+  no longer attaches — named `<project>/<key>`, needing only that one root
+  readable, with no labels and no cross-root reasoning — and a named `volume`,
+  now only the shared toolchain caches plus whatever an older layout left
+  behind. Errors `SSD_NOT_MOUNTED` (no root readable at all) and
+  `ROOT_UNREADABLE` (some, but not all, roots readable — a partial view is
+  refused rather than calling another root's cache orphaned).
+- `bardolier volumes rm <name>` — reclaim one orphan of either kind, by its name
+  or (for a directory) its path; confirm unless `--force`. Errors
+  `VOLUME_IN_USE` if still claimed.
 
 ### Lifecycle / SSD
 - `bardolier down-all` — stop + remove all bardolier containers, across every
@@ -435,6 +464,7 @@ changed to accommodate them.
       "archetype": "web",
       "state": "running",              // running | stopped | partial
       "root": "ssd",                    // configured root's name (phase 18, additive)
+      "work_dir": "/Volumes/ssd/claude-projects/myapp/work", // §3 (phase 19, additive)
       "services": [
         {
           "key": "postgres",
@@ -454,9 +484,10 @@ changed to accommodate them.
       ]
     }
   ],
-  "orphaned_volumes": [
-    { "name": "oldapp_pgdata", "size_bytes": 20971520, "size_human": "20 MB",
-      "last_project": "oldapp" }
+  "orphaned_volumes": [                 // kind/path additive since phase 19
+    { "name": "oldapp/postgres", "kind": "directory",
+      "path": "/Volumes/ssd/claude-projects/oldapp/data/postgres",
+      "size_bytes": 20971520, "size_human": "20 MB", "last_project": "oldapp" }
   ]
 }
 ```
@@ -502,8 +533,14 @@ Schema stability is the contract. Additive changes only once the app ships.
   declaring the same base image and packages resolve to the same tag and share
   one build (`deps.ts`). `up` builds it (§6, Deps) before `docker compose up`,
   since Compose references a local tag and never builds one itself.
-- Dev container: base image for the archetype, bind-mount project dir → `/work`,
-  `sleep infinity`; plus `platform:` when the archetype's base image is pinned
+- Dev container: base image for the archetype, four RELATIVE binds — `./work`
+  → `/work` (also `working_dir`), `./data` → `/data` **read-only**, `./local` →
+  `/local`, `./home` → `CONTAINER_HOME` — and `sleep infinity`. `/data` is
+  read-only because writing into a live data directory from a second container
+  corrupts it; the service that owns one mounts the same bytes read-write.
+  Relative means resolved against the compose file's own directory, so the
+  file holds no absolute path and the project stays a self-contained,
+  relocatable folder. Plus `platform:` when the archetype's base image is pinned
   to one architecture (§4.3), so it starts the way `build` built it. The key is
   absent otherwise — an unpinned project's generated file must not change.
 - Dev container, cont.: plus the base image's shared toolchain cache volume
@@ -512,16 +549,15 @@ Schema stability is the contract. Additive changes only once the app ships.
   on that image shares — `up` creates it, labelled `bardolier.role: cache`. Both
   keys are absent for an image with no cache, for the same reason `platform:`
   is: an existing project's generated file must not change.
-- Dev container, cont.: plus its `$HOME`, a named volume `bardolier-<project>-home`
-  mounted at the images' shared `CONTAINER_HOME`, labelled `bardolier.project` and
-  `bardolier.role: home`. `down` removes the container, so a home in its writable
-  layer would lose the shell history, the dotfiles and the agent's login on
-  every stop. It is PER PROJECT, not shared like the toolchain cache: it holds
-  the user's own state, and Claude Code files its sessions by working directory
-  — every dev container works in `/work`, so one shared home would file every
-  project's sessions together and `claude --continue` would resume the wrong
-  one. It is the project's, so `delete --purge` takes it and a plain `delete`
-  leaves it as a listed orphan.
+- Dev container, cont.: its `$HOME` is the `./home` bind above, at the images'
+  shared `CONTAINER_HOME`. `down` removes the container, so a home in its
+  writable layer would lose the shell history, the dotfiles and the agent's
+  login on every stop. It is PER PROJECT, not shared like the toolchain cache:
+  it holds the user's own state, and Claude Code files its sessions by working
+  directory — every dev container works in `/work`, so one shared home would
+  file every project's sessions together and `claude --continue` would resume
+  the wrong one. Being inside the project directory is what attributes it: it
+  needs no label, and `delete` takes it with the folder.
 - Dev container, cont.: an `environment:` block in Compose's LIST form naming
   the host variables the container may inherit — the agent's credentials and
   git's identity variables. A bare name (no `=`) is passed through when the
@@ -531,8 +567,12 @@ Schema stability is the contract. Additive changes only once the app ships.
   token and one holding none. `up` fills the `GIT_*` names from the host's own
   `git config`, so a commit made in the container is attributed to the human
   rather than failing on an unset `user.email`.
-- Services: image from catalogue, named volume, `host_port:container_port`
-  published, env interpolated (`{project}` → name).
+- Services: image from catalogue, `./data/<catalogue key>` bound at the
+  catalogue's `mount`, `host_port:container_port` published, env interpolated
+  (`{project}` → name).
+- The top-level `volumes:` block is therefore the shared toolchain cache and
+  nothing else — absent entirely for an image that declares none. A project
+  owns no named volume.
 - The dev container publishes NOTHING except its archetype's dev server, where
   the archetype has one (`ARCHETYPE_APP_PORT`; `web` → 3000), plus any extra
   ports declared on it (§5.1). `app_port` is a service-like allocation: fixed
@@ -549,16 +589,19 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 ## 10. Seeded files (by `new`)
 
-- `.gitignore` — `.build/ .swiftpm/ DerivedData/ node_modules/`
-  (archetype-tuned), plus `.bardolier/`, which holds the handoff note (§12):
-  regenerated on every stop, so churn rather than history. Track it deliberately
-  if you want the notes in the repo.
-- `.dockerignore` — excludes `node_modules`, build output, `.git`,
-  DerivedData, so image builds/context stays small (serves the disk goal).
-- `CLAUDE.md` — archetype-specific, references the boundary rules (host vs
-  container build), and for an archetype with a dev server (§9) the instruction
-  to bind `0.0.0.0` rather than `localhost` — a server on the container's own
-  loopback is unreachable from the Mac and looks like a broken port mapping.
+One file, `work/CLAUDE.md`: archetype-specific, describing where the agent is
+(§3's layout, `/data` read-only), the boundary rules (host vs container build),
+and for an archetype with a dev server (§9) the instruction to bind `0.0.0.0`
+rather than `localhost` — a server on the container's own loopback is
+unreachable from the Mac and looks like a broken port mapping.
+
+It goes in `work/` because that is the agent's working directory, and because a
+repository cloned in beside it then never contains it.
+
+There is no `.gitignore` and no `.dockerignore` (phase 19). There is no repo
+root to seed — bardolier's files are above `work/`, inside no working tree — and
+nothing has ever taken a build context from a project directory (`deps.ts`
+builds from a generated context under the config dir).
 
 ## 11. Testing expectations
 
@@ -576,8 +619,10 @@ A project resumed after three weeks is a project whose state has been forgotten.
 true and still reachable — so the note is written there, into
 `<project>/.bardolier/handoff.md`, and nowhere else.
 
-- **Two sources, failing independently.** The repository, via `git` on the host:
-  branch, recent commits, what is still uncommitted. And the agent's own
+- **Two sources, failing independently.** The repositories, via `git` on the
+  host: `work/` may hold several (§3), so each direct subdirectory that is a
+  working tree is reported — branch, recent commits, what is still uncommitted
+  — and a project with none says so. And the agent's own
   account, via `claude --print --continue` run INSIDE the dev container, which
   is the half that knows what was being *attempted* — no amount of git
   archaeology recovers that.
@@ -594,7 +639,7 @@ true and still reachable — so the note is written there, into
 - **Appended, not overwritten.** Each stop adds a new entry, newest at the
   bottom; none is ever rewritten or dropped — a quiet "just said hello" session
   reporting no work honestly must not destroy a substantive entry above it, and
-  `.bardolier/` is gitignored by default (§10), so there is usually no git history
-  underneath to fall back on.
+  `.bardolier/` sits above `work/` and is inside no repository (§3), so there is
+  no git history underneath to fall back on.
 - `--no-handoff` skips it. `delete` always passes it — there is no point
   summarising a project a second before its directory is removed.

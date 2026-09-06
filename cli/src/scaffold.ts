@@ -6,57 +6,16 @@
  * That asymmetry is deliberate — a seed you cannot edit is a nuisance, and a
  * derived file you can edit is a lie.
  *
- * `.dockerignore` serves the disk-frugality goal directly: the build context is
- * a directory on the SSD that will accumulate `node_modules` and build output,
- * and none of it belongs in an image layer.
+ * Since phase 19 there is exactly one seed, and it goes into `work/`. There is
+ * no repo root to seed: bardolier's files live above `work/`, outside every
+ * working tree, so there is nothing for a `.gitignore` to hide and nothing a
+ * build context has ever been taken from (`deps.ts` builds from a generated
+ * context under the config dir).
  */
 
 import type { Archetype } from './model/archetype.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
-import { WORKDIR } from './compose.ts'
-
-/** Ignored everywhere, whatever the archetype. */
-// `.bardolier/` holds the handoff note (§12) — generated on every stop, so it is
-// churn rather than history. Ignored by default; track it deliberately if you
-// want the notes in the repo.
-const COMMON_IGNORE = ['.bardolier/', '.DS_Store', '*.log', '.env', '.env.local']
-
-const NODE_IGNORE = ['node_modules/', 'dist/', 'build/', '.next/', 'coverage/']
-// A project's own Python backend (§4.3, bardolier-web now carries `uv`) keeps its
-// venv under /work like any other project file — bind-mounted, per-project,
-// never shipped in a build context or committed.
-const PYTHON_IGNORE = ['.venv/', '__pycache__/', '*.pyc']
-const SWIFT_IGNORE = ['.build/', '.swiftpm/', 'DerivedData/', '*.xcuserstate', 'xcuserdata/']
-const ANDROID_IGNORE = ['.gradle/', 'build/', 'local.properties', '*.apk', '*.aab']
-
-const ARCHETYPE_IGNORE: Readonly<Record<Archetype, readonly string[]>> = {
-  web: [...NODE_IGNORE, ...PYTHON_IGNORE],
-  library: [...NODE_IGNORE, ...PYTHON_IGNORE],
-  ios: [...SWIFT_IGNORE, ...NODE_IGNORE],
-  android: [...ANDROID_IGNORE, ...NODE_IGNORE],
-}
-
-function ignoreFile(intro: readonly string[], entries: readonly string[]): string {
-  return `${[...intro, '', ...entries].join('\n')}\n`
-}
-
-export function gitignore(archetype: Archetype): string {
-  return ignoreFile(
-    [`# Seeded by bardolier for the \`${archetype}\` archetype (cli-spec.md §10).`, '# Yours to edit — bardolier never rewrites this file.'],
-    [...ARCHETYPE_IGNORE[archetype], ...COMMON_IGNORE],
-  )
-}
-
-export function dockerignore(archetype: Archetype): string {
-  return ignoreFile(
-    [
-      `# Seeded by bardolier for the \`${archetype}\` archetype (cli-spec.md §10).`,
-      '# Keeps the build context small: images live on the internal disk and are',
-      '# shared, so nothing project-sized should ever be copied into one.',
-    ],
-    ['.git/', '.gitignore', 'docker-compose.yml', ...ARCHETYPE_IGNORE[archetype], ...COMMON_IGNORE],
-  )
-}
+import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, WORK_DIR } from './layout.ts'
 
 /** The archetype-specific boundary note §10 requires. */
 const BOUNDARY: Readonly<Record<Archetype, string>> = {
@@ -124,11 +83,24 @@ export function projectClaudeMd(name: string, archetype: Archetype): string {
 Seeded by \`bardolier new\` for the \`${archetype}\` archetype. Edit freely; bardolier
 will not rewrite this file.
 
-## Environment boundary
+## Where you are
 
-You are running **inside this project's dev container**. The project directory
-is mounted at \`${WORKDIR}\` and owned by the host user, so files you create are
-editable on the Mac without a chown.
+You are running **inside this project's dev container**, working in
+\`${CONTAINER_WORK}\` — the project's \`${WORK_DIR}/\` folder, bind-mounted and owned by the
+host user, so files you create are editable on the Mac without a chown. Clone
+or \`git init\` repositories here; this is the only part of the project a
+repository ever contains.
+
+Two more folders are mounted beside it:
+
+- \`${CONTAINER_DATA}\` — the services' data directories, **read-only**. Look, don't write:
+  a live database written to from a second container corrupts.
+- \`${CONTAINER_LOCAL}\` — scratch space that is neither repository nor service data.
+
+\`project.yml\` and \`docker-compose.yml\` are above all of these and deliberately
+not visible from in here.
+
+## Environment boundary
 
 ${BOUNDARY[archetype]}
 ${devServerNote(archetype)}
@@ -152,9 +124,10 @@ The lifecycle is driven from the **host**, not from in here:
     bardolier up ${name}
     bardolier down ${name}
 
-Nothing in this container should invoke \`bardolier\`, \`docker\`, or touch the
-compose file. \`docker-compose.yml\` is **generated** from \`project.yml\` and
-is overwritten on every regeneration — never hand-edit it.
+Nothing in this container should invoke \`bardolier\` or \`docker\`.
+\`docker-compose.yml\` is **generated** from \`project.yml\` and is overwritten on
+every regeneration — never hand-edit it. Neither file is reachable from in here
+anyway.
 `
 }
 
@@ -163,11 +136,13 @@ export type SeededFile = {
   readonly contents: string
 }
 
-/** The §10 seed set, in a fixed order so `new`'s output is deterministic. */
+/**
+ * The §10 seed set — one file, in `work/`.
+ *
+ * `work/CLAUDE.md` rather than the project root: the agent's working directory
+ * is `work/`, so that is where it looks, and a repository cloned in beside it
+ * never contains the file.
+ */
 export function seededFiles(name: string, archetype: Archetype): SeededFile[] {
-  return [
-    { name: '.gitignore', contents: gitignore(archetype) },
-    { name: '.dockerignore', contents: dockerignore(archetype) },
-    { name: 'CLAUDE.md', contents: projectClaudeMd(name, archetype) },
-  ]
+  return [{ name: `${WORK_DIR}/CLAUDE.md`, contents: projectClaudeMd(name, archetype) }]
 }

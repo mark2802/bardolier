@@ -121,6 +121,15 @@ nonisolated struct DoctorFindingID: BardolierToken {
     static let manifests = DoctorFindingID(rawValue: "manifests")
 }
 
+/// `volume | directory` — what one row of `volumes orphaned` would reclaim
+/// (phase 19). Open, like every token here, so a later kind cannot break this
+/// build.
+nonisolated struct OrphanKind: BardolierToken {
+    let rawValue: String
+    static let volume = OrphanKind(rawValue: "volume")
+    static let directory = OrphanKind(rawValue: "directory")
+}
+
 /// `built | unavailable` for a base image.
 nonisolated struct BaseImageStatus: BardolierToken {
     let rawValue: String
@@ -189,6 +198,10 @@ nonisolated struct BardolierProject: Codable, Hashable, Identifiable, Sendable {
     let extraPorts: [AttachedExtraPort]?
     /// The configured root's name this project lives under. Additive since phase 18.
     let root: String?
+    /// `<dir>/work`, where repositories live and the dev container works
+    /// (§4.2). Reported for the same reason `dir` is: no path is composed here.
+    /// Additive since phase 19.
+    let workDir: String?
 
     var id: String { name }
 }
@@ -207,10 +220,17 @@ nonisolated struct ProjectService: Codable, Hashable, Identifiable, Sendable {
 }
 
 nonisolated struct OrphanedVolume: Codable, Hashable, Identifiable, Sendable {
+    /// A Docker volume name, or `<project>/<key>` for a data directory.
     let name: String
+    /// What reclaiming this destroys (phase 19). Nil on an older CLI, which
+    /// only ever reported volumes.
+    let kind: OrphanKind?
+    /// Host path of a `directory` orphan; nil for a named volume.
+    let path: String?
     let sizeBytes: Int
     let sizeHuman: String
-    /// From the volume's `bardolier.project` label, or nil when unattributable.
+    /// The volume's `bardolier.project` label, or the project whose `data/` holds
+    /// the directory; nil when unattributable.
     let lastProject: String?
 
     var id: String { name }
@@ -306,7 +326,9 @@ nonisolated struct AttachedService: Codable, Hashable, Identifiable, Sendable {
     let hostPort: Int
     let containerPort: Int
     let connectionHint: String
-    let volume: String
+    /// Absolute path of this service's data directory, `<project>/data/<key>`
+    /// (phase 19). There is no named volume behind a service any more.
+    let dataDir: String
 
     var id: String { key }
 }
@@ -361,6 +383,8 @@ nonisolated struct DeleteOutput: Codable, Hashable, Sendable {
     /// Host ports the project no longer holds, free for the next allocation (§5).
     let releasedPorts: [Int]
     /// Removed under `--purge`.
+    /// Both are empty since phase 19: a project's data lives inside its
+    /// directory and goes with it.
     let removedVolumes: [String]
     /// Left behind under `--keep-data`; they become listed orphans.
     let keptVolumes: [String]
@@ -390,9 +414,10 @@ nonisolated struct RemovedService: Codable, Hashable, Sendable {
     let key: String
     /// Released — free for the next allocation (§5).
     let hostPort: Int
-    /// The KEPT volume (it becomes a listed orphan), or nil when the catalogue
-    /// no longer defines the service.
-    let volume: String?
+    /// The KEPT data directory; it becomes a listed orphan of the project.
+    /// Named by the catalogue key, so it is knowable even when the catalogue
+    /// has forgotten the service.
+    let dataDir: String
 }
 
 nonisolated struct ServiceListOutput: Codable, Hashable, Sendable {
@@ -467,7 +492,12 @@ nonisolated struct OrphanedVolumesOutput: Codable, Hashable, Sendable {
 }
 
 nonisolated struct VolumeRemoveOutput: Codable, Hashable, Sendable {
+    /// The orphan's name — a Docker volume, or `<project>/<key>`.
     let volume: String
+    /// What was reclaimed (phase 19). Nil on an older CLI.
+    let kind: OrphanKind?
+    /// Host path of a `directory` orphan; nil for a named volume.
+    let path: String?
     /// False when the confirmation was declined; nothing was touched.
     let removed: Bool
     let sizeBytes: Int

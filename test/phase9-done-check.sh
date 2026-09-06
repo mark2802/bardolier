@@ -38,7 +38,6 @@ DOCKER_OK=0
 cleanup() {
   if [ "$DOCKER_OK" = "1" ]; then
     docker rm -f bardolier-p9web bardolier-p9old >/dev/null 2>&1 || true
-    docker volume rm -f bardolier-p9web-home bardolier-p9old-home >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP"
 }
@@ -136,13 +135,13 @@ head "3. Compose generation (§9)"
 $BARDOLIER new p9web --archetype web --json >"$TMP/new.json"
 COMPOSE="$MOUNTED/p9web/docker-compose.yml"
 
-grep -q "bardolier-p9web-home:$HOME_PATH" "$COMPOSE" \
-  && ok "the dev container's \$HOME is a per-project named volume" \
-  || bad "no home volume in the generated file"
+grep -q -- "- ./home:$HOME_PATH" "$COMPOSE" \
+  && ok "the dev container's \$HOME is the project's own home/ folder (phase 19)" \
+  || bad "no home bind in the generated file"
 
 grep -q 'bardolier.role: home' "$COMPOSE" \
-  && ok "labelled so the orphan scan can attribute it" \
-  || bad "the home volume carries no role label"
+  && bad "the home is still a labelled named volume" \
+  || ok "it needs no label: being inside the project directory is the attribution"
 
 # The point of Compose's bare list form: names, never values.
 if grep -qE '^ *- CLAUDE_CODE_OAUTH_TOKEN$' "$COMPOSE" && ! grep -q 'CLAUDE_CODE_OAUTH_TOKEN=' "$COMPOSE"; then
@@ -206,8 +205,8 @@ if [ "$DOCKER_OK" = "1" ] && docker image inspect bardolier-web:latest >/dev/nul
     && ok "wrote a marker into the container's \$HOME" \
     || bad "could not write to \$HOME in the container"
 
-  # A repository for the handoff's other half to describe.
-  ( cd "$MOUNTED/p9web" \
+  # A repository under work/ for the handoff's other half to describe (§3).
+  ( cd "$MOUNTED/p9web/work" \
     && git init -q \
     && git -c user.name=T -c user.email=t@e add -A \
     && git -c user.name=T -c user.email=t@e commit -qm "Phase 9 done-check" \

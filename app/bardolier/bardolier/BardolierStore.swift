@@ -373,21 +373,15 @@ final class BardolierStore: ObservableObject {
         notice = result.wasRunning ? "\(name) stopped. Its data is untouched." : "\(name) was already stopped."
     }
 
-    /// CONFIRM FIRST — the client passes `--force` (§9). `purge` destroys the
-    /// project's volumes; the default keeps them as reclaimable orphans.
+    /// CONFIRM FIRST — the client passes `--force` (§9). The project's data
+    /// lives inside its directory (phase 19), so a plain delete refuses
+    /// PROJECT_HAS_DATA once there is any; `purge` is what destroys it.
     func delete(project name: String, purge: Bool) async {
         let result = await perform("Deleting \(name)") { client in
             try await client.delete(project: name, purge: purge)
         }
         guard let result, result.deleted else { return }
-        if result.removedVolumes.isEmpty {
-            let kept = result.keptVolumes.count
-            notice = kept == 0
-                ? "Deleted \(name)."
-                : "Deleted \(name). \(kept) volume\(kept == 1 ? "" : "s") kept — reclaim them from Reclaim disk."
-        } else {
-            notice = "Deleted \(name) and \(result.removedVolumes.count) volume(s)."
-        }
+        notice = "Deleted \(name)."
     }
 
     /// Attach a service. A running project fails PROJECT_RUNNING and the
@@ -402,14 +396,15 @@ final class BardolierStore: ObservableObject {
         notice = "\(result.added.display) attached on host port \(result.added.hostPort) — \(result.added.connectionHint)"
     }
 
-    /// Detach a service. The volume is KEPT and becomes a listed orphan (§6).
+    /// Detach a service. The data directory is KEPT and becomes a listed
+    /// orphan of the project (§6).
     func detach(service key: String, from name: String) async {
         let result = await perform("Detaching \(key) from \(name)") { client in
             try await client.serviceRemove(project: name, service: key)
         }
         guard let result else { return }
-        let volume = result.removed.volume.map { " Its volume \($0) is kept — reclaim it from Reclaim disk." } ?? ""
-        notice = "Detached \(result.removed.key); host port \(result.removed.hostPort) released.\(volume)"
+        let kept = " Its data in \(result.removed.dataDir) is kept — reclaim it from Reclaim disk."
+        notice = "Detached \(result.removed.key); host port \(result.removed.hostPort) released.\(kept)"
     }
 
     /// Create a project (§8). Returns the payload so the window can close only

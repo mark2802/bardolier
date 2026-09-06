@@ -61,7 +61,6 @@ describe('catalogue (app-spec.md §6, §8)', () => {
       '    image: "clickhouse/clickhouse-server:24"',
       '    container_port: 9000',
       '    host_port_base: 9000',
-      '    volume: "{project}_chdata"',
       '    mount: /var/lib/clickhouse',
     ].join('\n'))
 

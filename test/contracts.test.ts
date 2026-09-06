@@ -186,7 +186,6 @@ describe('service catalogue (cli-spec.md §4.1)', () => {
       image: 'postgres:17',
       container_port: 5432,
       host_port_base: 5432,
-      volume: '{project}_pgdata',
       mount: '/var/lib/postgresql/data',
       env: { POSTGRES_PASSWORD: 'dev', POSTGRES_DB: '{project}' },
     })
@@ -195,7 +194,6 @@ describe('service catalogue (cli-spec.md §4.1)', () => {
       image: 'redis:7',
       container_port: 6379,
       host_port_base: 6379,
-      volume: '{project}_redisdata',
       mount: '/data',
     })
     assert.deepEqual(catalogue.services.mongo, {
@@ -203,7 +201,6 @@ describe('service catalogue (cli-spec.md §4.1)', () => {
       image: 'mongo:7',
       container_port: 27017,
       host_port_base: 27017,
-      volume: '{project}_mongodata',
       mount: '/data/db',
     })
   })
@@ -211,8 +208,16 @@ describe('service catalogue (cli-spec.md §4.1)', () => {
   test('every service declares a host-port band the allocator can count from (§5)', () => {
     for (const [key, service] of Object.entries(catalogue.services)) {
       assert.ok(service.host_port_base >= 1024, `${key} band starts below 1024`)
-      assert.ok(service.volume.includes('{project}'), `${key} volume is not project-scoped`)
+      assert.ok(service.mount.startsWith('/'), `${key} mount is not an absolute container path`)
     }
+  })
+
+  test('no entry declares a volume — a service\'s data directory is its key (phase 19)', () => {
+    const raw = parseYaml(readText('cli/defaults/services.yml')) as { services: Record<string, Record<string, unknown>> }
+    for (const [key, service] of Object.entries(raw.services)) {
+      assert.ok(!('volume' in service), `${key} still declares a volume`)
+    }
+    assert.equal(validate('services', { services: { pg: { ...raw.services.postgres, volume: 'x' } } }).valid, false)
   })
 })
 
@@ -276,7 +281,7 @@ describe('service contracts (cli-spec.md §6, Services)', () => {
     host_port: 5433,
     container_port: 5432,
     connection_hint: 'postgresql://localhost:5433',
-    volume: 'myapp_pgdata',
+    data_dir: '/Volumes/ssd/claude-projects/myapp/data/postgres',
   }
 
   test('the attached-service block is identical in every schema that carries it', () => {
@@ -300,7 +305,7 @@ describe('service contracts (cli-spec.md §6, Services)', () => {
 
     const remove: ServiceRemoveOutput = {
       project: 'myapp',
-      removed: { key: 'postgres', host_port: 5433, volume: 'myapp_pgdata' },
+      removed: { key: 'postgres', host_port: 5433, data_dir: '/Volumes/ssd/claude-projects/myapp/data/postgres' },
       services: [],
       compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
       compose_regenerated: true,
@@ -311,10 +316,12 @@ describe('service contracts (cli-spec.md §6, Services)', () => {
     assert.ok(validate('service-list', list).valid)
   })
 
-  test('a detached service whose catalogue entry vanished may report a null volume', () => {
+  test('a detached service whose catalogue entry vanished still reports its data directory', () => {
+    // The directory is named by the catalogue KEY (phase 19), so an entry the
+    // catalogue has forgotten is still removable AND still locatable.
     const remove = {
       project: 'myapp',
-      removed: { key: 'kafka', host_port: 9092, volume: null },
+      removed: { key: 'kafka', host_port: 9092, data_dir: '/Volumes/ssd/claude-projects/myapp/data/kafka' },
       services: [],
       compose_path: '/tmp/docker-compose.yml',
       compose_regenerated: true,
@@ -327,8 +334,8 @@ describe('service contracts (cli-spec.md §6, Services)', () => {
   })
 
   test('rejects a row missing its host port — the whole point of the record (§5)', () => {
-    const { key, display, container_port, connection_hint, volume } = attached
-    const bad = { project: 'myapp', services: [{ key, display, container_port, connection_hint, volume }] }
+    const { key, display, container_port, connection_hint, data_dir } = attached
+    const bad = { project: 'myapp', services: [{ key, display, container_port, connection_hint, data_dir }] }
     assert.equal(validate('service-list', bad).valid, false)
   })
 })

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 import { ERROR_CODES } from '../cli/src/errors.ts'
 import { CATALOGUE_ORIGINS } from '../cli/src/catalogue.ts'
+import { ORPHAN_KINDS } from '../cli/src/model/status.ts'
 import { CONFIG_KEYS } from '../cli/src/config.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
@@ -240,6 +241,13 @@ describe('the app knows the tokens the CLI can emit', () => {
     const declared = constants('CatalogueOrigin')
     for (const origin of CATALOGUE_ORIGINS) {
       assert.ok(declared.has(origin), `BardolierModels.swift has no CatalogueOrigin for \`${origin}\``)
+    }
+  })
+
+  test('every orphan kind has an OrphanKind constant', () => {
+    const declared = constants('OrphanKind')
+    for (const kind of ORPHAN_KINDS) {
+      assert.ok(declared.has(kind), `BardolierModels.swift has no OrphanKind for \`${kind}\``)
     }
   })
 

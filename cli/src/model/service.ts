@@ -5,8 +5,8 @@
  * ships (Phase 5+).
  *
  * `AttachedService` is the shared row. It is deliberately Docker-free — key,
- * ports, hint and volume all come from the manifest plus the catalogue — which
- * is why `service list` answers with the daemon down and declares no
+ * ports, hint and data directory all come from the manifest plus the catalogue
+ * — which is why `service list` answers with the daemon down and declares no
  * DOCKER_UNAVAILABLE. Live state belongs to `status` (§7), which has the same
  * fields plus `state`; one shape would have forced this command to query the
  * daemon just to fill a field the caller did not ask for.
@@ -23,8 +23,8 @@ export type AttachedService = {
   container_port: number
   /** Ready-to-copy string for host GUI tools, e.g. `postgresql://localhost:5433`. */
   connection_hint: string
-  /** Named volume holding this service's data, e.g. `myapp_pgdata`. */
-  volume: string
+  /** Absolute path of this service's data directory, `<project>/data/<key>` (phase 19). */
+  data_dir: string
 }
 
 export type ServiceAddOutput = {
@@ -39,16 +39,16 @@ export type ServiceAddOutput = {
 }
 
 /**
- * What detaching left behind. `volume` is null only when the catalogue no
- * longer defines the service, in which case its volume name is unknowable —
- * removal still succeeds, because refusing would leave the project unfixable.
+ * What detaching left behind. Since phase 19 the data directory is named by
+ * the catalogue KEY, so it is always knowable — a service the catalogue has
+ * forgotten can still be detached AND still be told where its data went.
  */
 export type RemovedService = {
   key: string
   /** The port the project no longer holds; free for the next allocation (§5). */
   host_port: number
   /** KEPT, not destroyed: it becomes a listed orphan (`volumes orphaned`). */
-  volume: string | null
+  data_dir: string
 }
 
 export type ServiceRemoveOutput = {

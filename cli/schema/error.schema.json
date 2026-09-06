@@ -20,6 +20,7 @@
             "PROJECT_NOT_FOUND",
             "PROJECT_RUNNING",
             "PROJECT_STOPPED",
+            "PROJECT_HAS_DATA",
             "SERVICE_UNKNOWN",
             "SERVICE_ATTACHED",
             "SERVICE_NOT_ATTACHED",
