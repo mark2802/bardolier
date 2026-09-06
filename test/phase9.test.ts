@@ -122,6 +122,9 @@ describe('Claude Code is part of every base image', () => {
       // work and would silently lose the login on every `down`, which is
       // exactly the failure that is hard to notice and worth a test.
       assert.match(dockerfile(image), new RegExp(`ENV HOME=${CONTAINER_HOME}\\b`), `${image}`)
+      // ssh expands `~` from the passwd entry rather than $HOME, so a fourth
+      // reader has to agree: otherwise a key at $HOME/.ssh is invisible to it.
+      assert.match(dockerfile(image), new RegExp(`usermod -d ${CONTAINER_HOME}\\b`), `${image}`)
     }
   })
 })

@@ -42,8 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Installed as the pinned standalone binary rather than through npm, because two
 # of the three base images have no Node and one mechanism for all three beats
 # three. It lands in /usr/local/bin, NOT the installer's default
-# `$HOME/.local/bin`: $HOME here is a per-project named volume (below), and
-# anything the image leaves under $HOME is copied into it once per project.
+# `$HOME/.local/bin`: $HOME is a bind mount from the project's own `home/`
+# directory (below), which masks whatever the image put there — an install
+# under $HOME would simply not exist at runtime.
 #
 # Checksum-verified against the publisher's manifest for whatever version it
 # installs, exactly as swiftlint and the Android SDK are — but unlike them, NOT
@@ -133,21 +134,29 @@ RUN mkdir -p ${NPM_CONFIG_PREFIX} && chown -R "${HOST_UID}:${HOST_GID}" ${NPM_CO
 #
 # `bardolier down` removes the container, so a home living in the container layer
 # takes the shell history, the dotfiles and any `claude login` with it — the
-# next `up` would start from nothing. So $HOME is a named volume, one per
-# project (`bardolier-<project>-home`, cli/src/images.ts CONTAINER_HOME).
+# next `up` would start from nothing. So $HOME is the project's own `home/`
+# directory, bind-mounted here (cli/src/layout.ts, images.ts CONTAINER_HOME) —
+# per project, on the same disk as the project, and no Docker prune can take it.
 #
 # A FIXED path rather than the useradd-derived one, for the same reason
 # /cache/gradle is: HOST_UID may collide with a user the base image already
-# ships, which moves ~, and compose cannot mount a volume at a path it cannot
+# ships, which moves ~, and compose cannot mount anything at a path it cannot
 # predict. Claude Code's config dir then falls under it as $HOME/.claude, which
 # is what makes `claude --continue` resume THIS project rather than whichever
 # container last ran — every dev container has the same working dir, /work, so
 # a shared config dir would file every project's sessions in one bucket.
 #
-# Owned by the host user in the image: Docker seeds a new named volume from the
-# image directory, ownership included, and there is no sudo in here to fix it.
+# The mkdir/chown below seeds nothing — a bind mount masks the image's own
+# directory rather than being copied from it. It is here for the mount POINT,
+# for /state itself, and for running this image with no mount at all. The
+# mounted directory's ownership comes from the host, where `new` and every `up`
+# create it as the Mac user (cli/src/layout.ts) precisely so Docker does not
+# create it as root; there is no sudo in here to fix it afterwards.
 ENV HOME=/state/home
-RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state
+# The passwd entry moves too: ssh expands `~` from getpwuid, not $HOME, so a
+# key left at $HOME/.ssh is invisible to it while pw_dir is the useradd default.
+RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state \
+ && usermod -d /state/home "$(getent passwd "${HOST_UID}" | cut -d: -f1)"
 
 USER ${HOST_UID}:${HOST_GID}
 WORKDIR /work

@@ -120,7 +120,10 @@ RUN set -eux; \
 # Owned by the host user in the image: Docker seeds a new named volume from the
 # image directory, ownership included, and there is no sudo in here.
 ENV HOME=/state/home
-RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state
+# The passwd entry moves too: ssh expands `~` from getpwuid, not $HOME, so a
+# key left at $HOME/.ssh is invisible to it while pw_dir is the useradd default.
+RUN mkdir -p /state/home && chown -R "${HOST_UID}:${HOST_GID}" /state \
+ && usermod -d /state/home "$(getent passwd "${HOST_UID}" | cut -d: -f1)"
 
 USER ${HOST_UID}:${HOST_GID}
 WORKDIR /work
