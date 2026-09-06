@@ -24,9 +24,16 @@ try_eject() {
     const real = createSsdDevice()
     const unmounted = []
     const device = {
-      holders: (mount) => real.holders(mount),
-      // Not under test here (see test/phase10-done-check.sh) — this temp dir
-      // stands in for a removable SSD, same fiction as every other check.
+      // containingVolume() walks up by device number, and firmlinks make any
+      // path under \$TMPDIR resolve to the boot volume (/) on real macOS — so
+      // runEject asks holders() about \"/\", not our stand-in directory. \"/\"
+      // is never free of real holders (Finder, Dock, loginwindow, …), so the
+      // eject-clears-once-the-holder-quits assertion below could never pass.
+      // Query the actual stand-in directory instead — the one thing under
+      // test here is real lsof output for a real holder, not mount resolution.
+      holders: () => real.holders('$VOLUME'),
+      // Not under test here — this temp dir stands in for a removable SSD,
+      // same fiction as every other check.
       removable: async () => true,
       eject: async (mount) => { unmounted.push(mount) },
     }
