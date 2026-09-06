@@ -46,11 +46,11 @@ grows to provide it.
   stopped project is a no-op success.
 - **Read-only commands never mutate.** `status`, `list`, `volumes orphaned`.
 - The CLI reads `roots` from config (see §8); `$BARDOLIER_ROOT` overrides the
-  whole list with a single root (phase 18).
+  whole list with a single root.
 
 ## 3. On-disk layout
 
-Projects live in more than one **root** at once (phase 18) — typically an
+Projects live in more than one **root** at once — typically an
 internal-disk root and an external SSD root; the CLI treats every configured
 root the same way. Each root:
 
@@ -67,7 +67,7 @@ root the same way. Each root:
     work/CLAUDE.md                 # seeded, archetype-specific boundary (§10)
 ```
 
-- **A project directory is not a repository** (phase 19). bardolier's files sit
+- **A project directory is not a repository.** bardolier's files sit
   above the four folders and inside no working tree: nothing to gitignore, and
   `git clean -xdf` in a repo under `work/` cannot reach `data/`.
 - The four are created by `new` and re-ensured by every `up`. Docker would
@@ -94,10 +94,10 @@ root the same way. Each root:
 ### 4.1 Service catalogue — `services.yml`
 
 Single editable file (location in config; default `<default root>/services.yml`
-— the default root only, not per-root, phase 18's non-goals — falling back to
+— the default root only, never per-root — falling back to
 a bundled default). Adding a service type = adding an entry, no code change.
 There is no `volume` key: a service's data directory is its catalogue KEY, under
-the project's own `data/` (§3, phase 19).
+the project's own `data/` (§3).
 
 ```yaml
 services:
@@ -132,7 +132,7 @@ Source of truth for one project. The compose file is derived from this.
 name: myapp
 archetype: web            # web | ios | android | library
 base_image: bardolier-web    # resolved from archetype
-extra_packages:            # OS packages beyond base_image (Phase 13); absent/empty = none
+extra_packages:            # OS packages beyond base_image; absent/empty = none
   - libnss3
 services:
   postgres:
@@ -185,7 +185,7 @@ manifest names its base image.
 ## 5. Port allocation (first-class)
 
 Requirements, in priority order:
-1. **Unique** across all projects and services in **every** root (phase 18) — a
+1. **Unique** across all projects and services in **every** root — a
    project's root is otherwise invisible to whoever reads a connection string.
 2. **Stable** — assigned once at service-add, persisted in `project.yml`, never
    reassigned on restart. Released only on service-remove or project-delete.
@@ -253,7 +253,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
   (unknown `--root`, naming the configured roots).
 - `bardolier list` — array of projects with archetype + running state + root
-  (phase 18).
+
 - `bardolier status [<name>]` — full status object(s) (see §7). No arg = all.
   A name found in more than one root is `PROJECT_AMBIGUOUS`.
 - `bardolier up <name> [--no-shell]`
@@ -311,7 +311,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Volumes / disk
 - `bardolier volumes orphaned` — array of `{ name, kind, path, size_bytes,
   size_human, last_project }` for everything ours nothing claims. Two `kind`s
-  (phase 19): a `directory` under some project's `data/` whose key its manifest
+  a `directory` under some project's `data/` whose key its manifest
   no longer attaches — named `<project>/<key>`, needing only that one root
   readable, with no labels and no cross-root reasoning — and a named `volume`,
   now only the shared toolchain caches plus whatever an older layout left
@@ -326,11 +326,11 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 - `bardolier down-all` — stop + remove all bardolier containers, across every root.
   Containers don't belong to a root, so this stays global.
 - `bardolier eject [<root>]` — the volume is derived from the named root's path
-  (the last ancestor directory sharing its `st_dev`, phase 17); there is no
+  (the last ancestor directory sharing its `st_dev`); there is no
   `ssd_volume` key that could disagree with it. `[<root>]` may be omitted only
   when exactly one configured root is a mounted, removable volume
   (`diskutil info -plist`); otherwise its absence is `INVALID_ARGUMENT` naming
-  every configured root (phase 18).
+  every configured root.
   - **Not removable → `EJECT_NOT_APPLICABLE`, immediately**, before anything is
     stopped, naming `bardolier down-all` as the command to run instead. A root on
     the internal disk is a first-class mode (§8), and `diskutil eject`-ing `/`
@@ -373,7 +373,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Roots
 
 `roots` is list-valued (§8), which `config set` cannot edit — the same reason
-`catalogue` and `config get|set` got their own commands in Phase 6.
+`catalogue` and `config get|set` got their own commands.
 
 - `bardolier root add <path> [--name <name>]` — register a root; `--name` defaults
   to the path's basename. Names and paths must each be unique across the list.
@@ -399,9 +399,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### App support
 
-Phase 6 additions under §1 ("if the app needs something, a CLI command grows to
-provide it"), not part of the original surface. Additive: no existing schema
-changed.
+Commands that exist because the app asked, under §1 ("if the app needs
+something, a CLI command grows to provide it"). Additive: no existing schema
+changed to accommodate them.
 
 - `bardolier catalogue` — every service type the catalogue defines, with image,
   container port and host-port BAND START (an assigned port comes from a
@@ -424,7 +424,7 @@ changed.
 ```json
 {
   "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" }, // default root's path (roots[0])
-  "roots": [                          // every configured root (phase 18), additive
+  "roots": [                          // every configured root; additive
     { "name": "ssd", "path": "/Volumes/ssd/claude-projects", "mounted": true }
   ],
   "docker": { "available": true },
@@ -433,8 +433,8 @@ changed.
       "name": "myapp",
       "archetype": "web",
       "state": "running",              // running | stopped | partial
-      "root": "ssd",                    // configured root's name (phase 18, additive)
-      "work_dir": "/Volumes/ssd/claude-projects/myapp/work", // §3 (phase 19, additive)
+      "root": "ssd",                    // configured root's name; additive
+      "work_dir": "/Volumes/ssd/claude-projects/myapp/work", // §3; additive
       "services": [
         {
           "key": "postgres",
@@ -454,7 +454,7 @@ changed.
       ]
     }
   ],
-  "orphaned_volumes": [                 // kind/path additive since phase 19
+  "orphaned_volumes": [                 // kind/path are additive; older clients ignore them
     { "name": "oldapp/postgres", "kind": "directory",
       "path": "/Volumes/ssd/claude-projects/oldapp/data/postgres",
       "size_bytes": 20971520, "size_human": "20 MB", "last_project": "oldapp" }
@@ -471,9 +471,9 @@ Schema stability is the contract. Additive changes only once the app ships.
   (§3 — ordered `{ name, path }`, `roots[0]` the default `new` targets, names
   and paths each unique), `catalogue_path`, `terminal` (the app's shell-open
   preference, kept here for a single source).
-- No `ssd_volume` key (phase 17): a root's mount point is derived from its
+- No `ssd_volume` key: a root's mount point is derived from its
   `path` by walking `st_dev` boundaries, so the two can never disagree.
-- `$BARDOLIER_ROOT` (phase 18; was `$BDLR_SSD_ROOT`) REPLACES `roots` wholesale
+- `$BARDOLIER_ROOT` REPLACES `roots` wholesale
   with a single root named after the path's basename — one variable, so a
   done-check stays hermetic with a temp dir.
 - `roots` is list-valued and not settable through `config set`; see
@@ -493,7 +493,7 @@ Schema stability is the contract. Additive changes only once the app ships.
   than honoured. Writes go through `workspace.ts`, which skips a write whose
   bytes already match the file on disk: determinism made observable.
 - One user-defined network per project; services and dev container attached.
-- **Image selection** (phase 13): the dev container's `image:` is
+- **Image selection**: the dev container's `image:` is
   `<base_image>:latest` when `extra_packages` is empty, else the
   content-addressed `bardolier-deps-<base_image>:<hash>`, `hash` being a short
   sha256 of the base image plus the sorted package list — so two projects
@@ -558,7 +558,7 @@ the Mac and looks like a broken port mapping. It goes in `work/` because that is
 the agent's working directory, and because a repository cloned in beside it then
 never contains it.
 
-No `.gitignore` and no `.dockerignore` (phase 19): there is no repo root to seed
+No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's files sit above `work/`, inside no working tree — and nothing takes
 a build context from a project directory (`deps.ts` builds from a generated
 context under the config dir).
@@ -571,6 +571,11 @@ context under the config dir).
   eject (holder-blocked and clear paths).
 - Port allocation has unit coverage: uniqueness, stability across restart,
   band assignment, host-squat detection.
+- **Checks are named for what they cover, not for when they were written.**
+  `test/<name>-done-check.sh` drives one function from the terminal — services,
+  ports, eject, roots, images — each building its own temp root and config, so
+  it runs alone and in any order; `test/regression.sh` runs them all, cheapest
+  first. The TypeScript suites in `test/<name>.test.ts` mirror the same split.
 
 ## 12. The handoff note (by `down`)
 

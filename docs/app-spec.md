@@ -72,7 +72,7 @@ Quit
 - The status line reads "SSD: …" only when the default root is a removable
   volume; a root on the internal disk reads "Root: mounted (…)" / "Root not
   found: (…)" instead — a plain folder is never called an SSD, and "plug it
-  in" is never offered for one (phase 18, `doctor`'s `ssd.roots[].removable`).
+  in" is never offered for one (`doctor`'s `ssd.roots[].removable`).
 - Running project shows **Stop** + **Open shell**; stopped shows **Start**.
 - **Start** brings the project up and, per preference (default ON), opens a shell
   (see §7). **Open shell** is always available for a running project.
@@ -125,7 +125,7 @@ Small modal:
 ## 10. Close all & eject
 
 0. If no configured root is a removable volume (`doctor`'s `ssd` finding,
-   `roots[].removable` — phase 18), the row reads plain **Close all** and calls
+   `roots[].removable`), the row reads plain **Close all** and calls
    `bardolier down-all --json` directly. `eject` would only ever answer
    `EJECT_NOT_APPLICABLE`, and does so before stopping anything, so routing
    through it would leave every project running behind a button that claims to
@@ -141,7 +141,7 @@ Small modal:
    - `reason == "runtime-holds-volume-after-stop"`: that offer was taken and the
      CLI waited. Withdraw it, render the CLI's own sentence, leave **Retry**; a
      button that repeats what just failed is a loop, not a move.
-   - `EJECT_NOT_APPLICABLE` (a root that is a plain directory — phase 10): not a
+   - `EJECT_NOT_APPLICABLE` (a root that is a plain directory): not a
      banner failure. Render it once, then dim the menu row with the reason, the
      same treatment a missing archetype Dockerfile gets. No Retry — it would
      fail identically every time.
@@ -187,7 +187,7 @@ written against that contract, not in parallel with it.
 
 ## 15. Implementation map (Swift)
 
-Sources live in `app/Bardolier/Bardolier/Bardolier/` (phase 16). The app reads
+Sources live in `app/Bardolier/Bardolier/Bardolier/`. The app reads
 the contract; it never re-derives it.
 
 - `BardolierClient` — builds argv, appends `--json` itself (no caller may), and
@@ -212,7 +212,7 @@ the contract; it never re-derives it.
   its own way (§13).
 - `EjectPanel` renders `ejectPhase` and offers **Retry**. Nothing in Swift can
   force an unmount or kill a holder, and `eject` has no `--force`
-  (`test/phase7.test.ts`).
+  (`test/eject.test.ts`).
 - `MenuRow` takes a `disabledReason` and serves it as help; `DisabledNotice`
   says it once per group — a dimmed row and an absent row otherwise look the
   same, and with Docker down every mutating item is disabled for one reason.

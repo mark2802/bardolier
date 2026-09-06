@@ -37,11 +37,11 @@ Read only the spec **section** a task needs (`sed -n` a range), not the whole fi
   long output through `tail`/`grep`. Never re-read a file you just wrote — the
   edit would have errored.
 - **Test the smallest scope that can catch the bug**: `npm run test:quiet` (30
-  lines, not 600) or the one phase check you touched. `regression.sh` is for
-  declaring a phase done — prefer `--through N`, and `PHASE8_QUICK=1` /
-  `BARDOLIER_SKIP_DOCKER=1` skip legs a change cannot affect. Done-checks print
-  failures and a summary (`VERBOSE=1` for every passing line). Never re-run a
-  check that just passed.
+  lines, not 600) or the one done-check that owns what you touched.
+  `regression.sh` runs them all and is for declaring work done;
+  `BARDOLIER_SKIP_DOCKER=1` and `IMAGES_QUICK=1` skip legs a change cannot
+  affect. Checks print failures and a summary (`VERBOSE=1` for every passing
+  line). Never re-run a check that just passed.
 - **Batch independent tool calls** into one message.
 - **Don't add unasked work**: no extra docs, changelogs, formatting passes,
   review rounds, or subagents unless requested.
@@ -114,13 +114,15 @@ npm run bardolier -- --help
 node cli/bin/bardolier.js status --json
 npm run test:quiet                      # contract tests — use this, not npm test
 npm run typecheck
-bash test/phaseN-done-check.sh          # N = 0..9; each covers everything below
-bash test/regression.sh [--through N]   # the ladder, once, in order; 0-7 is ~60s
+bash test/<name>-done-check.sh          # one function: services, eject, roots…
+bash test/regression.sh [name...]       # every check, cheapest first, or just these
 ```
 
-`regression.sh` sets `BARDOLIER_REGRESSION`; a phase check seeing it skips its own
-"earlier phases" section instead of recursing. Phase 8 builds images and runs
-Gradle, so `--through 7` skips it.
+**A check is named for what it covers and stands alone.** Each builds its own
+temp root and config (`test/lib.sh`), assumes nothing another check left, and
+can run by itself — there is no ladder to walk. `contract` is the one that runs
+`npm test` and the typecheck; `images` builds base images and runs Gradle under
+emulation, so it goes last and is minutes rather than seconds.
 
 ## Code map
 
@@ -144,7 +146,8 @@ here is read by several files that must agree — change it in one place.
 
 ## Definition of done
 
-New work gets a scoped spec in `docs/phases/` and a terminal done-check; it is
-not done until that check passes, and a CLI check then joins `regression.sh`
-and stays. The spec names any decision that must be answered first, and the
-check covers every `INTENT.md` invariant the work could break.
+New work gets a scoped spec in `docs/phases/` and a terminal check; it is not
+done until that check passes. The check joins the done-check for the function
+it belongs to — a new one only for a function that has none — and stays. The
+spec names any decision that must be answered first, and the check covers every
+`INTENT.md` invariant the work could break.

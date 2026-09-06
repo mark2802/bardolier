@@ -131,8 +131,8 @@ if [ -n "$IOS_CONTAINER" ]; then
     ok "no xcodebuild, no simctl: the host-only steps cannot be attempted from in here"
   fi
 
-  if [ "${PHASE8_QUICK:-0}" = "1" ]; then
-    skip "PHASE8_QUICK=1 — skipped swift build / swift test / swiftlint on a real package"
+  if [ "${IMAGES_QUICK:-0}" = "1" ]; then
+    skip "IMAGES_QUICK=1 — skipped swift build / swift test / swiftlint on a real package"
   else
     if in_ios 'swift package init --type library --name Widget >/dev/null 2>&1 && swift build >/dev/null 2>&1 && swift test 2>&1 | tail -1' \
         >"$TMP/swift.log" 2>&1 && grep -qi "passed" "$TMP/swift.log"; then
@@ -288,8 +288,8 @@ if [ -n "$AND_CONTAINER" ]; then
     bad "the SDK is incomplete — sdkmanager lists no platform/build-tools"
   fi
 
-  if [ "${PHASE8_QUICK:-0}" = "1" ]; then
-    skip "PHASE8_QUICK=1 — skipped the Gradle build (the slow one: emulated, and it downloads AGP)"
+  if [ "${IMAGES_QUICK:-0}" = "1" ]; then
+    skip "IMAGES_QUICK=1 — skipped the Gradle build (the slow one: emulated, and it downloads AGP)"
   else
     printf '    running gradle assembleDebug + testDebugUnitTest (minutes, emulated)\n'
     if in_and 'gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest' >"$TMP/gradle.log" 2>&1; then

@@ -377,7 +377,8 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
 
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
-  situational fix — it's the same shape of change Phase 11 made for Python.
+  situational fix — it's the same shape of change that put Python in the web
+  base image.
   Don't improvise a per-project Dockerfile addition; file it in
   `docs/migration-guide-gaps.md` instead.
 

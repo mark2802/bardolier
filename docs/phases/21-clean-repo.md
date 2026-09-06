@@ -21,7 +21,7 @@ archived locally and not deleted.
   `docker-compose.yml` or `project.yml` from a real project.
 - Fresh-clone verification, on a machine (or a container) that has never run
   the tool: `npm install`; `npm run typecheck`; `npm run test:quiet`;
-  `bash test/regression.sh --through 7`. Then follow the README's quickstart
+  `BARDOLIER_SKIP_DOCKER=1 bash test/regression.sh`. Then follow the README's quickstart
   literally, from the top, changing nothing — every step that needs a fact the
   README does not state is a README bug, and this is the pass that finds them.
 - The human opens the renamed Xcode project on the host, builds, runs, and

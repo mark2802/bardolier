@@ -45,7 +45,7 @@ one contributor, and three files carrying personal paths.
   and test-ladder instructions, phrased as how to work on the project rather
   than as instructions to one agent.
 - Personal scrub: the hard-coded path in the Xcode scheme (already handled in
-  phase 16), `/Users/mark/projects` in `test/phase10.test.ts`, and
+  phase 16), `/Users/mark/projects` in `test/eject.test.ts`, and
   `.claude/settings.local.json` — which should be `.gitignore`d rather than
   edited.
 
@@ -54,7 +54,7 @@ no code of conduct or issue templates — none of them is needed to publish, and
 each is a commitment to maintain something. No screenshots of the app until
 someone asks for them.
 
-**Done-check:** `test/phase20-done-check.sh` asserts `LICENSE` exists and is
+**Done-check:** `test/publishing-done-check.sh` asserts `LICENSE` exists and is
 Apache 2.0; `NOTICE` and `README.md` exist and the README has the required
 sections including Security; `grep -ri "dangerously-skip-permissions"` over the
 tree returns nothing; no personal path or email appears in any tracked file;

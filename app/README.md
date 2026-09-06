@@ -42,9 +42,8 @@ Bardolier/Bardolier/
 
 ## Three build settings the template does not default to
 
-All three are the human's, in Xcode, and the done-checks report whether they
-have been done (`test/phase5-done-check.sh`, `test/phase6-done-check.sh`,
-`test/phase7-done-check.sh`):
+All three are the human's, in Xcode, and `test/app-done-check.sh` reports
+whether they have been done:
 
 - **App Sandbox OFF** (target → Signing & Capabilities → remove the capability).
   The app's only ability is to run `bardolier`; a sandboxed app cannot exec a helper
@@ -118,7 +117,8 @@ writer in Swift.
 `test/app-models.test.ts` holds the Swift models to the frozen schemas in both
 directions, asserts nothing here spawns anything but `bardolier`, and asserts the
 app composes no connection string, no project path and no config file of its
-own. `test/phase7.test.ts` adds the two flows that leave the app: a blocked
+own. `test/eject.test.ts` and `test/shell.test.ts` add the two flows that
+leave the app: a blocked
 eject keeps its holders on screen for a Retry instead of reducing them to a
 banner, nothing in Swift can force an unmount or kill a holder, the auto-shell
 preference reaches `up`, and a missing `bardolier` is a first-run state rather than
