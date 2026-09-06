@@ -1,51 +1,186 @@
 /**
- * Phase 12 — extra ports (`docs/migration-guide-gaps.md`, resolved): a named,
- * per-project, archetype-independent port published from the dev container —
- * a second frontend/backend a mobile client or another browser tab must reach
- * directly, or an interactive dev tool on an archetype that otherwise
- * publishes nothing. Same §5 rules as a service's port (unique, stable,
- * banded from the caller's own `--container-port`, released on remove).
+ * Port allocation (§5) and the named extra ports declared on top of it (§5.1).
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { parse as parseYaml } from 'yaml'
+import { join } from 'node:path'
+import { rmSync } from 'node:fs'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { composeDocument } from '../cli/src/compose.ts'
+import { MAX_BAND_SCAN, allocatePorts, assignedPorts } from '../cli/src/allocator.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDown } from '../cli/src/commands/down.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
 import { collectStatus } from '../cli/src/commands/status.ts'
+import { runServiceAdd } from '../cli/src/commands/service.ts'
+import { composeDocument } from '../cli/src/compose.ts'
 import { collectPortList, runPortAdd, runPortRemove } from '../cli/src/commands/port.ts'
-import type { Context } from '../cli/src/context.ts'
-import type { ProjectManifest } from '../cli/src/model/project.ts'
-import { makeContext, makeSandbox, manifest, stubDocker, stubPorts, type Sandbox } from './helpers.ts'
+import { scanVolumes } from '../cli/src/volumes.ts'
+import {
+  catalogue,
+  makeContext,
+  manifest,
+  ports,
+  project,
+  readManifest,
+  sandboxes,
+  stubDocker,
+  stubPorts,
+  tempDirs,
+  twoRoots,
+} from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
+const sandbox = sandboxes()
+const secondRoot = tempDirs('bardolier-root-b-')
+
+// ── The allocator (§5) ────────────────────────────────────────────────────────
+describe('port allocation (cli-spec.md §5)', () => {
+  test('scans every manifest on the disk, not just one project (§5 step 2)', () => {
+    const box = sandbox()
+    box.writeProject('alpha', manifest('alpha', { services: { postgres: { host_port: 5432 } } }))
+    box.writeProject('beta', manifest('beta', { services: { postgres: { host_port: 5433 }, redis: { host_port: 6379 } } }))
+    const ctx = makeContext(box)
+
+    const held = assignedPorts(ctx.config)
+    assert.deepEqual(
+      [...held.entries()].sort(([a], [b]) => a - b),
+      [
+        [5432, { project: 'alpha', service: 'postgres' }],
+        [5433, { project: 'beta', service: 'postgres' }],
+        [6379, { project: 'beta', service: 'redis' }],
+      ],
+    )
+  })
+
+  test('starts at the catalogue band base (§5.4)', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    const catalogue = ctx.catalogue().catalogue
+
+    const assigned = await allocatePorts(ctx, 'myapp', [
+      { key: 'postgres', definition: catalogue.services.postgres! },
+      { key: 'redis', definition: catalogue.services.redis! },
+      { key: 'mongo', definition: catalogue.services.mongo! },
+    ])
+    assert.deepEqual([...assigned], [
+      ['mongo', 27017],
+      ['postgres', 5432],
+      ['redis', 6379],
+    ])
+  })
+
+  test('is unique across projects: the second postgres lands one above the first', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await project(ctx, 'alpha')
+    await project(ctx, 'beta')
+
+    await runServiceAdd(ctx, { project: 'alpha', service: 'postgres' })
+    await runServiceAdd(ctx, { project: 'beta', service: 'postgres' })
+
+    assert.equal(ports(box, 'alpha').postgres, 5432)
+    assert.equal(ports(box, 'beta').postgres, 5433)
+  })
+
+  test('skips a port squatted on the host, even though no manifest claims it', async () => {
+    const box = sandbox()
+    // Two ports held by some other Mac process — TablePlus, a stray container,
+    // a local Homebrew postgres. Not ours, so not ours to hand out.
+    const ctx = makeContext(box, stubDocker(), { ports: stubPorts([5432, 5433]) })
+    await project(ctx, 'myapp')
+
+    const added = await runServiceAdd(ctx, { project: 'myapp', service: 'postgres' })
+    assert.equal(added.added.host_port, 5434)
+  })
+
+  test('a manifest claim and a host bind are both disqualifying', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { ports: stubPorts([5433]) })
+    await project(ctx, 'alpha')
+    await project(ctx, 'beta')
+
+    await runServiceAdd(ctx, { project: 'alpha', service: 'postgres' }) // takes 5432
+    const beta = await runServiceAdd(ctx, { project: 'beta', service: 'postgres' })
+    assert.equal(beta.added.host_port, 5434, '5432 is claimed and 5433 is bound')
+  })
+
+  test('an assigned port is never revisited — adding a second service leaves the first alone', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await project(ctx, 'myapp')
+
+    await runServiceAdd(ctx, { project: 'myapp', service: 'postgres' })
+    const before = ports(box, 'myapp').postgres
+    await runServiceAdd(ctx, { project: 'myapp', service: 'redis' })
+
+    assert.equal(ports(box, 'myapp').postgres, before)
+    assert.equal(ports(box, 'myapp').redis, 6379)
+  })
+
+  test('ports are stable across stop and start (§5.2)', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ startsAs: ['bardolier-myapp', 'bardolier-myapp-postgres'] })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'myapp')
+    await runServiceAdd(ctx, { project: 'myapp', service: 'postgres' })
+
+    const assigned = ports(box, 'myapp').postgres
+    await runUp(ctx, { name: 'myapp', noShell: true })
+    await runDown(ctx, 'myapp')
+    const restarted = await runUp(ctx, { name: 'myapp', noShell: true })
+
+    assert.equal(ports(box, 'myapp').postgres, assigned)
+    assert.deepEqual(restarted.services, [{ key: 'postgres', host_port: assigned, container_port: 5432 }])
+  })
+
+  test('allocation order does not depend on the order the keys were typed', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'forwards', archetype: 'web', services: 'postgres,redis' })
+    await runNew(ctx, { name: 'backwards', archetype: 'web', services: 'redis,postgres' })
+
+    // Different projects, so the second gets the next port in each band — but
+    // the KEY→BAND pairing must not flip with the typing order.
+    assert.deepEqual(ports(box, 'forwards'), { postgres: 5432, redis: 6379 })
+    assert.deepEqual(ports(box, 'backwards'), { postgres: 5433, redis: 6380 })
+  })
+
+  test('an exhausted band fails PORT_UNAVAILABLE rather than wandering off it', async () => {
+    const box = sandbox()
+    // A band with nowhere to go: base 65534, and both candidates bound.
+    const cataloguePath = box.writeFile(
+      'tight.yml',
+      [
+        'services:',
+        '  tight:',
+        '    display: "Tight"',
+        '    image: "tight:1"',
+        '    container_port: 9000',
+        '    host_port_base: 65534',
+        '    mount: /data',
+        '',
+      ].join('\n'),
+    )
+    box.writeConfig({ catalogue_path: cataloguePath })
+    const ctx = makeContext(box, stubDocker(), { ports: stubPorts([65534, 65535]) })
+    await project(ctx, 'myapp')
+
+    await assert.rejects(
+      () => runServiceAdd(ctx, { project: 'myapp', service: 'tight' }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PORT_UNAVAILABLE',
+    )
+    assert.deepEqual(ports(box, 'myapp'), {}, 'a failed allocation must not be recorded')
+  })
+
+  test('the band scan is bounded, so allocation cannot walk the whole port space', () => {
+    assert.ok(MAX_BAND_SCAN > 0 && MAX_BAND_SCAN <= 1024)
+  })
 })
 
-function readManifest(box: Sandbox, project: string): ProjectManifest {
-  const text = box.read(project, 'project.yml')
-  assert.ok(text, `${project}/project.yml is missing`)
-  return parseYaml(text) as ProjectManifest
-}
-
-async function project(ctx: Context, name: string, archetype: 'web' | 'library' = 'web'): Promise<void> {
-  await runNew(ctx, { name, archetype, services: undefined })
-}
-
 // ── port add (§6, §5.1) ────────────────────────────────────────────────────────
-
 describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
   test('records the port, regenerates compose, and reports both', async () => {
     const box = sandbox()
@@ -92,7 +227,7 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
   test('works on an archetype with no app_port — the library-archetype gap this closes', async () => {
     const box = sandbox()
     const ctx = makeContext(box)
-    await project(ctx, 'mylib', 'library')
+    await project(ctx, 'mylib', { archetype: 'library' })
 
     const result = await runPortAdd(ctx, { project: 'mylib', name: 'notebook', containerPort: '8888' })
     assert.equal(result.added.host_port, 8888)
@@ -103,7 +238,7 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
   test('a second declared port publishes alongside app_port — the second-frontend/mobile-client gap this closes', async () => {
     const box = sandbox()
     const ctx = makeContext(box)
-    await project(ctx, 'myapp', 'web')
+    await project(ctx, 'myapp', { archetype: 'web' })
     await runUp(ctx, { name: 'myapp', noShell: true }) // assigns app_port 3000
     await runDown(ctx, 'myapp')
 
@@ -177,7 +312,6 @@ describe('port add (cli-spec.md §6, Ports; §5.1)', () => {
 })
 
 // ── port remove (§6) ───────────────────────────────────────────────────────────
-
 describe('port remove (cli-spec.md §6, Ports)', () => {
   test('releases the port and rewrites compose', async () => {
     const box = sandbox()
@@ -253,7 +387,6 @@ describe('port remove (cli-spec.md §6, Ports)', () => {
 })
 
 // ── port list (§6) ─────────────────────────────────────────────────────────────
-
 describe('port list (cli-spec.md §6, Ports)', () => {
   test('reports declared ports with their resolved host ports, sorted', async () => {
     const box = sandbox()
@@ -287,7 +420,6 @@ describe('port list (cli-spec.md §6, Ports)', () => {
 })
 
 // ── compose + status + delete integration ───────────────────────────────────────
-
 describe('extra ports elsewhere in the system', () => {
   test('compose publishes app_port before extra ports, extra ports sorted by name', () => {
     const doc = composeDocument({
@@ -336,6 +468,45 @@ describe('extra ports elsewhere in the system', () => {
     await assert.rejects(
       () => runUp(squatted, { name: 'myapp', noShell: true }),
       (error: unknown) => error instanceof BardolierError && error.code === 'PORT_UNAVAILABLE',
+    )
+  })
+})
+
+describe('a partial view refuses rather than under-reporting (§5, §6)', () => {
+  test('assignedPorts throws ROOT_UNREADABLE when any configured root is unreadable', () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('alpha', manifest('alpha', { services: { postgres: { host_port: 5433 } } }))
+    rmSync(rootB, { recursive: true, force: true })
+
+    assert.throws(
+      () => assignedPorts(ctx.config),
+      (error: unknown) => error instanceof BardolierError && error.code === 'ROOT_UNREADABLE',
+    )
+  })
+
+  test('a port allocated in one root is never handed out in another', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+
+    const a = await runNew(ctx, { name: 'alpha', archetype: 'web', services: 'postgres', root: 'a' })
+    const b = await runNew(ctx, { name: 'beta', archetype: 'web', services: 'postgres', root: 'b' })
+    assert.notEqual(a.services[0]?.host_port, b.services[0]?.host_port)
+  })
+
+  test('volumes: SSD_NOT_MOUNTED when every root is gone, ROOT_UNREADABLE when only some are', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('alpha', manifest('alpha'))
+
+    rmSync(box.root, { recursive: true, force: true })
+    rmSync(rootB, { recursive: true, force: true })
+    await assert.rejects(
+      () => scanVolumes(ctx),
+      (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
     )
   })
 })

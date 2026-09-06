@@ -1,48 +1,30 @@
 /**
- * Phase 13 — extra packages (docs/phases/13-extra-packages.md): OS-level apt
- * packages a project's toolchain needs beyond its base image, built into a
- * content-addressed derived image at `up` rather than baked into the shared
- * base image or installed at runtime (no root there).
+ * Declared OS packages and the content-addressed derived image they build.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { parse as parseYaml } from 'yaml'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { composeDocument } from '../cli/src/compose.ts'
 import { derivedDockerfile, derivedImageTag, selectedImage } from '../cli/src/deps.ts'
-import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDown } from '../cli/src/commands/down.ts'
 import { collectDepsList, runDepsAdd, runDepsRemove } from '../cli/src/commands/deps.ts'
-import type { Context } from '../cli/src/context.ts'
-import type { ProjectManifest } from '../cli/src/model/project.ts'
-import { makeContext, makeSandbox, manifest, stubDocker, type Sandbox } from './helpers.ts'
+import {
+  catalogue,
+  makeContext,
+  manifest,
+  project,
+  readManifest,
+  sandboxes,
+  stubDocker,
+} from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
-})
-
-function readManifest(box: Sandbox, project: string): ProjectManifest {
-  const text = box.read(project, 'project.yml')
-  assert.ok(text, `${project}/project.yml is missing`)
-  return parseYaml(text) as ProjectManifest
-}
-
-async function project(ctx: Context, name: string): Promise<void> {
-  await runNew(ctx, { name, archetype: 'web', services: undefined })
-}
+const sandbox = sandboxes()
 
 // ── the derived-image mechanics (deps.ts) ───────────────────────────────────
-
 describe('derived-image mechanics (deps.ts)', () => {
   test('the tag is content-addressed: same base image + package set → same tag', () => {
     assert.equal(derivedImageTag('bardolier-web', ['libnss3', 'libatk-bridge2.0-0']), derivedImageTag('bardolier-web', ['libatk-bridge2.0-0', 'libnss3']))
@@ -70,7 +52,6 @@ describe('derived-image mechanics (deps.ts)', () => {
 })
 
 // ── deps add (§6, §4.2) ──────────────────────────────────────────────────────
-
 describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
   test('records the package(s), regenerates compose to the derived image, and reports both', async () => {
     const box = sandbox()
@@ -170,7 +151,6 @@ describe('deps add (cli-spec.md §6, Deps; §4.2)', () => {
 })
 
 // ── deps remove (§6) ─────────────────────────────────────────────────────────
-
 describe('deps remove (cli-spec.md §6, Deps)', () => {
   test('removes the package(s), regenerates compose back to the plain base image', async () => {
     const box = sandbox()
@@ -228,7 +208,6 @@ describe('deps remove (cli-spec.md §6, Deps)', () => {
 })
 
 // ── deps list (§6) ───────────────────────────────────────────────────────────
-
 describe('deps list (cli-spec.md §6, Deps)', () => {
   test('reports declared packages and the resolved image, sorted', async () => {
     const box = sandbox()
@@ -262,7 +241,6 @@ describe('deps list (cli-spec.md §6, Deps)', () => {
 })
 
 // ── compose + up integration ─────────────────────────────────────────────────
-
 describe('extra packages elsewhere in the system', () => {
   test('compose selects the derived image when packages are declared', () => {
     const doc = composeDocument({ manifest: manifest('myapp', { extra_packages: ['libnss3'] }), catalogue: null })

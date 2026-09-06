@@ -1,22 +1,8 @@
 /**
- * Phase 19 — the project layout: work, data, local, home.
- *
- * A project directory stops being a repository with bardolier's files scattered
- * through it and becomes four bind-mounted folders around them, with the
- * service data among them rather than in a named volume on the internal disk.
- * Four properties:
- *   - THE BIND SOURCES EXIST BEFORE COMPOSE RUNS, at `new` and again at every
- *     `up`. One Docker creates itself comes back root-owned — or, on Docker
- *     Desktop, inside the VM, which is data that never reaches the disk.
- *   - NOTHING BARDOLIER WRITES IS IN A WORKING TREE, so there is nothing to
- *     ignore and `git clean -xdf` cannot reach `data/`.
- *   - AN ORPHANED DATA DIRECTORY IS THE PROJECT'S OWN: derived from `ls data/`
- *     minus the manifest's keys, needing only the one root that holds it.
- *   - THE DATA IS INSIDE THE DIRECTORY, so `delete` cannot keep it — it refuses
- *     PROJECT_HAS_DATA rather than destroying it quietly.
+ * The four folders, the repository boundary, and what `delete` refuses.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -42,23 +28,20 @@ import { seededFiles } from '../cli/src/scaffold.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
-import { runServiceRemove } from '../cli/src/commands/service.ts'
 import { collectStatus } from '../cli/src/commands/status.ts'
-import { collectOrphanedVolumes, runVolumeRemove } from '../cli/src/commands/volumes.ts'
-import { makeContext, makeSandbox, manifest, stubDocker, type Sandbox } from './helpers.ts'
+import {
+  catalogue,
+  makeContext,
+  manifest,
+  project,
+  type Sandbox,
+  sandboxes,
+  stubDocker,
+} from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const box = makeSandbox()
-  sandboxes.push(box)
-  return box
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
-})
+const sandbox = sandboxes()
 
 // ── the four directories (§3, §4.2) ──────────────────────────────────────────
-
 describe('the project directory’s shape', () => {
   test('`new` creates the four folders and the one seed, and nothing else', async () => {
     const box = sandbox()
@@ -128,7 +111,6 @@ describe('the project directory’s shape', () => {
 })
 
 // ── compose (§9) ─────────────────────────────────────────────────────────────
-
 describe('what the generated file binds', () => {
   test('four relative binds, /data read-only, and no named volume but the cache', () => {
     const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
@@ -153,7 +135,6 @@ describe('what the generated file binds', () => {
 })
 
 // ── nothing is inside a working tree (§3) ────────────────────────────────────
-
 describe('the repository boundary', () => {
   test('the seed lives in work/, where a clone beside it will never contain it', async () => {
     const box = sandbox()
@@ -187,67 +168,7 @@ describe('the repository boundary', () => {
   })
 })
 
-// ── orphaned data directories (§6, §7) ───────────────────────────────────────
-
-describe('a detached service’s data directory', () => {
-  async function detached(box: Sandbox) {
-    const ctx = makeContext(box, stubDocker())
-    await runNew(ctx, { name: 'alpha', archetype: 'web', services: 'postgres' })
-    writeFileSync(join(serviceDataDir(box.path('alpha'), 'postgres'), 'PG_VERSION'), '17\n')
-    await runServiceRemove(ctx, { project: 'alpha', service: 'postgres' })
-    return ctx
-  }
-
-  test('is kept, and reported as a directory orphan with its path and size', async () => {
-    const box = sandbox()
-    const ctx = await detached(box)
-
-    const output = await collectOrphanedVolumes(ctx)
-    assert.deepEqual(output.orphaned, [
-      {
-        name: 'alpha/postgres',
-        kind: 'directory',
-        path: serviceDataDir(box.path('alpha'), 'postgres'),
-        size_bytes: 3,
-        size_human: '3 B',
-        last_project: 'alpha',
-      },
-    ])
-    assert.ok(validate('volumes-orphaned', output).valid)
-  })
-
-  test('needs only its own root — another root being unreadable is not its business', async () => {
-    // The claim is `ls data/` against the manifest beside it. No labels, no
-    // Docker, no second root consulted: the directory's own project answers.
-    const box = sandbox()
-    const ctx = await detached(box)
-    const scan = await collectOrphanedVolumes(ctx)
-    assert.equal(scan.orphaned[0]?.last_project, 'alpha')
-  })
-
-  test('`volumes rm` takes it, by name or by path', async () => {
-    const box = sandbox()
-    const ctx = await detached(box)
-    const path = serviceDataDir(box.path('alpha'), 'postgres')
-
-    const removed = await runVolumeRemove(ctx, { name: path, force: true, json: true })
-    assert.equal(removed.removed, true)
-    assert.equal(removed.kind, 'directory')
-    assert.equal(existsSync(path), false)
-  })
-
-  test('a loose file under data/ is not a service, and neither is the marker', async () => {
-    const box = sandbox()
-    const ctx = makeContext(box, stubDocker())
-    await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
-    writeFileSync(join(dataDir(box.path('alpha')), 'notes.txt'), 'scratch\n')
-
-    assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
-  })
-})
-
 // ── delete (§6, PROJECT_HAS_DATA) ────────────────────────────────────────────
-
 describe('deleting a project that holds data', () => {
   async function withData(box: Sandbox) {
     const ctx = makeContext(box, stubDocker())
@@ -311,7 +232,6 @@ describe('deleting a project that holds data', () => {
 })
 
 // ── the measuring helpers ────────────────────────────────────────────────────
-
 describe('layout.ts’s two questions about a directory', () => {
   test('directorySize walks the tree and counts files only', () => {
     const box = sandbox()

@@ -1,193 +1,41 @@
 /**
- * Phase 1 — the read-only core: config, discovery, Docker probe, status, list,
- * doctor. No SSD, no daemon. Two properties the app depends on from Phase 5:
- * `status` succeeds in EVERY degraded state and always matches §7, and
- * read-only means read-only — nothing under the sandbox is created.
+ * The read-only core — discovery, the Docker probe, `status`, `list`, `doctor`. No daemon.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { stringify as stringifyYaml } from 'yaml'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { DEFAULT_TERMINAL, defaultConfigPath, loadConfig } from '../cli/src/config.ts'
+import { loadConfig } from '../cli/src/config.ts'
 import { createDocker, type DockerRunner } from '../cli/src/docker.ts'
-import { connectionHint, resolveCatalogue } from '../cli/src/catalogue.ts'
-import { defaultRoot, discoverProjects, probeRoot } from '../cli/src/projects.ts'
+import { defaultRoot, discoverProjects, probeRoot, findProject } from '../cli/src/projects.ts'
 import { devContainerName, serviceContainerName } from '../cli/src/naming.ts'
 import { collectStatus } from '../cli/src/commands/status.ts'
 import { collectList } from '../cli/src/commands/list.ts'
 import { collectDoctor } from '../cli/src/commands/doctor.ts'
-import { DOCTOR_CHECKS, type DoctorCheck, type DoctorReport } from '../cli/src/model/doctor.ts'
-import { makeContext, makeSandbox, manifest, stubDocker, type Sandbox } from './helpers.ts'
+import { DOCTOR_CHECKS } from '../cli/src/model/doctor.ts'
+import { runNew } from '../cli/src/commands/new.ts'
+import { requireProject } from '../cli/src/workspace.ts'
+import {
+  catalogue,
+  finding,
+  labels,
+  makeContext,
+  manifest,
+  project,
+  sandboxes,
+  stubDevice,
+  stubDocker,
+  tempDirs,
+  twoRoots,
+} from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
-})
-
-function finding(report: DoctorReport, id: DoctorCheck) {
-  const found = report.findings.find((f) => f.id === id)
-  assert.ok(found, `doctor produced no \`${id}\` finding`)
-  return found
-}
-
-describe('config (cli-spec.md §8)', () => {
-  test('loads with no config file at all — the every-root-absent first run', () => {
-    const box = sandbox()
-    const loaded = loadConfig({ path: join(box.home, 'nope', 'config.yml'), home: box.home, env: {} })
-    assert.equal(loaded.exists, false)
-    assert.deepEqual(loaded.config.roots, [{ name: 'bardolier-projects', path: join(box.home, 'bardolier-projects') }])
-    assert.equal(loaded.config.terminal, DEFAULT_TERMINAL)
-    assert.equal(loaded.config.catalogue_path, null)
-  })
-
-  test('reads roots and every other §8 key from the file', () => {
-    const box = sandbox()
-    box.writeConfig({
-      roots: [{ name: 'disk', path: '/mnt/disk/projects' }],
-      catalogue_path: '/mnt/disk/services.yml',
-      terminal: 'Ghostty',
-    })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: {} })
-    assert.deepEqual(config.roots, [{ name: 'disk', path: '/mnt/disk/projects' }])
-    assert.equal(config.catalogue_path, '/mnt/disk/services.yml')
-    assert.equal(config.terminal, 'Ghostty')
-  })
-
-  test('$BARDOLIER_ROOT beats the file, replaces the whole list, and is reported', () => {
-    const box = sandbox()
-    box.writeConfig({ roots: [{ name: 'disk', path: '/mnt/disk/projects' }] })
-    const loaded = loadConfig({
-      path: box.configPath,
-      home: box.home,
-      env: { BARDOLIER_ROOT: '/elsewhere/projects' },
-    })
-    assert.deepEqual(loaded.config.roots, [{ name: 'projects', path: '/elsewhere/projects' }])
-    assert.deepEqual([...loaded.overrides], ['BARDOLIER_ROOT'])
-  })
-
-  test('$BDLR_SSD_VOLUME is ignored — there is no ssd_volume key left to override (phase 17)', () => {
-    const box = sandbox()
-    const loaded = loadConfig({ path: box.configPath, home: box.home, env: { BDLR_SSD_VOLUME: '/elsewhere' } })
-    assert.deepEqual([...loaded.overrides], [])
-  })
-
-  test('expands ~ against the resolved home', () => {
-    const box = sandbox()
-    box.writeConfig({ roots: [{ name: 'p', path: '~/projects' }] })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: {} })
-    assert.deepEqual(config.roots, [{ name: 'p', path: join(box.home, 'projects') }])
-  })
-
-  test('an empty file is equivalent to no file', () => {
-    const box = sandbox()
-    box.writeFile('empty.yml', '')
-    const { config } = loadConfig({ path: join(box.home, '..', 'empty.yml'), home: box.home, env: {} })
-    assert.deepEqual(config.roots, [{ name: 'bardolier-projects', path: join(box.home, 'bardolier-projects') }])
-  })
-
-  test('duplicate root names or paths are CONFIG_INVALID', () => {
-    const box = sandbox()
-    box.writeConfig({ roots: [{ name: 'a', path: '/x' }, { name: 'a', path: '/y' }] })
-    assert.throws(
-      () => loadConfig({ path: box.configPath, home: box.home, env: {} }),
-      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
-    )
-  })
-
-  test('rejects an unknown key rather than ignoring a typo', () => {
-    const box = sandbox()
-    box.writeConfig({ ssd_rooot: '/typo' })
-    assert.throws(
-      () => loadConfig({ path: box.configPath, home: box.home, env: {} }),
-      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
-    )
-  })
-
-  test('rejects unparseable YAML with CONFIG_INVALID', () => {
-    const box = sandbox()
-    const path = box.writeFile('bad.yml', 'roots: [unclosed\n')
-    assert.throws(
-      () => loadConfig({ path, home: box.home, env: {} }),
-      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
-    )
-  })
-
-  test('the config file lives on the internal disk, not on a root', () => {
-    const path = defaultConfigPath({}, '/Users/someone')
-    assert.equal(path, '/Users/someone/.config/bardolier/config.yml')
-  })
-})
-
-describe('service catalogue resolution (cli-spec.md §4.1)', () => {
-  test('falls back to the bundled default when the SSD has none', () => {
-    const box = sandbox()
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_ROOT: box.root } })
-    const resolved = resolveCatalogue(config)
-    assert.equal(resolved.origin, 'bundled')
-    assert.deepEqual(Object.keys(resolved.catalogue.services).sort(), ['mongo', 'postgres', 'redis'])
-  })
-
-  test('prefers $SSD_ROOT/services.yml over the bundled default', () => {
-    const box = sandbox()
-    box.writeFile(
-      join('ssd', 'claude-projects', 'services.yml'),
-      'services:\n  minio:\n    display: MinIO\n    image: minio/minio\n    container_port: 9000\n    host_port_base: 9000\n    mount: /data\n',
-    )
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_ROOT: box.root } })
-    const resolved = resolveCatalogue(config)
-    assert.equal(resolved.origin, 'ssd')
-    assert.deepEqual(Object.keys(resolved.catalogue.services), ['minio'])
-  })
-
-  test('a configured catalogue_path that does not exist is an error, not a silent fallback', () => {
-    const box = sandbox()
-    box.writeConfig({ catalogue_path: join(box.home, 'missing.yml') })
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_ROOT: box.root } })
-    assert.throws(
-      () => resolveCatalogue(config),
-      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
-    )
-  })
-
-  test('a catalogue that breaks the schema is CONFIG_INVALID', () => {
-    const box = sandbox()
-    box.writeFile(join('ssd', 'claude-projects', 'services.yml'), 'services:\n  redis:\n    display: Redis\n')
-    const { config } = loadConfig({ path: box.configPath, home: box.home, env: { BARDOLIER_ROOT: box.root } })
-    assert.throws(
-      () => resolveCatalogue(config),
-      (error: unknown) => error instanceof BardolierError && error.code === 'CONFIG_INVALID',
-    )
-  })
-
-  test('connection hints name the HOST port (the debugging tap, §5)', () => {
-    assert.equal(connectionHint('postgres', { container_port: 5432 }, 5433, 'myapp'), 'postgresql://localhost:5433')
-    assert.equal(connectionHint('redis', { container_port: 6379 }, 6380, 'myapp'), 'redis://localhost:6380')
-    assert.equal(connectionHint('mongo', { container_port: 27017 }, 27018, 'myapp'), 'mongodb://localhost:27018')
-  })
-
-  test('an unknown service still gets a usable hint — no code change to add one', () => {
-    assert.equal(connectionHint('minio', { container_port: 9000 }, 9001, 'myapp'), 'tcp://localhost:9001')
-  })
-
-  test('a catalogue-supplied template wins and interpolates', () => {
-    const hint = connectionHint(
-      'postgres',
-      { container_port: 5432, connection_hint: 'postgresql://dev@localhost:{host_port}/{project}' },
-      5440,
-      'shop',
-    )
-    assert.equal(hint, 'postgresql://dev@localhost:5440/shop')
-  })
-})
+const sandbox = sandboxes()
+const secondRoot = tempDirs('bardolier-root-b-')
 
 describe('project discovery (cli-spec.md §3)', () => {
   test('an absent SSD reports unmounted instead of throwing', () => {
@@ -527,5 +375,130 @@ describe('doctor (cli-spec.md §6)', () => {
     const config = finding(report, 'config')
     assert.equal(config.ok, true)
     assert.match(config.detail, /using defaults/)
+  })
+})
+
+// ── doctor ───────────────────────────────────────────────────────────────────
+describe('doctor on a local root (cli-spec.md §6)', () => {
+  test('a non-removable root is ok, with no "plug in" remedy', async () => {
+    const box = sandbox()
+    const device = stubDevice([], { removable: false })
+    const ctx = makeContext(box, stubDocker(), { device })
+
+    const report = await collectDoctor(ctx)
+    const ssd = finding(report, 'ssd')
+    assert.equal(ssd.ok, true)
+    assert.equal(ssd.remedy, undefined)
+    assert.doesNotMatch(ssd.detail, /[Pp]lug in/)
+    assert.match(ssd.detail, /eject/)
+    assert.equal(ssd.roots?.[0]?.removable, false, 'structured per-root state, for the app to tell SSD wording apart from internal-disk wording')
+    assert.ok(validate('doctor', report).valid)
+  })
+
+  test('a removable root keeps the original wording', async () => {
+    const box = sandbox()
+    const device = stubDevice([], { removable: true })
+    const ctx = makeContext(box, stubDocker(), { device })
+
+    const report = await collectDoctor(ctx)
+    const ssd = finding(report, 'ssd')
+    assert.match(ssd.detail, /readable \(volume/)
+    assert.equal(ssd.roots?.[0]?.removable, true)
+  })
+
+  test('an unreadable root reports removable: null — nothing to ask diskutil about', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '/nonexistent/nowhere' } })
+
+    const report = await collectDoctor(ctx)
+    const ssd = finding(report, 'ssd')
+    assert.equal(ssd.roots?.[0]?.mounted, false)
+    assert.equal(ssd.roots?.[0]?.removable, null)
+  })
+})
+
+describe('discovery across roots (cli-spec.md §3)', () => {
+  test('projects from every readable root are merged, sorted by name, each carrying its root', () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('zeta', manifest('zeta'))
+    // A project planted directly in the second root, bypassing `new`.
+    mkdirSync(join(rootB, 'alpha'), { recursive: true })
+    writeFileSync(join(rootB, 'alpha', 'project.yml'), stringifyYaml(manifest('alpha')))
+
+    const discovery = discoverProjects(ctx.config)
+    assert.deepEqual(discovery.projects.map((p) => [p.name, p.root]), [['alpha', 'b'], ['zeta', 'a']])
+    assert.deepEqual(discovery.roots.map((r) => [r.name, r.mounted]), [['a', true], ['b', true]])
+  })
+
+  test('a name in two roots is PROJECT_AMBIGUOUS naming both directories', () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('dup', manifest('dup'))
+    mkdirSync(join(rootB, 'dup'), { recursive: true })
+    writeFileSync(join(rootB, 'dup', 'project.yml'), stringifyYaml(manifest('dup')))
+
+    const discovery = discoverProjects(ctx.config)
+    assert.throws(
+      () => findProject(discovery, 'dup'),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'PROJECT_AMBIGUOUS')
+        assert.equal((error.details?.dirs as string[]).length, 2)
+        return true
+      },
+    )
+    assert.throws(
+      () => requireProject(ctx, 'dup'),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_AMBIGUOUS',
+    )
+  })
+
+  test('one root unreadable: `mounted` stays true, and `status`/`list` see only the other', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('alpha', manifest('alpha'))
+    rmSync(rootB, { recursive: true, force: true })
+
+    const discovery = discoverProjects(ctx.config)
+    assert.equal(discovery.mounted, true)
+    assert.deepEqual(discovery.projects.map((p) => p.name), ['alpha'])
+
+    const status = await collectStatus(ctx)
+    assert.deepEqual(status.projects.map((p) => p.name), ['alpha'])
+    assert.deepEqual(status.orphaned_volumes, [])
+    assert.equal(status.roots?.find((r) => r.name === 'b')?.mounted, false)
+
+    const list = await collectList(ctx)
+    assert.deepEqual(list.projects.map((p) => p.name), ['alpha'])
+  })
+})
+
+describe('status.ssd.root stays the default root\'s path', () => {
+  test('unaffected by which root a lookup resolves to', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    assert.equal(defaultRoot(ctx.config).name, 'a')
+    const status = await collectStatus(ctx)
+    assert.equal(status.ssd.root, box.root)
+  })
+})
+
+describe('status.dir (app-spec.md §5, "Open folder in Finder")', () => {
+  test('every project reports its own directory', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
+
+    const status = await collectStatus(ctx)
+    const project = status.projects.find((p) => p.name === 'myapp')
+
+    assert.ok(project)
+    assert.equal(project.dir, box.path('myapp'))
+    assert.ok(validate('status', status).valid, validate('status', status).errors.join('\n'))
   })
 })

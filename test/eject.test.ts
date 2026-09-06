@@ -1,59 +1,487 @@
 /**
- * Phase 7 — the two flows that leave the app: the host terminal and the SSD.
- *   - THE CLI half, run for real: a held eject is EJECT_BLOCKED carrying
- *     `holders`, the disk is NOT unmounted anyway, and the same command
- *     succeeds once the holder goes — exactly what the menu's Retry does.
- *     `shell` resolves to argv, which is what the app hands the terminal.
- *   - THE APP half, read as text (Xcode is host-only; see app-models.test.ts):
- *     the eject flow keeps its holders on screen for a retry instead of a
- *     banner the next refresh wipes, nothing invents a way to force an unmount,
- *     the auto-shell preference reaches `up`, and a missing `bardolier` is a
- *     first-run state rather than one failed command.
- * Common property: the app RENDERS the CLI's answer about the disk and never
- * second-guesses it.
+ * down-all, eject, the holders that block it, and Docker Desktop’s VM.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { BardolierError } from '../cli/src/errors.ts'
-import { createSsdDevice, type SsdDevice } from '../cli/src/device.ts'
 import { validate } from '../cli/src/schema.ts'
-import { runEject } from '../cli/src/commands/ssd.ts'
-import { containingVolume } from '../cli/src/projects.ts'
-import { runShell } from '../cli/src/commands/shell.ts'
+import {
+  createSsdDevice,
+  isRuntimeHolder,
+  isSystemHolder,
+  parseDissenter,
+  parseLsof,
+  type SsdDevice,
+} from '../cli/src/device.ts'
 import { runNew } from '../cli/src/commands/new.ts'
+import { runDownAll, runEject } from '../cli/src/commands/ssd.ts'
+import { containingVolume } from '../cli/src/projects.ts'
 import type { Context } from '../cli/src/context.ts'
 import {
+  finding,
   holder,
+  labels,
   makeContext,
-  makeSandbox,
+  project,
+  type Sandbox,
+  sandboxes,
   stubConfirm,
   stubDevice,
-  stubDocker,
-  stubWait,
-  type Sandbox,
   type StubDevice,
+  stubDocker,
   type StubDocker,
+  stubWait,
 } from './helpers.ts'
 
-const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
-const APP_DIR = 'app/bardolier/bardolier'
+const sandbox = sandboxes()
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
+const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
+
+// ── down-all (§6, Lifecycle / SSD) ────────────────────────────────────────────
+describe('down-all (cli-spec.md §6)', () => {
+  test('stops what is running and leaves what is not alone', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-alpha', 'bardolier-alpha-postgres'] })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'alpha', { services: 'postgres' })
+    await project(ctx, 'beta')
+
+    const output = await runDownAll(ctx)
+    assert.deepEqual(output.stopped, ['alpha'])
+    assert.deepEqual(output.projects, [
+      { name: 'alpha', was_running: true },
+      { name: 'beta', was_running: false },
+    ])
+    assert.ok(validate('down-all', output).valid)
+    assert.deepEqual(
+      docker.calls.filter((call) => call.kind === 'down').length,
+      1,
+      'a stopped project was torn down needlessly',
+    )
+  })
+
+  test('never removes volumes — down-all keeps data like down does', async () => {
+    const box = sandbox()
+    const docker = stubDocker({
+      running: ['bardolier-alpha', 'bardolier-alpha-postgres'],
+      volumes: [{ name: 'alpha_pgdata', labels: labels('alpha', 'postgres'), size_bytes: 1 }],
+    })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'alpha', { services: 'postgres' })
+
+    await runDownAll(ctx)
+    assert.deepEqual(docker.calls.filter((call) => call.kind === 'removeVolume'), [])
+    assert.deepEqual(await docker.volumeNames(), ['alpha_pgdata'])
+  })
+
+  test('sweeps a bardolier container no manifest claims', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-ghost', 'unrelated-container'] })
+    const ctx = makeContext(box, docker)
+    await project(ctx, 'alpha')
+
+    const output = await runDownAll(ctx)
+    assert.deepEqual(output.stray_containers, ['bardolier-ghost'])
+    assert.deepEqual(docker.calls, [{ kind: 'removeContainer', name: 'bardolier-ghost' }])
+  })
+
+  test('an unreachable daemon is a no-op success — nothing can be running', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ available: true }))
+    await project(ctx, 'alpha')
+
+    const output = await runDownAll(makeContext(box, stubDocker({ available: false })))
+    assert.equal(output.docker_available, false)
+    assert.deepEqual(output.stopped, [])
+    assert.deepEqual(output.projects, [{ name: 'alpha', was_running: false }])
+  })
+})
+
+// ── eject (§6, Lifecycle / SSD) ───────────────────────────────────────────────
+describe('eject (cli-spec.md §6)', () => {
+  /** The mount point is whatever `containingVolume` derives from `box.root` on this machine (phase 17) — not a settable value. */
+  function ejectContext(box: Sandbox, docker: StubDocker, device: StubDevice): Context {
+    return makeContext(box, docker, { device })
+  }
+
+  test('stops everything, finds nothing holding it, and ejects', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-alpha'] })
+    const device = stubDevice()
+    const ctx = ejectContext(box, docker, device)
+    await project(ctx, 'alpha')
+
+    const output = await runEject(ctx)
+    assert.deepEqual(output.stopped, ['alpha'])
+    assert.equal(output.ejected, true)
+    assert.deepEqual(output.holders, [])
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
+    assert.ok(validate('eject', output).valid)
+  })
+
+  test('a held volume is EJECT_BLOCKED with the holders named, and is not forced', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: [] })
+    const device = stubDevice([holder({ pid: 431, command: 'Xcode', paths: [`${box.root}/alpha`] })])
+    const ctx = ejectContext(box, docker, device)
+    await project(ctx, 'alpha')
+
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'EJECT_BLOCKED')
+        const holders = error.details?.holders as { command: string; pid: number }[]
+        assert.deepEqual(holders.map((h) => h.command), ['Xcode'])
+        assert.match(error.message, /Xcode \[pid 431\]/)
+        assert.ok(validate('error', error.toPayload()).valid)
+        return true
+      },
+    )
+    assert.deepEqual(device.ejected, [], 'a blocked eject unmounted the disk anyway')
+  })
+
+  test('the same volume ejects once the holder quits', async () => {
+    const box = sandbox()
+    const device = stubDevice([holder({ command: 'zsh' })])
+    const ctx = ejectContext(box, stubDocker({ running: [] }), device)
+    await project(ctx, 'alpha')
+
+    await assert.rejects(() => runEject(ctx), (error: unknown) => error instanceof BardolierError)
+    device.setHolders([])
+    const output = await runEject(ctx)
+    assert.equal(output.ejected, true)
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
+  })
+
+  test('containers come down BEFORE holders are checked — they are holders too', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-alpha'] })
+    const order: string[] = []
+    const device: StubDevice = {
+      ejected: [],
+      setHolders() {},
+      setRuntimeHolders() {},
+      setRemovable() {},
+      releaseRuntimeAfter() {},
+      runtimeProbes: () => 0,
+      async removable() {
+        return true
+      },
+      async holders() {
+        order.push('holders')
+        return []
+      },
+      async runtimeHolders() {
+        return []
+      },
+      async eject() {
+        order.push('eject')
+      },
+    }
+    const recording = {
+      ...docker,
+      async composeDown(target: Parameters<StubDocker['composeDown']>[0]) {
+        order.push('down')
+        await docker.composeDown(target)
+      },
+    }
+    const ctx = makeContext(box, recording, { device })
+    await project(ctx, 'alpha')
+
+    await runEject(ctx)
+    assert.deepEqual(order, ['down', 'holders', 'eject'])
+  })
+
+  test('an absent root is SSD_NOT_MOUNTED and stops nothing', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-alpha'] })
+    const device = stubDevice()
+    const ctx = makeContext(box, docker, { device, env: { BARDOLIER_ROOT: `${box.root}-gone` } })
+
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
+    )
+    assert.deepEqual(docker.calls, [])
+    assert.deepEqual(device.ejected, [])
+  })
+})
+
+// ── the host probes (§6) ──────────────────────────────────────────────────────
+describe('the lsof/diskutil seam', () => {
+  const LSOF = ['p431', 'cXcode', 'Lmark', 'fcwd', 'n/Volumes/ssd/claude-projects/alpha', 'p9', 'czsh', 'Lmark', 'n/Volumes/ssd'].join(
+    '\n',
+  )
+
+  test('parses lsof machine output into holders', () => {
+    const holders = parseLsof(LSOF, '/Volumes/ssd')
+    assert.deepEqual(holders, [
+      { pid: 9, command: 'zsh', user: 'mark', paths: ['/Volumes/ssd'] },
+      { pid: 431, command: 'Xcode', user: 'mark', paths: ['/Volumes/ssd/claude-projects/alpha'] },
+    ])
+  })
+
+  test('ignores what a process holds elsewhere', () => {
+    const holders = parseLsof(['p1', 'claunchd', 'Lroot', 'n/dev/null'].join('\n'), '/Volumes/ssd')
+    assert.deepEqual(holders[0]?.paths, [])
+  })
+
+  test('no match is no holders, not a failure', async () => {
+    const device = createSsdDevice(async () => ({ code: 1, stdout: '', stderr: '' }))
+    assert.deepEqual(await device.holders('/Volumes/ssd'), [])
+  })
+
+  test('a broken lsof refuses rather than reporting "nothing holds it"', async () => {
+    const device = createSsdDevice(async () => ({ code: 127, stdout: '', stderr: 'lsof: command not found' }))
+    await assert.rejects(
+      () => device.holders('/Volumes/ssd'),
+      (error: unknown) => error instanceof BardolierError && error.code === 'EJECT_BLOCKED',
+    )
+  })
+
+  test('our own process is not a holder; the shell that launched it is', async () => {
+    const device = createSsdDevice(async () => ({ code: 0, stdout: LSOF, stderr: '' }), 431)
+    const holders = await device.holders('/Volumes/ssd')
+    assert.deepEqual(holders.map((h) => h.pid), [9])
+  })
+
+  test('a diskutil refusal is EJECT_BLOCKED, never retried with force', async () => {
+    const calls: string[][] = []
+    const device = createSsdDevice(async (command, args) => {
+      calls.push([command, ...args])
+      return { code: 1, stdout: '', stderr: 'Unmount failed: dissenter' }
+    })
+    await assert.rejects(
+      () => device.eject('/Volumes/ssd'),
+      (error: unknown) => error instanceof BardolierError && error.code === 'EJECT_BLOCKED',
+    )
+    assert.deepEqual(calls, [['diskutil', 'eject', '/Volumes/ssd']])
+  })
+})
+
+describe('holders the user cannot act on', () => {
+  const DOCKER_LSOF = ['p23619', 'ccom.apple.Virtualization.Virtua', 'Lmark', 'n/Volumes/ssd/claude-projects/alpha'].join('\n')
+
+  test("the container runtime's own descriptors do not block an eject", async () => {
+    // Docker Desktop holds a descriptor on every bind-mounted path for as long
+    // as the share exists — including after down-all. Reporting it would make
+    // "quit Docker" the answer to every eject.
+    const device = createSsdDevice(async () => ({ code: 0, stdout: DOCKER_LSOF, stderr: '' }))
+    assert.deepEqual(await device.holders('/Volumes/ssd'), [])
+    assert.equal(isRuntimeHolder('com.docker.backend'), true)
+    assert.equal(isRuntimeHolder('Xcode'), false)
+  })
+
+  test('but a real user process alongside it still does', async () => {
+    const stdout = `${DOCKER_LSOF}\np431\ncXcode\nLmark\nn/Volumes/ssd/claude-projects/alpha`
+    const device = createSsdDevice(async () => ({ code: 0, stdout, stderr: '' }))
+    assert.deepEqual((await device.holders('/Volumes/ssd')).map((h) => h.command), ['Xcode'])
+  })
+
+  // Spotlight is the one that made "Close all & eject" impossible rather than
+  // merely inconvenient: `mds_stores` maps the volume's index for as long as it
+  // is mounted, so counting it is a refusal with no end state.
+  const SPOTLIGHT_LSOF = [
+    'p343',
+    'cmds',
+    'Lroot',
+    'n/Volumes/ssd',
+    'p556',
+    'cmds_stores',
+    'Lroot',
+    'n/Volumes/ssd/.Spotlight-V100/Store-V2/67C1D8EB/store.db',
+    'p654',
+    'ccom.apple.quicklook.ThumbnailsAgent',
+    'Lmark',
+    'n/Volumes/ssd/claude-projects/alpha/project.yml',
+  ].join('\n')
+
+  test('Spotlight and the preview agents never block an eject', async () => {
+    const device = createSsdDevice(async () => ({ code: 0, stdout: SPOTLIGHT_LSOF, stderr: '' }))
+    assert.deepEqual(await device.holders('/Volumes/ssd'), [])
+    assert.equal(isSystemHolder('mds_stores'), true)
+    assert.equal(isSystemHolder('mdworker_shared'), true)
+    assert.equal(isSystemHolder('com.apple.quicklook.ThumbnailsAgent'), true)
+    assert.equal(isSystemHolder('Xcode'), false)
+    // An editor indexing a repo on the SSD is a real holder with a real fix.
+    assert.equal(isSystemHolder('plugin_host-3.8'), false)
+  })
+
+  test('a user process is still named when the system agents are there too', async () => {
+    const stdout = `${SPOTLIGHT_LSOF}\np51310\ncplugin_host-3.8\nLmark\nn/Volumes/ssd/analysta/.git/objects/10/5c57`
+    const device = createSsdDevice(async () => ({ code: 0, stdout, stderr: '' }))
+    assert.deepEqual((await device.holders('/Volumes/ssd')).map((h) => h.command), ['plugin_host-3.8'])
+  })
+})
+
+describe('a refusal always names something (§6)', () => {
+  test("diskutil's dissenter becomes a holder, in every shape it prints it", () => {
+    assert.deepEqual(
+      parseDissenter('Volume ssd on disk5s1 failed to eject\nDissenter PID = 51310 (plugin_host-3.8), Status = 0x0000c010'),
+      [{ pid: 51310, command: 'plugin_host-3.8', user: null, paths: [] }],
+    )
+    assert.deepEqual(
+      parseDissenter('Unmount failed for /Volumes/ssd: dissented by PID 556 (mds_stores)').map((h) => h.command),
+      ['mds_stores'],
+    )
+  })
+
+  test('a refusal that names no PID invents no holder', () => {
+    assert.deepEqual(parseDissenter('Unmount of disk5s1 failed: at least one volume could not be unmounted'), [])
+  })
+
+  test('the blocked eject carries the dissenter lsof could not see', async () => {
+    // holders() runs unprivileged, so a root dissenter is named HERE or nowhere.
+    const device = createSsdDevice(async () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'Volume ssd on disk5s1 failed to eject\nDissenter PID = 556 (mds_stores), Status = 0x0000c010',
+    }))
+    await assert.rejects(
+      () => device.eject('/Volumes/ssd'),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'EJECT_BLOCKED')
+        const holders = error.details?.holders as { pid: number; command: string }[]
+        assert.deepEqual(holders.map((h) => h.pid), [556])
+        // A system agent gets the advice that fits it — there is nothing to quit.
+        assert.match(error.message, /try again in a moment/)
+        return true
+      },
+    )
+  })
+
+  test('an app that can be quit is told to quit', async () => {
+    const device = createSsdDevice(async () => ({
+      code: 1,
+      stdout: 'Dissenter PID = 431 (Xcode), Status = 0x0000c010',
+      stderr: '',
+    }))
+    await assert.rejects(
+      () => device.eject('/Volumes/ssd'),
+      (error: unknown) => error instanceof BardolierError && /Xcode \[pid 431\] — close it and try again/.test(error.message),
+    )
+  })
+})
+
+// ── SsdDevice.removable() ────────────────────────────────────────────────────
+describe('removable() (cli-spec.md §6)', () => {
+  test('a removable, non-internal volume is removable', async () => {
+    const device = createSsdDevice(async () => ({
+      code: 0,
+      stdout: '<key>Ejectable</key><true/><key>Internal</key><false/>',
+      stderr: '',
+    }))
+    assert.equal(await device.removable('/Volumes/ssd'), true)
+  })
+
+  test('an internal directory is not removable, even if diskutil answers', async () => {
+    const device = createSsdDevice(async () => ({
+      code: 0,
+      stdout: '<key>Ejectable</key><false/><key>Internal</key><true/>',
+      stderr: '',
+    }))
+    assert.equal(await device.removable('/Users/mark/projects'), false)
+  })
+
+  test('a probe failure is not removable, never a throw', async () => {
+    const device = createSsdDevice(async () => ({ code: 1, stdout: '', stderr: 'No such file or directory' }))
+    assert.equal(await device.removable('/nonexistent'), false)
+  })
+
+  test('a plist with neither key present is not removable', async () => {
+    const device = createSsdDevice(async () => ({ code: 0, stdout: '<dict/>', stderr: '' }))
+    assert.equal(await device.removable('/'), false)
+  })
+})
+
+// ── eject ────────────────────────────────────────────────────────────────────
+describe('eject on a non-removable root (cli-spec.md §6)', () => {
+  function ejectContext(box: Sandbox, running: readonly string[], removable: boolean): { ctx: Context; docker: ReturnType<typeof stubDocker> } {
+    const docker = stubDocker({ running: [...running] })
+    const device = stubDevice([], { removable })
+    const ctx = makeContext(box, docker, { device })
+    return { ctx, docker }
+  }
+
+  test('a non-removable ssd_volume fails EJECT_NOT_APPLICABLE, and stops nothing on the way', async () => {
+    const box = sandbox()
+    const { ctx, docker } = ejectContext(box, ['bardolier-alpha'], false)
+    await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
+
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'EJECT_NOT_APPLICABLE')
+        assert.match(error.message, /down-all/)
+        assert.ok(validate('error', error.toPayload()).valid)
+        return true
+      },
+    )
+    // down-all never ran: the container that was "up" is still there.
+    assert.ok(docker.calls.every((call) => call.kind !== 'down'))
+  })
+
+  test('a removable volume is unaffected — the existing eject flow still runs', async () => {
+    const box = sandbox()
+    const { ctx } = ejectContext(box, [], true)
+    const output = await runEject(ctx)
+    assert.equal(output.ejected, true)
+  })
+})
+
+describe('eject (cli-spec.md §6, phase 17)', () => {
+  test('the volume ejected is the one derived from the root, not anything config said', async () => {
+    const box = sandbox()
+    const device = stubDevice([], { removable: true })
+    const ctx = makeContext(box, stubDocker(), { device })
+
+    const output = await runEject(ctx)
+    const expected = containingVolume(box.root)
+    assert.equal(output.volume, expected)
+    assert.deepEqual(device.ejected, [expected])
+  })
+
+  test('a non-removable root fails EJECT_NOT_APPLICABLE, naming the derived volume', async () => {
+    const box = sandbox()
+    const device = stubDevice([], { removable: false })
+    const ctx = makeContext(box, stubDocker(), { device })
+
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'EJECT_NOT_APPLICABLE')
+        assert.ok(error.message.includes(containingVolume(box.root) ?? ''))
+        return true
+      },
+    )
+  })
+
+  test('an unreadable root is SSD_NOT_MOUNTED, naming the root', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'gone') } })
+
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'SSD_NOT_MOUNTED')
+        assert.ok(error.message.includes(join(box.root, 'gone')))
+        return true
+      },
+    )
+  })
 })
 
 // ── The CLI half ─────────────────────────────────────────────────────────────
-
 describe('the eject flow the menu drives (app-spec.md §10)', () => {
   /** The mount point is whatever `containingVolume` derives from `box.root` on this machine (phase 17) — not a settable value. */
   function ejectContext(box: Sandbox, docker: StubDocker, device: SsdDevice): Context {
@@ -515,183 +943,5 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
   test('there is no way to force an unmount, so the menu cannot offer one', () => {
     const source = readFileSync(repo('cli/src/commands/ssd.ts'), 'utf8')
     assert.doesNotMatch(source, /'--force'|"--force"/, 'eject must not grow a force flag for the app to reach for')
-  })
-})
-
-describe('shell-open (app-spec.md §7)', () => {
-  test('the CLI resolves argv and spawns nothing; the app runs it', async () => {
-    const box = sandbox()
-    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
-    await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
-
-    const invocation = await runShell(ctx, 'alpha')
-
-    assert.ok(validate('shell', invocation).valid, validate('shell', invocation).errors.join('\n'))
-    assert.equal(invocation.exec[0], 'docker')
-    assert.ok(invocation.exec.length > 1, 'argv, so the app needs no quoting rules of its own')
-  })
-})
-
-// ── The app half (read as text — Xcode is host-only) ─────────────────────────
-
-describe('the app renders the eject flow rather than re-deciding it', () => {
-  const store = readFileSync(repo(`${APP_DIR}/BardolierStore.swift`), 'utf8')
-  const panel = readFileSync(repo(`${APP_DIR}/Views/EjectPanel.swift`), 'utf8')
-
-  test('a blocked eject is a state that survives, not a banner (§10)', () => {
-    // The holder list has to outlive the refresh that follows the failed call:
-    // the user goes away, quits Xcode, and comes back to it.
-    assert.match(store, /case blocked\(holders: \[SsdHolder\], message: String\)/)
-    assert.match(store, /ejectPhase = \.blocked\(/)
-    assert.match(store, /failure\.code == \.ejectBlocked/)
-  })
-
-  test('Retry re-runs the same command (§10.2)', () => {
-    assert.match(panel, /"Retry"/)
-    const retries = panel.match(/await store\.closeAllAndEject\(root: root\)/g) ?? []
-    assert.ok(retries.length >= 2, 'the panel starts the eject and retries it with the same call')
-  })
-
-  test('the ejected state is reported, and cleared by the disk coming back (§11)', () => {
-    assert.match(store, /case ejected\(volume: String, stopped: \[String\]\)/)
-    assert.match(store, /if fresh\.ssd\.mounted \{/)
-    assert.match(store, /ejected = false/)
-  })
-
-  test('a refresh does not wipe the holder list it was blocked by', () => {
-    // "Blocked" means the disk is still mounted, so clearing the phase on
-    // `mounted` would lose it on the next menu open — the one right after the
-    // user goes and quits Xcode.
-    assert.match(store, /if ejectPhase\.isEjected \{ ejectPhase = \.ready \}/)
-  })
-
-  test('nothing in the app forces an unmount or kills a holder', () => {
-    const sources = readdirSync(repo(APP_DIR), { recursive: true, encoding: 'utf8' })
-      .filter((entry) => entry.endsWith('.swift'))
-      .map((entry) => [entry, readFileSync(repo(`${APP_DIR}/${entry}`), 'utf8')] as const)
-    for (const [file, source] of sources) {
-      const code = source
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('//'))
-        .join('\n')
-      assert.doesNotMatch(code, /\bkill\(|SIGKILL|terminate\(withPid|diskutil/, `${file} tries to force the disk free`)
-    }
-  })
-
-  test('Docker holding the disk is its own state, with its own move (§10)', () => {
-    // Reduced to `.blocked` it would read "quit them, then Retry" — advice for
-    // a process with a window, about one that has none and that no retry
-    // clears. The distinction comes from the CLI's own `details.reason`; the
-    // app does not sniff holder names to work it out.
-    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
-    assert.match(error, /reason == "runtime-holds-volume"/)
-    assert.match(store, /case blockedByDocker\(holders: \[SsdHolder\], message: String, engineStopped: Bool\)/)
-    assert.match(store, /failure\.isRuntimeHold/)
-    assert.match(panel, /"Stop Docker & eject"/)
-    assert.match(panel, /closeAllAndEject\(root: root, stopDocker: true\)/)
-  })
-
-  test('and once the engine IS stopped, that button is not offered again (§10)', () => {
-    // The CLI stops the engine, waits for the VM to let go, and is refused
-    // anyway: `reason` says so, and the panel must not answer it with the
-    // button whose whole effect has already happened.
-    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
-    assert.match(error, /reason == "runtime-holds-volume-after-stop"/)
-    assert.match(store, /isRuntimeHoldAfterStop/)
-    assert.match(store, /engineStopped: failure\.isRuntimeHoldAfterStop/)
-    // The offer lives in the `else` branch of `engineStopped`, and the message
-    // the CLI wrote is what is rendered instead.
-    const offer = panel.indexOf('"Stop Docker & eject"')
-    const buttons = panel.lastIndexOf('HStack(spacing: 8)', offer)
-    const guardAt = panel.lastIndexOf('if engineStopped {', offer)
-    assert.ok(offer > 0 && buttons < guardAt && guardAt < offer, 'the offer sits behind the engineStopped guard')
-  })
-
-  test('stopping the engine is consented to here, never assumed', () => {
-    // The default has to stay "don't", or the menu's ordinary eject would take
-    // down every container on the Mac — bardolier's and everyone else's.
-    const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
-    assert.match(client, /func eject\(root: String\? = nil, stopDocker: Bool = false\)/)
-    assert.match(client, /stopDocker \? \["--stop-docker"\] : \[\]/)
-    assert.match(store, /func closeAllAndEject\(root: String\? = nil, stopDocker: Bool = false\)/)
-  })
-
-  test('the holders are shown by name, from the CLI’s own fields', () => {
-    const chrome = readFileSync(repo(`${APP_DIR}/Views/MenuChrome.swift`), 'utf8')
-    assert.match(chrome, /struct HolderList/)
-    assert.match(chrome, /holder\.command/)
-    assert.match(chrome, /holder\.pid/)
-  })
-})
-
-describe('the auto-shell preference reaches the CLI (app-spec.md §7, §12)', () => {
-  const preferences = readFileSync(repo(`${APP_DIR}/Preferences/AppPreferences.swift`), 'utf8')
-  const menu = readFileSync(repo(`${APP_DIR}/Views/MenuBarRootView.swift`), 'utf8')
-  const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
-
-  test('it defaults ON, and an unset key does not silently invert it', () => {
-    assert.match(preferences, /object\(forKey: Self\.startOpensShellKey\) as\? Bool \?\? true/)
-  })
-
-  test('Start passes it to `up`, and says which Start it is', () => {
-    assert.match(menu, /openShell: preferences\.startOpensShell/)
-    assert.match(menu, /startOpensShell \? "Start & open shell" : "Start"/)
-    assert.match(client, /openShell/)
-  })
-
-  test('a terminal that will not open is its own failure, with its own fix', () => {
-    const error = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierError.swift`), 'utf8')
-    assert.match(error, /case terminalFailed\(terminal: String, underlying: String\)/)
-    assert.match(error, /Pick a different terminal in Preferences/)
-  })
-})
-
-describe('a missing bardolier is a first-run state (app-spec.md §13)', () => {
-  const store = readFileSync(repo(`${APP_DIR}/BardolierStore.swift`), 'utf8')
-  const panel = readFileSync(repo(`${APP_DIR}/Views/FirstRunPanel.swift`), 'utf8')
-  const menu = readFileSync(repo(`${APP_DIR}/Views/MenuBarRootView.swift`), 'utf8')
-
-  test('the store records it instead of reporting one failed command', () => {
-    assert.match(store, /bardolierMissing = true/)
-    assert.match(store, /bardolierSearchedLocations = BardolierExecutable\.searchedLocations/)
-  })
-
-  test('the menu shows the message in place of items that cannot work', () => {
-    assert.match(menu, /if store\.bardolierMissing \{[\s\S]*?FirstRunPanel\(\)/)
-  })
-
-  test('it names an expected install location and the places actually searched', () => {
-    assert.match(panel, /npm link/)
-    assert.match(panel, /bin\/bardolier/)
-    assert.match(panel, /store\.bardolierSearchedLocations/)
-  })
-})
-
-describe('click-to-copy stays reachable (app-spec.md §5, §6)', () => {
-  const chrome = readFileSync(repo(`${APP_DIR}/Views/MenuChrome.swift`), 'utf8')
-  const menu = readFileSync(repo(`${APP_DIR}/Views/MenuBarRootView.swift`), 'utf8')
-  const services = readFileSync(repo(`${APP_DIR}/Views/ServicesPanel.swift`), 'utf8')
-
-  test('the whole service row copies, not a 10pt icon', () => {
-    assert.match(chrome, /struct CopyRow/)
-    assert.match(menu, /CopyRow\(value: service\.connectionHint/)
-  })
-
-  test('copying is not disabled along with the row it sits next to', () => {
-    // The copy control must be OUTSIDE MenuRow's label: inside, it inherits
-    // the row's `disabled` — and the row is disabled exactly when the project
-    // is RUNNING, which is when the connection string is wanted.
-    const row = services.slice(services.indexOf('private func row(for service'))
-    const copyIndex = row.indexOf('CopyButton(')
-    const menuRowIndex = row.indexOf('MenuRow(')
-    assert.ok(copyIndex > menuRowIndex, 'the copy button follows the row rather than nesting in it')
-    assert.match(row.slice(0, copyIndex), /^\s*\}\s*$/m)
-  })
-
-  test('what is copied is the CLI’s connection_hint, never a string built here', () => {
-    for (const source of [menu, services]) {
-      assert.doesNotMatch(source, /localhost:/)
-      assert.match(source, /connectionHint/)
-    }
   })
 })

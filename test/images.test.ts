@@ -1,64 +1,121 @@
 /**
- * Phase 8 — the mobile base images and the boundary they encode. Building them
- * for real takes a daemon, a network and gigabytes (phase8-done-check.sh); what
- * a fast test owns is everything the built image is judged against:
- *   - THE MAP IS COMPLETE: every §4.3 archetype resolves to a Dockerfile that
- *     exists, so `unavailable` means "not built yet", never "never will be".
- *   - THE BUILD-ARG CONTRACT: each Dockerfile takes HOST_UID/HOST_GID and drops
- *     to that user at /work — the whole reason `bardolier build` exists. Skipping it
- *     hands the Mac root-owned files, and only a real build would notice.
- *   - THE PIN AGREES WITH ITSELF: `bardolier-and` is x86_64-only because aapt2 is,
- *     and `build` and the generated compose file must both say so. One
- *     constant, two readers.
- *   - THE BOUNDARY IS IN THE IMAGE: no `xcodebuild` in the ios base, no `adb`
- *     in the android one — a rule the container cannot disobey. Asserted here
- *     against the seeded CLAUDE.md (§10) that states it.
+ * The base images: the archetype map, build args, the architecture pin, the shared caches.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { IMAGE_CACHE, IMAGE_PLATFORM, baseImages } from '../cli/src/images.ts'
 import { renderCompose } from '../cli/src/compose.ts'
-import { runBuild } from '../cli/src/commands/build.ts'
+import { seededFiles } from '../cli/src/scaffold.ts'
+import { baseImages, IMAGE_CACHE, IMAGE_PLATFORM, CONTAINER_HOME } from '../cli/src/images.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
+import { runBuild } from '../cli/src/commands/build.ts'
+import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from '../cli/src/model/archetype.ts'
 import { runVolumeRemove } from '../cli/src/commands/volumes.ts'
 import { scanVolumes } from '../cli/src/volumes.ts'
-import { BardolierError } from '../cli/src/errors.ts'
-import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from '../cli/src/model/archetype.ts'
-import { seededFiles } from '../cli/src/scaffold.ts'
-import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
-import { makeContext, makeSandbox, manifest, stubDocker, type Sandbox } from './helpers.ts'
+import {
+  catalogue,
+  dockerfile,
+  labels,
+  makeContext,
+  manifest,
+  project,
+  sandboxes,
+  stubDocker,
+} from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
+const sandbox = sandboxes()
+
+// ── build (§6 Images) ─────────────────────────────────────────────────────────
+describe('build (cli-spec.md §6, Images)', () => {
+  test('builds the web base with the host UID/GID as build args', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), 'web')
+
+    assert.ok(validate('build', result).valid, 'build output must match build.schema.json')
+    assert.equal(result.uid, 501)
+    assert.equal(result.gid, 20)
+    assert.deepEqual(result.images.map((i) => [i.image, i.status]), [['bardolier-web', 'built']])
+
+    const call = docker.calls[0]
+    assert.ok(call?.kind === 'build')
+    assert.equal(call.request.tag, 'bardolier-web:latest')
+    assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
+    assert.ok(call.request.dockerfile.endsWith(join('bardolier-web', 'Dockerfile')))
+  })
+
+  test('`library` shares the web base, per the §4.3 map', async () => {
+    const box = sandbox()
+    const docker = stubDocker()
+    const result = await runBuild(makeContext(box, docker), 'library')
+    assert.deepEqual(result.images.map((i) => i.image), ['bardolier-web'])
+    assert.deepEqual(result.images[0]?.archetypes, ['web', 'library'])
+  })
+
+  test('no argument builds every base image, in §4.3 order', async () => {
+    const box = sandbox()
+    const result = await runBuild(makeContext(box, stubDocker()), undefined)
+    assert.deepEqual(
+      result.images.map((i) => [i.image, i.status]),
+      [
+        ['bardolier-web', 'built'],
+        ['bardolier-ios', 'built'],
+        ['bardolier-and', 'built'],
+      ],
+    )
+    for (const image of result.images) {
+      if (image.status === 'unavailable') assert.ok(image.reason, `${image.image} was skipped without saying why`)
+    }
+  })
+
+  test('an image with no Dockerfile behind it is described, not thrown away', () => {
+    // The state `build` reports as `unavailable`: reachable through the images
+    // root, which is what makes a deleted or not-yet-written Dockerfile an
+    // explanation rather than a crash.
+    const box = sandbox()
+    for (const definition of baseImages(join(box.root, 'no-images'))) {
+      assert.equal(definition.dockerfile, null)
+    }
+  })
+
+  test('a dead daemon is DOCKER_UNAVAILABLE, and an unknown archetype is refused', async () => {
+    const box = sandbox()
+    await assert.rejects(
+      () => runBuild(makeContext(box, stubDocker({ available: false })), 'web'),
+      (error: unknown) => error instanceof BardolierError && error.code === 'DOCKER_UNAVAILABLE',
+    )
+    await assert.rejects(
+      () => runBuild(makeContext(box, stubDocker()), 'toaster'),
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
+    )
+  })
+
+  test('build works with the SSD unplugged — images live on the internal disk', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'unplugged') } })
+    const result = await runBuild(ctx, 'web')
+    assert.equal(result.images[0]?.status, 'built')
+  })
+
+  test('the base image the doctor looks for is the one build produces', () => {
+    const web = baseImages().find((image) => image.image === 'bardolier-web')
+    assert.ok(web?.dockerfile, 'the bardolier-web Dockerfile is missing from the install')
+    const dockerfile = readFileSync(web.dockerfile, 'utf8')
+    // The build args are the contract between build.ts and the Dockerfile.
+    assert.ok(dockerfile.includes('ARG HOST_UID'))
+    assert.ok(dockerfile.includes('ARG HOST_GID'))
+    assert.ok(dockerfile.includes('WORKDIR /work'))
+  })
 })
 
-/** The bundled catalogue, which is what a real run resolves to (§4.1). */
-function catalogue(): ServiceCatalogue {
-  return makeContext(sandbox()).catalogue().catalogue
-}
-
-/** The Dockerfile text of a base image, read the way `docker build` would. */
-function dockerfile(image: string): string {
-  const definition = baseImages().find((candidate) => candidate.image === image)
-  assert.ok(definition?.dockerfile, `${image} has no Dockerfile`)
-  return readFileSync(definition.dockerfile, 'utf8')
-}
-
 // ── The §4.3 map, completed ───────────────────────────────────────────────────
-
 describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
   test('each declared image is written, and each archetype resolves to one', () => {
     for (const definition of baseImages()) {
@@ -114,7 +171,6 @@ describe('every archetype now has a base image (cli-spec.md §4.3)', () => {
 })
 
 // ── The build-arg contract every base image keeps ─────────────────────────────
-
 describe('the base images keep the ownership contract (HOST_UID/HOST_GID)', () => {
   for (const image of BASE_IMAGES) {
     test(`${image} takes the host identity and works at /work as that user`, () => {
@@ -133,7 +189,6 @@ describe('the base images keep the ownership contract (HOST_UID/HOST_GID)', () =
 })
 
 // ── The one architecture pin, read by two writers ─────────────────────────────
-
 describe('bardolier-and is pinned to linux/amd64, consistently (images.ts)', () => {
   test('only the android base is pinned, and it is pinned to x86_64', () => {
     assert.deepEqual(IMAGE_PLATFORM, { 'bardolier-and': 'linux/amd64' })
@@ -163,7 +218,7 @@ describe('bardolier-and is pinned to linux/amd64, consistently (images.ts)', () 
   })
 
   test('the generated compose file starts the dev container on the same platform', () => {
-    const services = catalogue()
+    const services = catalogue(sandbox())
     const android = renderCompose({ manifest: manifest('droid', { archetype: 'android', base_image: 'bardolier-and' }), catalogue: services })
     assert.match(android, /platform: linux\/amd64/)
 
@@ -186,7 +241,6 @@ describe('bardolier-and is pinned to linux/amd64, consistently (images.ts)', () 
 })
 
 // ── Claude Code defaults to `latest`; `--claude-code-version` pins it ─────────
-
 describe('`build --claude-code-version` (default `latest`, pin with an exact release)', () => {
   test('unset defaults to `latest`, passed to every image and reported in the output', async () => {
     const box = sandbox()
@@ -226,7 +280,6 @@ describe('`build --claude-code-version` (default `latest`, pin with an exact rel
 })
 
 // ── The boundary, as a fact about the image ───────────────────────────────────
-
 describe('the mobile images encode the host/container boundary (CLAUDE.md)', () => {
   test('bardolier-ios carries the Swift toolchain and swiftlint, and no host-only build', () => {
     const text = dockerfile('bardolier-ios')
@@ -276,7 +329,6 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
 })
 
 // ── The Gradle cache: shared, and on the internal disk ────────────────────────
-
 describe('toolchain caches are shared, not per project (images.ts)', () => {
   const CACHE = 'bardolier-gradle-cache'
   const MOUNT = '/cache/gradle'
@@ -319,7 +371,7 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
   })
 
   test('the compose file mounts each, and lets Compose neither create nor claim them', () => {
-    const services = catalogue()
+    const services = catalogue(sandbox())
     const android = renderCompose({ manifest: droid(), catalogue: services })
     assert.match(android, new RegExp(`- ${CACHE}:${MOUNT}`))
     // `external: true` is the whole trick: a Compose-created volume carries the
@@ -429,5 +481,42 @@ describe('toolchain caches are shared, not per project (images.ts)', () => {
       'the cache is shared by every project on the image; purging one must not take it',
     )
     assert.deepEqual(await docker.volumeNames(), [CACHE])
+  })
+})
+
+// ── the agent is in the image (§4.3) ─────────────────────────────────────────
+describe('Claude Code is part of every base image', () => {
+  test('all three install it, pinned and verified', () => {
+    for (const { image } of baseImages()) {
+      const text = dockerfile(image)
+      assert.match(text, /ARG CLAUDE_CODE_VERSION=\d+\.\d+\.\d+/, `${image} must pin a version`)
+      assert.match(text, /sha256sum -c -/, `${image} must verify the download`)
+      assert.match(text, /claude --version/, `${image} must prove it runs at build time`)
+    }
+  })
+
+  test('it is installed OUTSIDE $HOME, which is a per-project volume', () => {
+    for (const { image } of baseImages()) {
+      const text = dockerfile(image)
+      // The whole reason for not using the installer's default location: a
+      // 236MB binary under $HOME would be copied into every project's volume.
+      assert.match(text, /-o \/usr\/local\/bin\/claude/, `${image} must install to a system path`)
+      assert.ok(
+        !/-o .*\$\{?HOME/.test(text),
+        `${image} must not install the agent into the mounted home`,
+      )
+    }
+  })
+
+  test('every Dockerfile sets $HOME to the path compose mounts (CONTAINER_HOME)', () => {
+    for (const { image } of baseImages()) {
+      // One constant, three readers. A Dockerfile that disagreed would still
+      // work and would silently lose the login on every `down`, which is
+      // exactly the failure that is hard to notice and worth a test.
+      assert.match(dockerfile(image), new RegExp(`ENV HOME=${CONTAINER_HOME}\\b`), `${image}`)
+      // ssh expands `~` from the passwd entry rather than $HOME, so a fourth
+      // reader has to agree: otherwise a key at $HOME/.ssh is invisible to it.
+      assert.match(dockerfile(image), new RegExp(`usermod -d ${CONTAINER_HOME}\\b`), `${image}`)
+    }
   })
 })

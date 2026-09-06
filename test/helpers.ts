@@ -9,10 +9,19 @@
  * `-v`, `up` must target the generated file).
  */
 
+import assert from 'node:assert/strict'
+import { afterEach } from 'node:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { stringify as stringifyYaml } from 'yaml'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+
+import { runNew } from '../cli/src/commands/new.ts'
+import { baseImages } from '../cli/src/images.ts'
+import { serviceDataDir } from '../cli/src/layout.ts'
+import type { Archetype } from '../cli/src/model/archetype.ts'
+import type { DoctorReport } from '../cli/src/model/doctor.ts'
+import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
 
 import type { Context, ContextOptions } from '../cli/src/context.ts'
 import { createContext } from '../cli/src/context.ts'
@@ -445,4 +454,101 @@ export function makeContext(
     wait: async () => {},
     ...rest,
   })
+}
+
+// ── Suite scaffolding ────────────────────────────────────────────────────────
+//
+// Every suite file used to repeat these: a sandbox list, a factory that pushes
+// onto it, an afterEach that drains it, and a handful of readers. One import
+// now, so a new suite is imports + describes.
+
+/** A sandbox factory whose sandboxes are torn down after each test. */
+export function sandboxes(): () => Sandbox {
+  const created: Sandbox[] = []
+  afterEach(() => {
+    while (created.length > 0) created.pop()?.cleanup()
+  })
+  return () => {
+    const box = makeSandbox()
+    created.push(box)
+    return box
+  }
+}
+
+/** Temp directories outside any sandbox — a second root, say — removed after each test. */
+export function tempDirs(prefix: string): () => string {
+  const dirs: string[] = []
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop()!, { recursive: true, force: true })
+  })
+  return () => {
+    const dir = mkdtempSync(join(tmpdir(), prefix))
+    dirs.push(dir)
+    return dir
+  }
+}
+
+/** A context with two configured roots: the sandbox's own (named `a`) plus a second (`b`). */
+export function twoRoots(box: Sandbox, rootB: string): Context {
+  box.writeConfig({ roots: [{ name: 'a', path: box.root }, { name: 'b', path: rootB }] })
+  // The file must win over the single-root env override makeContext sets.
+  return makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '' } })
+}
+
+/** Read what is actually on disk — the manifest is the registry (§4.2, §5). */
+export function readManifest(box: Sandbox, project: string): ProjectManifest {
+  const text = box.read(project, 'project.yml')
+  assert.ok(text, `${project}/project.yml is missing`)
+  return parseYaml(text) as ProjectManifest
+}
+
+/** The host port each attached service holds, straight from the manifest. */
+export function ports(box: Sandbox, project: string): Record<string, number> {
+  const services = readManifest(box, project).services ?? {}
+  return Object.fromEntries(Object.entries(services).map(([key, value]) => [key, value.host_port]))
+}
+
+/** A project on disk, created the way a user would. */
+export async function project(
+  ctx: Context,
+  name: string,
+  options: { archetype?: Archetype; services?: string } = {},
+): Promise<void> {
+  await runNew(ctx, { name, archetype: options.archetype ?? 'web', services: options.services })
+}
+
+/** The bundled catalogue, which is what a real run resolves to (§4.1). */
+export function catalogue(box: Sandbox): ServiceCatalogue {
+  return makeContext(box).catalogue().catalogue
+}
+
+/** The Dockerfile text of a base image, read the way `docker build` would. */
+export function dockerfile(image: string): string {
+  const definition = baseImages().find((candidate) => candidate.image === image)
+  assert.ok(definition?.dockerfile, `${image} has no Dockerfile`)
+  return readFileSync(definition.dockerfile, 'utf8')
+}
+
+/** One `doctor` finding, by id, asserted present. */
+export function finding(report: DoctorReport, id: string) {
+  const found = report.findings.find((f) => f.id === id)
+  assert.ok(found, `doctor produced no \`${id}\` finding`)
+  return found
+}
+
+/** The labels an older layout's compose file put on a service's volume. */
+export function labels(project: string, service: string) {
+  return { 'bardolier.project': project, 'bardolier.service': service }
+}
+
+/**
+ * A service's data directory with something in it — what `up` leaves behind.
+ * Compose creates the bind source at start-up, so a project that never ran has
+ * no such directory and nothing to orphan.
+ */
+export function seedServiceData(box: Sandbox, project: string, service: string, bytes = 1024): string {
+  const dir = serviceDataDir(box.path(project), service)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'DATA'), 'x'.repeat(bytes))
+  return dir
 }

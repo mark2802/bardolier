@@ -1,217 +1,59 @@
 /**
- * Phase 2 — the project lifecycle (new, up, down, delete) and compose
- * generation. No SSD, no daemon. Three properties the rest is built on:
- *   - compose generation is DETERMINISTIC (§9): same manifest, same bytes,
- *     whatever the path, key order, or number of regenerations.
- *   - up/down are IDEMPOTENT (§2) and neither invents state.
- *   - destructive actions are CONSERVATIVE: down keeps data, delete confirms,
- *     and a project holding data refuses to be deleted without --purge.
+ * `new`, `up`, `down`, `delete`, and the walks that run them end to end.
  */
 
-import { test, describe, afterEach } from 'node:test'
+import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { COMPOSE_FILENAME, PASSTHROUGH_ENV, attachedKeys, renderCompose } from '../cli/src/compose.ts'
+import { COMPOSE_FILENAME, attachedKeys } from '../cli/src/compose.ts'
 import { PROJECT_DIRS } from '../cli/src/layout.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../cli/src/naming.ts'
-import { orderManifest, regenerateCompose, renderManifest, requireProject } from '../cli/src/workspace.ts'
+import { requireProject } from '../cli/src/workspace.ts'
 import { seededFiles } from '../cli/src/scaffold.ts'
-import { baseImages } from '../cli/src/images.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDown } from '../cli/src/commands/down.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
-import { runBuild } from '../cli/src/commands/build.ts'
 import { collectStatus } from '../cli/src/commands/status.ts'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE } from '../cli/src/model/archetype.ts'
 import type { Archetype } from '../cli/src/model/archetype.ts'
 import type { ProjectManifest } from '../cli/src/model/project.ts'
-import type { ServiceCatalogue } from '../cli/src/model/catalogue.ts'
+import { runServiceRemove } from '../cli/src/commands/service.ts'
+import { runShell } from '../cli/src/commands/shell.ts'
+import { collectOrphanedVolumes, runVolumeRemove } from '../cli/src/commands/volumes.ts'
+import { runDownAll, runEject } from '../cli/src/commands/ssd.ts'
+import { containingVolume } from '../cli/src/projects.ts'
 import {
   FIXED_NOW,
+  holder,
   makeContext,
-  makeSandbox,
   manifest,
+  ports,
+  project,
+  sandboxes,
+  seedServiceData,
   stubConfirm,
+  stubDevice,
   stubDocker,
   stubPorts,
-  type Sandbox,
+  tempDirs,
+  twoRoots,
 } from './helpers.ts'
 
-const sandboxes: Sandbox[] = []
-function sandbox(): Sandbox {
-  const created = makeSandbox()
-  sandboxes.push(created)
-  return created
-}
-afterEach(() => {
-  while (sandboxes.length > 0) sandboxes.pop()?.cleanup()
-})
-
-/** The bundled catalogue, which is what a real run resolves to (§4.1 step 3). */
-function catalogue(): ServiceCatalogue {
-  return makeContext(sandbox()).catalogue().catalogue
-}
+const sandbox = sandboxes()
+const secondRoot = tempDirs('bardolier-root-b-')
 
 /** A manifest with services already attached — Phase 3 assigns these for real. */
 function withServices(name = 'myapp'): ProjectManifest {
   return manifest(name, { services: { redis: { host_port: 6380 }, postgres: { host_port: 5433 } } })
 }
 
-// ── Compose generation (§9) ───────────────────────────────────────────────────
-
-describe('compose generation (cli-spec.md §9)', () => {
-  test('is deterministic: the same manifest renders the same bytes', () => {
-    const source = withServices()
-    const first = renderCompose({ manifest: source, catalogue: catalogue() })
-    const second = renderCompose({ manifest: source, catalogue: catalogue() })
-    assert.equal(first, second)
-  })
-
-  test('key order in the manifest cannot change the output', () => {
-    // The same attachments, declared in the opposite order.
-    const forwards = manifest('myapp', { services: { postgres: { host_port: 5433 }, redis: { host_port: 6380 } } })
-    const backwards = manifest('myapp', { services: { redis: { host_port: 6380 }, postgres: { host_port: 5433 } } })
-    assert.equal(
-      renderCompose({ manifest: forwards, catalogue: catalogue() }),
-      renderCompose({ manifest: backwards, catalogue: catalogue() }),
-    )
-  })
-
-  test('regeneration on an unchanged manifest is a no-op write', () => {
-    const box = sandbox()
-    box.writeProject('myapp', manifest('myapp'))
-    const dir = box.path('myapp')
-
-    const first = regenerateCompose(dir, manifest('myapp'), null)
-    assert.equal(first.changed, true, 'the first generation writes the file')
-    const bytes = readFileSync(first.path, 'utf8')
-
-    const second = regenerateCompose(dir, manifest('myapp'), null)
-    assert.equal(second.changed, false, 'a second generation must find nothing to do')
-    assert.equal(readFileSync(second.path, 'utf8'), bytes)
-  })
-
-  test('a hand-edited compose file is overwritten — project.yml is the truth', () => {
-    const box = sandbox()
-    box.writeProject('myapp', manifest('myapp'))
-    const dir = box.path('myapp')
-    regenerateCompose(dir, manifest('myapp'), null)
-    writeFileSync(join(dir, COMPOSE_FILENAME), 'services: {evil: {image: nope}}\n')
-
-    const again = regenerateCompose(dir, manifest('myapp'), null)
-    assert.equal(again.changed, true)
-    assert.ok(!readFileSync(again.path, 'utf8').includes('evil'))
-  })
-
-  test('the dev container binds the four project folders and publishes nothing', () => {
-    const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    const dev = doc.services.dev
-    assert.equal(dev.container_name, devContainerName('myapp'))
-    assert.equal(dev.image, 'bardolier-web:latest')
-    // Four relative binds (§4.2), then the shared `uv` cache every
-    // bardolier-web project mounts (Phase 11) — the one named volume left.
-    // `/data` is read-only: writing into a live data directory from a second
-    // container corrupts it.
-    assert.deepEqual(dev.volumes, [
-      './work:/work',
-      './data:/data:ro',
-      './local:/local',
-      './home:/state/home',
-      'bardolier-uv-cache:/cache/uv',
-    ])
-    assert.equal(dev.working_dir, '/work')
-    assert.deepEqual(dev.command, ['sleep', 'infinity'])
-    assert.equal(dev.ports, undefined, 'the dev container must not publish host ports')
-  })
-
-  test('the bind mount is relative, so where the SSD mounts cannot change the file', () => {
-    const rendered = renderCompose({ manifest: manifest('myapp'), catalogue: null })
-    assert.ok(!rendered.includes('/Volumes'))
-    assert.ok(!rendered.includes('/tmp'))
-  })
-
-  test('a project on an image with no cache declares no named volume at all', () => {
-    // bardolier-ios has no toolchain cache (images.ts); bardolier-web's `uv` cache
-    // would otherwise be the one volume here, so this is the archetype that
-    // isolates the claim: since phase 19 nothing a PROJECT owns is a volume.
-    const ios = manifest('myapp', { archetype: 'ios', base_image: 'bardolier-ios' })
-    const doc = parseYaml(renderCompose({ manifest: ios, catalogue: null })) as Record<string, any>
-    assert.equal(doc.volumes, undefined)
-    assert.deepEqual(Object.keys(doc.services), ['dev'])
-  })
-
-  test('attaching services adds no named volume either — the cache is the only one', () => {
-    const doc = parseYaml(renderCompose({ manifest: withServices(), catalogue: catalogue() })) as Record<string, any>
-    assert.deepEqual(Object.keys(doc.volumes), ['bardolier-uv-cache'])
-    assert.equal(doc.volumes['bardolier-uv-cache'].external, true)
-  })
-
-  test('the dev container inherits the host names it is lent, and no values', () => {
-    const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    // Compose's LIST form: a bare name is passed through when the environment
-    // running `compose up` has one and left UNSET otherwise. A `NAME=` here
-    // would put an empty credential in the container instead of none.
-    assert.deepEqual(doc.services.dev.environment, [...PASSTHROUGH_ENV])
-    for (const entry of doc.services.dev.environment) {
-      assert.ok(!entry.includes('='), `${entry} must not carry a value`)
-    }
-  })
-
-  test('services publish host:container and bind their own data directory (§9)', () => {
-    const doc = parseYaml(renderCompose({ manifest: withServices(), catalogue: catalogue() })) as Record<string, any>
-    const postgres = doc.services.postgres
-    assert.equal(postgres.container_name, serviceContainerName('myapp', 'postgres'))
-    assert.equal(postgres.image, 'postgres:17')
-    assert.deepEqual(postgres.ports, ['5433:5432'])
-    // Named by the catalogue KEY, relative to the compose file, and read-write
-    // here — the dev container sees the same bytes through a read-only /data.
-    assert.deepEqual(postgres.volumes, ['./data/postgres:/var/lib/postgresql/data'])
-  })
-
-  test('{project} is interpolated in env, the one substitution left (§4.1)', () => {
-    // The data directory is named by the catalogue KEY now, so the project
-    // name appears nowhere in the bind — the path is already project-scoped.
-    const doc = parseYaml(renderCompose({ manifest: withServices('shop'), catalogue: catalogue() })) as Record<string, any>
-    assert.equal(doc.services.postgres.environment.POSTGRES_DB, 'shop')
-    assert.deepEqual(doc.services.postgres.volumes, ['./data/postgres:/var/lib/postgresql/data'])
-  })
-
-  test('one network per project, namespaced by the compose project name', () => {
-    const doc = parseYaml(renderCompose({ manifest: manifest('myapp'), catalogue: null })) as Record<string, any>
-    assert.equal(doc.name, composeProject('myapp'))
-  })
-
-  test('a manifest naming an unknown service fails SERVICE_UNKNOWN, not silence', () => {
-    const bad = manifest('myapp', { services: { kafka: { host_port: 9092 } } })
-    assert.throws(
-      () => renderCompose({ manifest: bad, catalogue: catalogue() }),
-      (error: unknown) => error instanceof BardolierError && error.code === 'SERVICE_UNKNOWN',
-    )
-  })
-
-  test('the generated file warns that it is generated', () => {
-    assert.ok(renderCompose({ manifest: manifest('myapp'), catalogue: null }).includes('DO NOT EDIT'))
-  })
-
-  test('the manifest round-trips through its own writer without drift', () => {
-    const source = withServices()
-    const text = renderManifest(source)
-    const reparsed = parseYaml(text) as ProjectManifest
-    assert.ok(validate('project', reparsed).valid)
-    assert.deepEqual(reparsed, parseYaml(renderManifest(reparsed)))
-    // Sorted, whatever order the object was built in.
-    assert.deepEqual(Object.keys((orderManifest(source).services ?? {}) as object), ['postgres', 'redis'])
-  })
-})
-
 // ── new (§6, §10) ─────────────────────────────────────────────────────────────
-
 describe('new (cli-spec.md §6, §10)', () => {
   test('creates the manifest, the seeds and the compose file, and validates', async () => {
     const box = sandbox()
@@ -330,7 +172,6 @@ describe('new (cli-spec.md §6, §10)', () => {
 })
 
 // ── up (§6, §2, §5) ───────────────────────────────────────────────────────────
-
 describe('up (cli-spec.md §6)', () => {
   test('starts a stopped project and reports what it published', async () => {
     const box = sandbox()
@@ -473,7 +314,6 @@ describe('up (cli-spec.md §6)', () => {
 })
 
 // ── down (§6, §2) ─────────────────────────────────────────────────────────────
-
 describe('down (cli-spec.md §6)', () => {
   test('stops the project and keeps its data', async () => {
     const box = sandbox()
@@ -537,7 +377,6 @@ describe('down (cli-spec.md §6)', () => {
 })
 
 // ── delete (§6, §5) ───────────────────────────────────────────────────────────
-
 describe('delete (cli-spec.md §6)', () => {
   const request = (name: string, overrides: Partial<Parameters<typeof runDelete>[1]> = {}) => ({
     name,
@@ -692,92 +531,7 @@ describe('delete (cli-spec.md §6)', () => {
   })
 })
 
-// ── build (§6 Images) ─────────────────────────────────────────────────────────
-
-describe('build (cli-spec.md §6, Images)', () => {
-  test('builds the web base with the host UID/GID as build args', async () => {
-    const box = sandbox()
-    const docker = stubDocker()
-    const result = await runBuild(makeContext(box, docker), 'web')
-
-    assert.ok(validate('build', result).valid, 'build output must match build.schema.json')
-    assert.equal(result.uid, 501)
-    assert.equal(result.gid, 20)
-    assert.deepEqual(result.images.map((i) => [i.image, i.status]), [['bardolier-web', 'built']])
-
-    const call = docker.calls[0]
-    assert.ok(call?.kind === 'build')
-    assert.equal(call.request.tag, 'bardolier-web:latest')
-    assert.deepEqual(call.request.args, { HOST_UID: '501', HOST_GID: '20', CLAUDE_CODE_VERSION: 'latest' })
-    assert.ok(call.request.dockerfile.endsWith(join('bardolier-web', 'Dockerfile')))
-  })
-
-  test('`library` shares the web base, per the §4.3 map', async () => {
-    const box = sandbox()
-    const docker = stubDocker()
-    const result = await runBuild(makeContext(box, docker), 'library')
-    assert.deepEqual(result.images.map((i) => i.image), ['bardolier-web'])
-    assert.deepEqual(result.images[0]?.archetypes, ['web', 'library'])
-  })
-
-  test('no argument builds every base image, in §4.3 order', async () => {
-    const box = sandbox()
-    const result = await runBuild(makeContext(box, stubDocker()), undefined)
-    assert.deepEqual(
-      result.images.map((i) => [i.image, i.status]),
-      [
-        ['bardolier-web', 'built'],
-        ['bardolier-ios', 'built'],
-        ['bardolier-and', 'built'],
-      ],
-    )
-    for (const image of result.images) {
-      if (image.status === 'unavailable') assert.ok(image.reason, `${image.image} was skipped without saying why`)
-    }
-  })
-
-  test('an image with no Dockerfile behind it is described, not thrown away', () => {
-    // The state `build` reports as `unavailable`: reachable through the images
-    // root, which is what makes a deleted or not-yet-written Dockerfile an
-    // explanation rather than a crash.
-    const box = sandbox()
-    for (const definition of baseImages(join(box.root, 'no-images'))) {
-      assert.equal(definition.dockerfile, null)
-    }
-  })
-
-  test('a dead daemon is DOCKER_UNAVAILABLE, and an unknown archetype is refused', async () => {
-    const box = sandbox()
-    await assert.rejects(
-      () => runBuild(makeContext(box, stubDocker({ available: false })), 'web'),
-      (error: unknown) => error instanceof BardolierError && error.code === 'DOCKER_UNAVAILABLE',
-    )
-    await assert.rejects(
-      () => runBuild(makeContext(box, stubDocker()), 'toaster'),
-      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
-    )
-  })
-
-  test('build works with the SSD unplugged — images live on the internal disk', async () => {
-    const box = sandbox()
-    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: join(box.root, 'unplugged') } })
-    const result = await runBuild(ctx, 'web')
-    assert.equal(result.images[0]?.status, 'built')
-  })
-
-  test('the base image the doctor looks for is the one build produces', () => {
-    const web = baseImages().find((image) => image.image === 'bardolier-web')
-    assert.ok(web?.dockerfile, 'the bardolier-web Dockerfile is missing from the install')
-    const dockerfile = readFileSync(web.dockerfile, 'utf8')
-    // The build args are the contract between build.ts and the Dockerfile.
-    assert.ok(dockerfile.includes('ARG HOST_UID'))
-    assert.ok(dockerfile.includes('ARG HOST_GID'))
-    assert.ok(dockerfile.includes('WORKDIR /work'))
-  })
-})
-
 // ── The lifecycle end to end ──────────────────────────────────────────────────
-
 describe('lifecycle (new → up → down → delete)', () => {
   test('status tracks every transition', async () => {
     const box = sandbox()
@@ -830,5 +584,99 @@ describe('lifecycle (new → up → down → delete)', () => {
       (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
     )
     assert.equal(readFileSync(join(box.root, 'notes', 'todo.md'), 'utf8'), 'buy milk')
+  })
+})
+
+describe('`new --root` (cli-spec.md §6)', () => {
+  test('defaults to the first configured root', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    const created = await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined })
+    assert.equal(created.project.root, 'a')
+    assert.ok(box.exists('alpha', 'project.yml'))
+  })
+
+  test('an unknown --root is INVALID_ARGUMENT naming the configured roots', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    await assert.rejects(
+      () => runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined, root: 'ghost' }),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'INVALID_ARGUMENT')
+        assert.match(error.message, /a, b/)
+        return true
+      },
+    )
+  })
+
+  test('an unreadable target root is ROOT_UNREADABLE, not SSD_NOT_MOUNTED', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    rmSync(rootB, { recursive: true, force: true })
+    await assert.rejects(
+      () => runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined, root: 'b' }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'ROOT_UNREADABLE',
+    )
+  })
+
+  test('PROJECT_EXISTS means "in any root"', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    await runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined, root: 'a' })
+    await assert.rejects(
+      () => runNew(ctx, { name: 'alpha', archetype: 'web', services: undefined, root: 'b' }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_EXISTS',
+    )
+  })
+})
+
+// ── the whole loop ────────────────────────────────────────────────────────────
+describe('new → up → shell → down → remove → reclaim → delete → eject', () => {
+  test('one story, end to end', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ startsAs: ['bardolier-alpha', 'bardolier-alpha-postgres'] })
+    const device = stubDevice()
+    const ctx = makeContext(box, docker, { device, confirm: stubConfirm(true) })
+
+    await project(ctx, 'alpha', { services: 'postgres' })
+    const up = await runUp(ctx, { name: 'alpha', noShell: false })
+    assert.equal(up.state, 'running')
+    // What the running postgres wrote into its bind source.
+    seedServiceData(box, 'alpha', 'postgres', 20971520)
+
+    const shell = await runShell(ctx, 'alpha')
+    assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+
+    const status = await collectStatus(ctx, 'alpha')
+    assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)
+    assert.deepEqual(status.orphaned_volumes, [], 'attached data is not an orphan while the project is up')
+
+    await runDownAll(ctx)
+    await runServiceRemove(ctx, { project: 'alpha', service: 'postgres' })
+
+    const orphaned = await collectOrphanedVolumes(ctx)
+    assert.deepEqual(orphaned.orphaned.map((v) => v.name), ['alpha/postgres'])
+    assert.equal(orphaned.total_human, '20 MB')
+
+    const reclaimed = await runVolumeRemove(ctx, { name: 'alpha/postgres', force: true, json: true })
+    assert.equal(reclaimed.removed, true)
+    assert.deepEqual((await collectOrphanedVolumes(ctx)).orphaned, [])
+
+    await runDelete(ctx, { name: 'alpha', force: true, purge: false, json: true })
+    assert.equal(box.exists('alpha'), false)
+
+    device.setHolders([holder({ command: 'zsh' })])
+    await assert.rejects(
+      () => runEject(ctx),
+      (error: unknown) => error instanceof BardolierError && error.code === 'EJECT_BLOCKED',
+    )
+    device.setHolders([])
+    assert.equal((await runEject(ctx)).ejected, true)
+    assert.deepEqual(device.ejected, [containingVolume(box.root)])
   })
 })
