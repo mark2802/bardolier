@@ -1,78 +1,19 @@
 #!/usr/bin/env bash
-# Phase 4 done-check — THE CONTRACT-FREEZE GATE. The full lifecycle end to end:
-# new → service add → up → `shell --json` (run, not merely shaped) → status
-# ports → down → service remove → orphan with size → reclaim → delete → eject
-# blocked by a shell holding the volume, then clear once it quits.
+# What the disk holds and how it is let go: orphans and their size, the in-use
+# refusals, `down-all`, and an `eject` blocked by a real holder then cleared.
 #
-# REAL: Docker, the dev container, postgres, named volumes, sizes from
-# `docker system df`, and the lsof holder probe — which runs AFTER Docker has
-# bind-mounted the same directory, proving the runtime's own descriptors do not
-# stand in for a user's shell (`isRuntimeHolder`).
-# STOOD IN: the SSD (temp dir, §8).
-# STUBBED: `diskutil eject` alone — a done-check must never unmount a real disk,
-# so the Context records the unmount instead of performing it.
-#
-#   bash test/phase4-done-check.sh
-set -euo pipefail
+#   bash test/disk-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
-
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-# `pwd -P` so the path matches what lsof reports (macOS /var → /private/var).
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
-HOLDER_PID=""
-cleanup() {
-  [ -n "$HOLDER_PID" ] && kill "$HOLDER_PID" >/dev/null 2>&1 || true
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-alpha bardolier-alpha-postgres bardolier-beta bardolier-beta-redis >/dev/null 2>&1 || true
-    docker volume rm alpha_pgdata beta_redisdata >/dev/null 2>&1 || true
-  docker volume rm -f bardolier-alpha-home bardolier-beta-home >/dev/null 2>&1 || true
-    # Every project now owns a $HOME volume (cli-spec.md §9).
-    docker volume rm -f bardolier-alpha-home bardolier-beta-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
 VOLUME="$TMP/ssd"
-MOUNTED="$VOLUME/claude-projects"
-mkdir -p "$MOUNTED"
+track bardolier-myapp bardolier-myapp-postgres
+track_volume bardolier-myapp-home
 
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-json_value() { # json_value <json> <js expression over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.stdout.write(String(${2}))
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
-
-# Drive `eject` with the REAL lsof probe and a RECORDING diskutil (see header).
 try_eject() {
   node --input-type=module -e "
     import { createContext } from './cli/src/context.ts'
@@ -308,29 +249,5 @@ if [ "$DOCKER_OK" = "1" ]; then
   $BARDOLIER down-all >/dev/null
 fi
 
-# ── 8. Suites, typecheck, and the earlier phases ──────────────────────────────
-head "8. Test suites, typecheck, and earlier done-checks"
-
-if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-3: already being walked, in order, by test/regression.sh"
-else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 3 >"$LADDER" 2>&1; then
-    ok "phases 0-3 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
-fi
-
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 4: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed. Contracts are frozen: schema changes are additive only.\033[0m\n'
+summary "Disk"

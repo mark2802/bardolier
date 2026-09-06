@@ -1,56 +1,17 @@
 #!/usr/bin/env bash
-# Phase 14 done-check — root shell (docs/phases/14-root-shell.md): `docker exec
-# -u root` named as `bardolier shell --root`, one argv difference, no new checks
-# beyond the ones `shell` already has. SSD is a temp dir (§8); the Docker half
-# proves `up` → shell/--root/--print → down against a real container.
+# `bardolier shell`: the argv the CLI resolves, `--root`, `--print`, and the
+# app-facing shape the menu runs (app-spec.md §7).
 #
-#   bash test/phase14-done-check.sh
+#   bash test/shell-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-cleanup() {
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-alpha >/dev/null 2>&1 || true
-    docker volume rm -f bardolier-alpha-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
+track bardolier-alpha bardolier-beta
+track_volume bardolier-alpha-home bardolier-beta-home
 
 # ── 1. new → up → shell/--root/--print, plain shell unchanged ─────────────────
 head "1. \`shell --root\` swaps to \`docker exec -u root\`; plain \`shell\` is untouched"
@@ -102,7 +63,31 @@ if [ "$DOCKER_OK" = "1" ]; then
     && ok "a stopped project still fails PROJECT_STOPPED with --root" || bad "shell --root resolved a stopped project"
 fi
 
+# ── 2. Shell-open: the CLI resolves, the app runs (app-spec.md §7) ────────────
+head "2. Shell-open resolves to argv the app can run (§7)"
+
+$BARDOLIER new beta --archetype web >/dev/null || bad "new exited non-zero"
+
+if OUT="$($BARDOLIER shell beta --json 2>&1)"; then
+  bad "shell answered for a stopped project"
+else
+  if json_assert "$OUT" "d.error.code === 'PROJECT_STOPPED'"; then
+    ok "a stopped project is PROJECT_STOPPED — the app relays it, never auto-starts"
+  else
+    bad "shell failed with the wrong code: $OUT"
+  fi
+fi
+
+# The running case needs a container; the contract tests cover it against a
+# stub. Here we only assert the shape the app depends on is documented.
+if [ -f cli/schema/shell.schema.json ] && node -e "
+  const s = require('./cli/schema/shell.schema.json')
+  process.exit(s.required.includes('exec') && s.properties.exec.type === 'array' ? 0 : 1)
+"; then
+  ok "shell's contract is argv, so the app quotes once and spawns the terminal, not docker"
+else
+  bad "shell.schema.json no longer promises an argv array"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 14: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Shell"

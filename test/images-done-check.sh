@@ -1,71 +1,21 @@
 #!/usr/bin/env bash
-# Phase 8 done-check — the mobile base images, for real, through the CLI: `new`
-# and `up` an ios and an android project on a temp SSD, then work inside the
-# container the generated compose file started.
+# The base images: the §4.3 map complete, the build-arg contract, the
+# architecture pin, the shared toolchain caches, and a real project built and
+# tested inside each — including the Python half of `bardolier-web`.
 #
-#   IOS      swift build, swift test and swiftlint run; `xcodebuild` is absent,
-#            because the boundary is a fact about the image and not only a
-#            sentence in the seeded CLAUDE.md (which is checked too).
-#   ANDROID  a real Gradle assembleDebug + unit test produces an APK on an
-#            x86_64 container (Google ships aapt2 for x86_64 only, so the image
-#            is pinned — cli/src/images.ts); its dependencies land in the SHARED
-#            cache volume, which a second --offline build proves; `adb` is
-#            absent for the same reason `xcodebuild` is.
-#
-# Files the container writes come back owned by the HOST user — the reason
-# `bardolier build` passes HOST_UID/HOST_GID. Needs a Docker daemon and the network;
-# the first run builds both images (several GB, and the Android one compiles
-# under emulation on Apple Silicon).
-#
-#   bash test/phase8-done-check.sh
-#   PHASE8_QUICK=1 …      skip the in-container toolchain runs, keep the rest
-#   PHASE8_NO_BUILD=1 …   never build an image; fail if one is missing
-set -euo pipefail
+#   bash test/images-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-manual=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }
-section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
-VOLUME="$TMP/ssd"
-MOUNTED="$VOLUME/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$VOLUME"
-export BARDOLIER_ROOT="$MOUNTED"
-
-cleanup() {
-  # Never leave containers behind: the projects are in a temp dir that is about
-  # to vanish, and a running container holding it would be the mess this tool
-  # exists to prevent.
-  $BARDOLIER down-all --force >/dev/null 2>&1 || true
-  # Every project now owns a $HOME volume (cli-spec.md §9). NOT the Gradle
-  # cache: that is shared, expensive to refill, and the point of this phase.
-  docker volume rm -f bardolier-swiftbits-home bardolier-droid-home >/dev/null 2>&1 || true
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
+track bardolier-mobile bardolier-droid bardolier-pyweb
+track_volume bardolier-mobile-home bardolier-droid-home bardolier-pyweb-home
 
 # ── 1. The §4.3 map is complete ───────────────────────────────────────────────
-section "1. Every archetype has a base image (§4.3)"
+head "1. Every archetype has a base image (§4.3)"
 
 if node --input-type=module -e "
   import assert from 'node:assert/strict'
@@ -83,12 +33,11 @@ if npm test >/dev/null 2>&1; then ok "npm test — including test/phase8.test.ts
 if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
 
 # ── 2. The images themselves ──────────────────────────────────────────────────
-section "2. Base images"
+head "2. Base images"
 
-if ! docker info >/dev/null 2>&1; then
-  bad "the Docker daemon did not respond — this phase's check is about real containers"
-  printf '\n\033[1mPhase 8: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-  exit 1
+if ! docker_ready; then
+  summary "Images"
+  exit 0
 fi
 ok "the Docker daemon responded"
 
@@ -123,7 +72,7 @@ else
 fi
 
 # ── 3. An ios project, from `new` to a test run ───────────────────────────────
-section "3. ios — Swift toolchain, swiftlint, and no way to build the app (§4.3)"
+head "3. ios — Swift toolchain, swiftlint, and no way to build the app (§4.3)"
 
 $BARDOLIER new swiftbits --archetype ios >/dev/null || bad "\`bardolier new --archetype ios\` failed"
 IOS_DIR="$MOUNTED/swiftbits"
@@ -223,7 +172,7 @@ fi
 $BARDOLIER down swiftbits >/dev/null 2>&1 || true
 
 # ── 4. An android project, built and tested by Gradle ─────────────────────────
-section "4. android — a real Gradle build and unit test in-container (§4.3)"
+head "4. android — a real Gradle build and unit test in-container (§4.3)"
 
 $BARDOLIER new droid --archetype android >/dev/null || bad "\`bardolier new --archetype android\` failed"
 AND_DIR="$MOUNTED/droid"
@@ -394,7 +343,7 @@ fi
 $BARDOLIER down droid >/dev/null 2>&1 || true
 
 # ── 5. Nothing in the repo attempts a host-only step ──────────────────────────
-section "5. The boundary holds in the tooling too (CLAUDE.md)"
+head "5. The boundary holds in the tooling too (CLAUDE.md)"
 
 # Naming these tools is the boundary being WRITTEN DOWN — in a comment, or in
 # the seeded CLAUDE.md that scaffold.ts renders. Running one is the boundary
@@ -421,39 +370,122 @@ else
   ok "the module that writes the boundary note has no way to execute anything"
 fi
 
-# ── 6. Earlier phases ─────────────────────────────────────────────────────────
-section "6. Earlier phases"
+# ── 6. Build bardolier-web fresh, so this Dockerfile is the one running ─────────
+head "6. bardolier-web, rebuilt with uv"
 
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-7: already being walked, in order, by test/regression.sh"
+printf '    building bardolier-web (fast — a Node image)\n'
+if $BARDOLIER build --archetype web >"$TMP/build.log" 2>&1; then
+  ok "bardolier-web:latest built from cli/images/bardolier-web/Dockerfile"
 else
-  if bash test/regression.sh --through 7 >"$TMP/ladder.log" 2>&1; then
-    ok "phases 0-7 still pass (test/regression.sh)"
+  bad "\`bardolier build --archetype web\` failed:"
+  tail -8 "$TMP/build.log" | sed 's/^/      /'
+fi
+
+# ── 7. A web project, up, with uv inside ──────────────────────────────────────
+head "7. A Python API alongside the React frontend, in one dev container"
+
+$BARDOLIER new pybits --archetype web >/dev/null || bad "\`bardolier new --archetype web\` failed"
+DIR="$MOUNTED/pybits"
+
+if grep -q "bardolier-uv-cache:/cache/uv" "$DIR/docker-compose.yml" && grep -q "external: true" "$DIR/docker-compose.yml"; then
+  ok "the compose file mounts the shared uv cache as an external volume (§4.3, §9)"
+else
+  bad "the web project's compose file does not mount bardolier-uv-cache as an external volume"
+fi
+
+if grep -qi "proxy" "$DIR/work/CLAUDE.md"; then
+  ok "its seeded CLAUDE.md says how a second process is reached (proxy, not a second port)"
+else
+  bad "the seeded CLAUDE.md is missing the proxy-not-a-second-port note"
+fi
+
+if $BARDOLIER up pybits --no-shell >/dev/null 2>&1; then
+  ok "bardolier up pybits"
+else
+  bad "bardolier up pybits failed"
+fi
+
+if docker volume inspect bardolier-uv-cache >/dev/null 2>&1; then
+  ok "bardolier up created the shared uv cache volume"
+  ROLE="$(docker volume inspect bardolier-uv-cache --format '{{index .Labels "bardolier.role"}}' 2>/dev/null)"
+  if [ "$ROLE" = "cache" ]; then
+    ok "labelled bardolier.role=cache, so the orphan scan knows it belongs to no project"
   else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$TMP/ladder.log" | sed 's/^/      /'
+    bad "the cache volume is labelled '$ROLE' — the volume scan would misattribute it"
+  fi
+else
+  bad "bardolier up did not create bardolier-uv-cache"
+fi
+
+CONTAINER="$($BARDOLIER status pybits --json 2>/dev/null | node -e "
+  let s = ''
+  process.stdin.on('data', (c) => (s += c)).on('end', () => {
+    const d = JSON.parse(s)
+    process.stdout.write(d.projects[0]?.dev_container ?? '')
+  })
+")"
+in_c() { docker exec "$CONTAINER" bash -lc "$1"; }
+
+if [ -n "$CONTAINER" ]; then
+  if UVV="$(in_c 'uv --version 2>&1')"; then
+    ok "the container has uv: $UVV"
+  else
+    bad "no working uv in the web container"
+  fi
+
+  if [ "${PHASE11_QUICK:-0}" = "1" ]; then
+    skip "PHASE11_QUICK=1 — skipped uv python install and the offline-cache proof"
+  else
+    printf '    uv python install 3.12 (first run downloads an interpreter)\n'
+    if in_c 'uv python install 3.12 >/dev/null 2>&1 && uv run --python 3.12 python3 -c "print(2 + 2)"' \
+        >"$TMP/uv-python.log" 2>&1 && grep -q '^4$' "$TMP/uv-python.log"; then
+      ok "uv python install + uv run actually execute Python 3.12"
+    else
+      bad "uv python install/run failed:"
+      tail -5 "$TMP/uv-python.log" | sed 's/^/      /'
+    fi
+
+    if in_c 'test -n "$(find /cache/uv/python -mindepth 1 -maxdepth 1 2>/dev/null)"'; then
+      ok "the managed Python interpreter landed in the shared volume, not under /work"
+    else
+      bad "UV_PYTHON_INSTALL_DIR holds nothing — the interpreter is not where the volume is"
+    fi
+
+    if in_c 'cd /work && uv venv >/dev/null 2>&1 && uv pip install --python .venv six >/dev/null 2>&1'; then
+      ok "a project venv installs a real package via uv"
+    else
+      bad "uv venv / uv pip install failed in the container"
+    fi
+
+    if in_c 'test -n "$(find /cache/uv -maxdepth 1 -name "*.lock" -o -maxdepth 2 -type d -name wheels 2>/dev/null)"' \
+        || in_c 'du -sh /cache/uv 2>/dev/null | grep -qv "^0"'; then
+      ok "the wheel cache is populated in the shared volume"
+    else
+      bad "/cache/uv looks empty after a real install"
+    fi
+
+    # The offline proof: a second, unrelated project reuses the warm cache.
+    $BARDOLIER new pybits2 --archetype web >/dev/null || bad "second \`bardolier new\` failed"
+    $BARDOLIER up pybits2 --no-shell >/dev/null 2>&1 || bad "bardolier up pybits2 failed"
+    CONTAINER2="$($BARDOLIER status pybits2 --json 2>/dev/null | node -e "
+      let s = ''
+      process.stdin.on('data', (c) => (s += c)).on('end', () => {
+        const d = JSON.parse(s)
+        process.stdout.write(d.projects[0]?.dev_container ?? '')
+      })
+    ")"
+    if [ -n "$CONTAINER2" ] && docker exec "$CONTAINER2" bash -lc \
+        'cd /work && uv venv >/dev/null 2>&1 && uv pip install --python .venv --offline six >/dev/null 2>&1'; then
+      ok "a second, unrelated project installs the same package --offline: the cache is shared"
+    else
+      bad "the second project could not install six --offline — the cache did not carry over"
+    fi
+    $BARDOLIER down pybits2 >/dev/null 2>&1 || true
+    $BARDOLIER delete pybits2 --force >/dev/null 2>&1 || true
   fi
 fi
 
+$BARDOLIER down pybits >/dev/null 2>&1 || true
+
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 8: %d passed, %d failed, %d manual\033[0m\n' "$pass" "$fail" "$manual"
-[ "$fail" -eq 0 ] || exit 1
-
-cat <<'MANUAL'
-
-What is still the human's, on the Mac — the other side of the boundary:
-
-  1. IOS, THE HOST HALF. Open the real app's .xcodeproj in Xcode, ⌘B, run it on
-     a simulator, sign it. None of that is in the container and none of it ever
-     will be; if a task seems to need it in there, the answer is this step.
-  2. ANDROID, THE HOST HALF. Instrumented tests and the emulator. `bardolier shell`
-     into the project and run the unit tests; run the AVD from Android Studio.
-  3. THE AGENT'S SIDE OF IT. Start an ios project, `bardolier shell` into it, and
-     ask the agent inside to build the app. It should read its CLAUDE.md, say
-     the step is yours, and stop — rather than looking for a workaround.
-MANUAL
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Images"

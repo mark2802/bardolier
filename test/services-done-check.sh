@@ -1,92 +1,20 @@
 #!/usr/bin/env bash
-# Phase 3 done-check — postgres on two projects: distinct host ports in-band,
-# both up, a TCP connect from this machine (what a GUI client does first), the
-# port unchanged across a restart, and removal orphaning the volume and freeing
-# the port for the next add. SSD is a temp dir (§8); the Docker half is real.
+# Attaching catalogue services: ports assigned once and stable, the §6 refusals,
+# determinism with services attached, and two projects reachable at once.
 #
-#   bash test/phase3-done-check.sh
+#   bash test/services-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-cleanup() {
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-alpha bardolier-alpha-postgres bardolier-beta bardolier-beta-postgres >/dev/null 2>&1 || true
-    docker volume rm alpha_pgdata beta_pgdata >/dev/null 2>&1 || true
-  docker volume rm -f bardolier-alpha-home bardolier-beta-home >/dev/null 2>&1 || true
-    # Every project now owns a $HOME volume (cli-spec.md §9).
-    docker volume rm -f bardolier-alpha-home bardolier-beta-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-json_value() { # json_value <json> <js expression over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.stdout.write(String(${2}))
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
+track bardolier-alpha bardolier-alpha-postgres bardolier-beta bardolier-beta-postgres
+track_volume bardolier-alpha-home bardolier-beta-home alpha_pgdata beta_pgdata
 
 manifest_port() { # manifest_port <project> <service>
-  node --input-type=module -e "
-    import { readFileSync } from 'node:fs'
-    import { parse } from 'yaml'
-    const m = parse(readFileSync(process.argv[1], 'utf8'))
-    process.stdout.write(String(m.services?.[process.argv[2]]?.host_port ?? ''))
-  " "$MOUNTED/$1/project.yml" "$2" 2>/dev/null
-}
-
-tcp_connect() { # tcp_connect <port> — retries for up to ~30s
-  node -e "
-    const net = require('node:net')
-    const port = Number(process.argv[1])
-    const deadline = Date.now() + 30000
-    const attempt = () => {
-      const socket = net.connect({ host: '127.0.0.1', port })
-      socket.once('connect', () => { socket.destroy(); process.exit(0) })
-      socket.once('error', () => {
-        socket.destroy()
-        if (Date.now() > deadline) process.exit(1)
-        setTimeout(attempt, 500)
-      })
-    }
-    attempt()
-  " "$1" 2>/dev/null
+  manifest_field "$1" "m.services?.['$2']?.host_port ?? ''"
 }
 
 # ── 1. Two projects, two ports (§5.1, §5.4) ───────────────────────────────────
@@ -267,8 +195,8 @@ if [ "$DOCKER_OK" = "1" ]; then
   $BARDOLIER down beta >/dev/null
 fi
 
-# ── 7. The freed port is reused ───────────────────────────────────────────────
-head "7. The freed port is reused by the next add"
+# ── 6. The freed port is reused ───────────────────────────────────────────────
+head "6. The freed port is reused by the next add"
 
 if [ "$DOCKER_OK" != "1" ]; then
   # Offline equivalent of section 6: detach so there is a freed port to reuse.
@@ -285,8 +213,8 @@ json_assert "$REUSE" "d.added.host_port === $PORT_A" \
 json_assert "$($BARDOLIER service list beta --json)" "d.services[0].host_port === $PORT_B" \
   && ok "and beta's port was never a candidate — it is still assigned" || bad "an assigned port was handed out twice"
 
-# ── 8. Renderers stay separate (§2) ───────────────────────────────────────────
-head "8. Renderers stay separate (§2)"
+# ── 7. Renderers stay separate (§2) ───────────────────────────────────────────
+head "7. Renderers stay separate (§2)"
 
 HUMAN="$($BARDOLIER service list beta)"
 if node -e "JSON.parse(process.argv[1])" "$HUMAN" 2>/dev/null; then
@@ -295,29 +223,5 @@ else
   ok "human output is not JSON"
 fi
 
-# ── 9. Suites, typecheck, and the earlier phases ──────────────────────────────
-head "9. Test suites, typecheck, and earlier done-checks"
-
-if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-2: already being walked, in order, by test/regression.sh"
-else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 2 >"$LADDER" 2>&1; then
-    ok "phases 0-2 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
-fi
-
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 3: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Services"

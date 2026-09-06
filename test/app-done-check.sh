@@ -1,63 +1,48 @@
 #!/usr/bin/env bash
-# Phase 6 done-check — "drive the whole lifecycle FROM THE MENU BAR". That is a
-# human with a mouse, so this makes sure everything the mouse depends on is
-# already true and prints the manual pass.
+# The menu-bar app, read as text: the sources exist where the target looks for
+# them, the build settings the spec requires are set, the CLI surface the menu
+# needs answers, and Swift type-checks where a toolchain is present.
 #
-# Checks the CLI surface Phase 6 added (`catalogue`, `config get|set`, `dir` on
-# every status project), the Swift sources' location, the build settings —
-# including NSAppleEventsUsageDescription, without which macOS kills the app the
-# first time it drives a terminal — and, when a Swift toolchain is present, a
-# type-check plus an SF Symbol check (an unresolvable symbol draws as NOTHING,
-# i.e. a blank menu-bar icon). That type-check only approximates the target's
-# settings and is weaker than ⌘B: read a pass as "no obvious breakage".
-#
-#   bash test/phase6-done-check.sh
-set -euo pipefail
+#   bash test/app-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
 APP="app/bardolier/bardolier"
 PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-manual=0
 
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+# ── 1. The client layer exists where the target will find it ─────────────────
+head "1. Sources (app-spec.md §4)"
 
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
-cleanup() { rm -rf "$TMP"; }
-trap cleanup EXIT
+for file in \
+  "$APP/Bardolier/BardolierModels.swift" \
+  "$APP/Bardolier/BardolierError.swift" \
+  "$APP/Bardolier/BardolierExecutable.swift" \
+  "$APP/Bardolier/BardolierClient.swift" \
+  "$APP/BardolierStore.swift" \
+  "$APP/DebugStatusView.swift" \
+  "$APP/BardolierApp.swift"
+do
+  [ -f "$file" ] && ok "$file" || bad "$file is missing"
+done
 
-VOLUME="$TMP/ssd"
-MOUNTED="$VOLUME/claude-projects"
-mkdir -p "$MOUNTED"
+if grep -q "fileSystemSynchronizedGroups" "$PBXPROJ"; then
+  ok "the target uses a synchronized folder group — new files are in the build already"
+else
+  todo "the target has no synchronized folder group: add the new .swift files to it in Xcode"
+fi
 
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_ROOT="$MOUNTED"
+if grep -q "MenuBarExtra" "$APP/BardolierApp.swift"; then
+  ok "the scene is a MenuBarExtra (app-spec.md §1)"
+else
+  bad "BardolierApp.swift declares no MenuBarExtra"
+fi
 
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
-
-# ── 1. The commands Phase 6 grew (cli-spec.md §1, §4.1, §8) ───────────────────
-head "1. The CLI surface the menu needs"
+# ── 2. The commands Phase 6 grew (cli-spec.md §1, §4.1, §8) ───────────────────
+head "2. The CLI surface the menu needs"
 
 CATALOGUE="$($BARDOLIER catalogue --json)"
 if schema_assert catalogue "$CATALOGUE"; then ok "catalogue --json matches catalogue.schema.json"; else bad "catalogue --json"; fi
@@ -117,8 +102,8 @@ else
   fi
 fi
 
-# ── 2. status.dir — "Open folder in Finder" without composing a path (§5) ─────
-head "2. status carries each project's directory"
+# ── 3. status.dir — "Open folder in Finder" without composing a path (§5) ─────
+head "3. status carries each project's directory"
 
 $BARDOLIER new alpha --archetype web --services postgres >/dev/null || bad "new exited non-zero"
 STATUS="$($BARDOLIER status --json)"
@@ -134,8 +119,8 @@ else
   bad "status lost the service port"
 fi
 
-# ── 3. Sources (app-spec.md §5-§13) ───────────────────────────────────────────
-head "3. Sources"
+# ── 4. Sources (app-spec.md §5-§13) ───────────────────────────────────────────
+head "4. Sources"
 
 for file in \
   "$APP/Bardolier/BardolierModels.swift" \
@@ -169,8 +154,8 @@ else
   bad "BardolierApp.swift still hosts the debug view"
 fi
 
-# ── 4. Build settings (the human's manual step) ───────────────────────────────
-head "4. Build settings (app-spec.md §1, §7)"
+# ── 5. Build settings (the human's manual step) ───────────────────────────────
+head "5. Build settings (app-spec.md §1, §7)"
 
 if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
   ok "App Sandbox is off — the app can shell out to bardolier"
@@ -199,20 +184,55 @@ else
   todo "  Without it macOS terminates the app instead of prompting, the first time you Open shell."
 fi
 
-# ── 5. Contract (test/) ───────────────────────────────────────────────────────
-head "5. Contract"
+# ── 6. Sources (§7, §10, §13) ─────────────────────────────────────────────────
+head "6. Sources"
 
-if npm test >/dev/null 2>&1; then ok "npm test — models mirror the schemas, both directions"; else bad "npm test"; fi
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
+for file in \
+  "$APP/Views/EjectPanel.swift" \
+  "$APP/Views/FirstRunPanel.swift" \
+  "$APP/Shell/BardolierTerminal.swift" \
+  "$APP/Views/MenuChrome.swift" \
+  "$APP/BardolierStore.swift"
+do
+  [ -f "$file" ] && ok "$file" || bad "$file is missing"
+done
 
-# ── 6. Swift, when a toolchain is here (no build, no signing) ─────────────────
-head "6. Swift sources (skipped without a toolchain)"
+if grep -q "fileSystemSynchronizedGroups" "$PBXPROJ"; then
+  ok "the target uses a synchronized folder group — the new panels are in the build already"
+else
+  todo "add EjectPanel.swift and FirstRunPanel.swift to the target in Xcode (⌘B to confirm)"
+fi
+
+# ── 7. Build settings (the human's manual step) ───────────────────────────────
+head "7. Build settings (app-spec.md §1, §7)"
+
+if grep -q "ENABLE_APP_SANDBOX = NO" "$PBXPROJ"; then
+  ok "App Sandbox is off — the app can shell out to bardolier"
+else
+  todo "App Sandbox is still ON. Xcode → target → Signing & Capabilities → remove App Sandbox."
+fi
+
+if grep -q "INFOPLIST_KEY_LSUIElement = YES" "$PBXPROJ"; then
+  ok "LSUIElement is YES — menu-bar only, no dock icon"
+else
+  todo "LSUIElement is not set. Xcode → target → Info → \"Application is agent (UIElement)\" = YES."
+fi
+
+if grep -qE "INFOPLIST_KEY_NSAppleEventsUsageDescription = (YES|NO|\"\");?$" "$PBXPROJ"; then
+  todo "NSAppleEventsUsageDescription is a boolean, not the sentence macOS shows. Set it to e.g."
+  todo "  \"bardolier opens a shell in your terminal.\""
+elif grep -q "INFOPLIST_KEY_NSAppleEventsUsageDescription" "$PBXPROJ"; then
+  ok "NSAppleEventsUsageDescription is a real sentence — shell-open can ask for permission"
+else
+  todo "NSAppleEventsUsageDescription is not set: macOS terminates the app the first time it"
+  todo "  drives a terminal. Xcode → target → Info → \"Privacy - AppleEvents Sending Usage Description\"."
+fi
+
+# ── 8. Swift, when a toolchain is here (no build, no signing) ─────────────────
+head "8. Swift sources (skipped without a toolchain)"
 
 SDK="$(xcrun --show-sdk-path 2>/dev/null || true)"
 if command -v swiftc >/dev/null 2>&1 && [ -n "$SDK" ]; then
-  # Flags chosen to approximate the target (SWIFT_VERSION 5.0,
-  # SWIFT_DEFAULT_ACTOR_ISOLATION MainActor, SWIFT_APPROACHABLE_CONCURRENCY,
-  # MemberImportVisibility, macOS 15). See the header: still weaker than ⌘B.
   if swiftc -typecheck -swift-version 5 -default-isolation MainActor -strict-concurrency=complete \
       -enable-upcoming-feature MemberImportVisibility \
       -enable-upcoming-feature DisableOutwardActorInference \
@@ -220,13 +240,12 @@ if command -v swiftc >/dev/null 2>&1 && [ -n "$SDK" ]; then
       -enable-upcoming-feature InferSendableFromCaptures \
       -enable-upcoming-feature NonisolatedNonsendingByDefault \
       -target arm64-apple-macos15.0 -sdk "$SDK" $(find "$APP" -name '*.swift') >"$TMP/swift.log" 2>&1; then
-    ok "the app sources type-check (weaker than ⌘B — see the header)"
+    ok "the app sources type-check (weaker than ⌘B — see phase6's header)"
   else
     bad "swiftc -typecheck failed:"
     grep "error:" "$TMP/swift.log" | head -5 | sed 's/^/      /'
   fi
 
-  # Every SF Symbol the menu names, resolved the way AppKit will resolve it.
   {
     grep -rhoE '(systemName|systemImage): *"[^"]+"' "$APP" | sed 's/.*"\(.*\)"/\1/'
     grep -rhoE 'return "[a-z][a-z0-9.]*"' "$APP" | sed 's/.*"\(.*\)"/\1/'
@@ -257,57 +276,57 @@ else
   skip "no Swift toolchain here — Xcode will type-check on ⌘B (CLAUDE.md boundary)"
 fi
 
-# ── 7. Earlier phases ─────────────────────────────────────────────────────────
-head "7. Earlier phases"
+# ── 9. The MANUAL prerequisite (the human, in Xcode) ────────────────────────────
+head "9. MANUAL prerequisite (docs/phases/16-rename-app.md)"
 
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-5: already being walked, in order, by test/regression.sh"
+PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
+SCHEME="app/bardolier/bardolier.xcodeproj/xcshareddata/xcschemes/bardolier.xcscheme"
+
+if [ -d "app/bardolier/bardolier" ]; then
+  ok "app/bardolier/bardolier exists — the outer directories are renamed"
 else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 5 >"$LADDER" 2>&1; then
-    ok "phases 0-5 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
+  todo "app/claude-yard/ and app/claude-yard/claude-yard/ are still named claude-yard — rename them in Xcode and re-point the synchronized folder group"
 fi
 
+if [ -f "$PBXPROJ" ] && grep -q 'PRODUCT_BUNDLE_IDENTIFIER = "com.mw.claude-yard"' "$PBXPROJ"; then
+  todo "the bundle identifier is still com.mw.claude-yard — rename the target/scheme/product to Bardolier in Xcode"
+elif [ -f "$PBXPROJ" ]; then
+  ok "the bundle identifier is no longer com.mw.claude-yard"
+else
+  todo "$PBXPROJ not found"
+fi
+
+if [ -f "$SCHEME" ] && grep -q 'cproj\.js' "$SCHEME"; then
+  todo "the scheme's environment still points at cli/bin/cproj.js (which no longer exists) — fix it in Xcode"
+elif [ -f "$SCHEME" ]; then
+  ok "the scheme no longer names cproj.js"
+fi
+
+# ── 10. The Swift files exist under their new names ────────────────────────────
+head "10. Renamed Swift sources"
+
+APP="app/bardolier/bardolier"
+for file in \
+  "$APP/Bardolier/BardolierModels.swift" \
+  "$APP/Bardolier/BardolierError.swift" \
+  "$APP/Bardolier/BardolierExecutable.swift" \
+  "$APP/Bardolier/BardolierClient.swift" \
+  "$APP/BardolierStore.swift" \
+  "$APP/BardolierApp.swift" \
+  "$APP/Shell/BardolierTerminal.swift" \
+  "$APP/Preferences/AppPreferences.swift"
+do
+  [ -f "$file" ] && ok "$file" || bad "$file is missing"
+done
+
+for gone in \
+  "$APP/Cproj" \
+  "$APP/CprojStore.swift" \
+  "$APP/claude_yardApp.swift" \
+  "$APP/Shell/CprojTerminal.swift"
+do
+  [ ! -e "$gone" ] && ok "$gone no longer exists" || bad "$gone is a leftover — deletions must be real deletions"
+done
+
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 6: %d passed, %d failed, %d manual\033[0m\n' "$pass" "$fail" "$manual"
-[ "$fail" -eq 0 ] || exit 1
-
-cat <<'MANUAL'
-
-The half a terminal cannot check — the lifecycle FROM THE MENU BAR:
-
-  0. Fix anything marked ⚠ above, then ⌘B and run. A box icon appears in the
-     menu bar; no dock icon does.
-  1. Preferences… → point "Volume" at your SSD and "Projects" at its projects
-     dir, pick your terminal, leave "Starting a project opens a shell" on.
-     Reopen the menu: the status line reads "SSD: mounted (…)".
-  2. New project… → name it, pick web, tick postgres → Create. The banner names
-     the host port it was assigned. The project appears, stopped.
-  3. Expand it → Services… → every catalogue service is listed, postgres ticked
-     with `host :<port> → :5432`. Click the copy icon; paste it somewhere.
-  4. Back → Start. A terminal window opens inside the dev container (that is
-     `bardolier shell`'s argv, run by the app). The dot goes green.
-  5. While it is running, open Services… again: it says "Stop the project to
-     change its services", and the rows are inert. That refusal is the CLI's,
-     relayed — do not let the app work around it.
-  6. Stop → Services… → click postgres to detach → confirm. The banner says the
-     port is released and the volume kept.
-  7. Reclaim disk… → the kept volume is listed with its size. Delete it, confirm.
-  8. Delete… the project, confirm (leave the volumes box unticked). It is gone
-     from the menu.
-  9. Compare against the terminal at any point:
-       bardolier status --json
-     Same projects, same ports, same states. That is the done-check.
- 10. Close all & eject is Phase 7's flow; clicking it here should either eject
-     cleanly or report its holders — neither may force.
-MANUAL
-printf '\033[32mDone-check passed the automated half.\033[0m\n'
+summary "App"

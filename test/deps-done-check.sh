@@ -1,73 +1,20 @@
 #!/usr/bin/env bash
-# Phase 13 done-check — extra packages (docs/phases/13-extra-packages.md): OS
-# packages a project's toolchain needs beyond its base image, built into a
-# content-addressed derived image at `up` rather than baked into the shared
-# base image or installed at runtime (no root there, `down` throws the
-# writable layer away regardless). SSD is a temp dir (§8); the Docker half
-# builds a small derived image (`figlet`, fast, not in the base image).
+# Declared OS packages (§6, Deps): persisted in the manifest, resolved to a
+# content-addressed derived image, present in the container `up` starts.
 #
-#   bash test/phase13-done-check.sh
+#   bash test/deps-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-cleanup() {
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-myapp >/dev/null 2>&1 || true
-    docker volume rm -f bardolier-myapp-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-json_value() { # json_value <json> <js expression over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.stdout.write(String(${2}))
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
+track bardolier-alpha
+track_volume bardolier-alpha-home
 
 manifest_packages() { # manifest_packages <project>
-  node --input-type=module -e "
-    import { readFileSync } from 'node:fs'
-    import { parse } from 'yaml'
-    const m = parse(readFileSync(process.argv[1], 'utf8'))
-    process.stdout.write((m.extra_packages ?? []).join(','))
-  " "$MOUNTED/$1/project.yml" 2>/dev/null
+  manifest_field "$1" "(m.extra_packages ?? []).join(',')"
 }
 
 # ── 1. deps add — declared, persisted, compose selects the derived image ──────
@@ -174,6 +121,4 @@ if [ "$DOCKER_OK" = "1" ]; then
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 13: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Deps"

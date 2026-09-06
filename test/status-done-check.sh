@@ -1,44 +1,16 @@
 #!/usr/bin/env bash
-# Phase 1 done-check — on an empty SSD, `status --json` is valid JSON with empty
-# projects/orphaned_volumes, and `doctor --json` tracks the SSD appearing and
-# disappearing. Both halves run against a temp dir via BARDOLIER_ROOT (§8), so
-# no real SSD is needed.
+# The read-only core: `status`, `list` and `doctor` report an empty root, an
+# absent one, and a plug/unplug, without ever mutating or failing.
 #
-#   bash test/phase1-done-check.sh
-set -euo pipefail
+#   bash test/status-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-# An empty SSD, and a path that is definitively not mounted.
-MOUNTED="$TMP/ssd/claude-projects"
 ABSENT="$TMP/nowhere/claude-projects"
-mkdir -p "$MOUNTED"
-
-# Isolate from any real config on this machine, so the check measures the CLI
-# rather than the operator's setup.
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-
-# jq-free assertions: node reads the JSON on stdin and exits non-zero on mismatch.
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    const check = (${2})
-    process.exit(check ? 0 : 1)
-  " "$1" 2>/dev/null
-}
 
 # ── 1. status on an empty SSD ─────────────────────────────────────────────────
 head "1. \`status --json\` on an empty SSD"
@@ -175,29 +147,5 @@ grep -q 'SSD' <<<"$HUMAN" && ok "human status names the SSD state" || bad "human
 BARDOLIER_ROOT="$MOUNTED" $BARDOLIER doctor | grep -q 'Service catalogue' \
   && ok "human doctor renders its findings" || bad "human doctor output is missing findings"
 
-# ── 6. Suites ─────────────────────────────────────────────────────────────────
-head "6. Test suites and typecheck"
-
-if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-0: already being walked, in order, by test/regression.sh"
-else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 0 >"$LADDER" 2>&1; then
-    ok "phases 0-0 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
-fi
-
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 1: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Status"

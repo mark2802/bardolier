@@ -1,83 +1,27 @@
 #!/usr/bin/env bash
-# Phase 9 done-check — the agent in the container, and the memory of what it
-# did. The half needing a real login and a real session is printed at the end.
+# The agent in the container and the memory of what it did: Claude Code in
+# every base image, the $HOME bind, the lent environment, and the handoff note
+# `down` writes before the container that knows anything is gone.
 #
-#   - all three images carry Claude Code, pinned and checksum-verified, at a
-#     system path rather than under $HOME — a mounted volume, so an agent
-#     installed there would be copied once per project.
-#   - $HOME survives a real down/up: a per-project volume, mounted where all
-#     three Dockerfiles say (one constant, four readers).
-#   - the generated compose file NAMES the passthrough variables and carries no
-#     values, so it is identical on a machine holding every token and one
-#     holding none.
-#   - the dev-server port, for new projects and for ones predating the field.
-#   - the handoff note, written before the containers go and never able to fail
-#     the stop it rides on.
-#
-#   bash test/phase9-done-check.sh
-#   BARDOLIER_SKIP_DOCKER=1 …   offline assertions only
-set -euo pipefail
+#   bash test/agent-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
 APP="app/bardolier/bardolier"
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-manual=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-todo() { printf '  \033[33m⚠\033[0m %s\n' "$1"; manual=$((manual + 1)); }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
-DOCKER_OK=0
-cleanup() {
-  if [ "$DOCKER_OK" = "1" ]; then
-    docker rm -f bardolier-p9web bardolier-p9old >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
 VOLUME="$TMP/ssd"
-MOUNTED="$VOLUME/claude-projects"
-mkdir -p "$MOUNTED"
+track bardolier-myapp
+track_volume bardolier-myapp-home
 
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$VOLUME"
-export BARDOLIER_ROOT="$MOUNTED"
+# The Docker half is the point here; the offline half still says what it can.
+docker_ready || true
 
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
+# ── 1. the images ────────────────────────────────────────────────────────────
 
-if [ "${BARDOLIER_SKIP_DOCKER:-0}" != "1" ] && docker info >/dev/null 2>&1; then
-  DOCKER_OK=1
-fi
-
-# ── 1. the contracts, in the fast tests ──────────────────────────────────────
-
-head "1. Phase 9 properties (test/phase9.test.ts)"
-
-if npm test >"$TMP/test.log" 2>&1; then
-  ok "npm test"
-else
-  bad "npm test failed:"
-  grep -m 6 '✖' "$TMP/test.log" | sed 's/^/      /'
-fi
-
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-
-# ── 2. the images ────────────────────────────────────────────────────────────
-
-head "2. Claude Code is in every base image"
+head "1. Claude Code is in every base image"
 
 for image in bardolier-web bardolier-ios bardolier-and; do
   DF="cli/images/$image/Dockerfile"
@@ -128,9 +72,9 @@ else
   skip "built-image checks (no daemon, or BARDOLIER_SKIP_DOCKER=1)"
 fi
 
-# ── 3. what the generated file says ──────────────────────────────────────────
+# ── 2. what the generated file says ──────────────────────────────────────────
 
-head "3. Compose generation (§9)"
+head "2. Compose generation (§9)"
 
 $BARDOLIER new p9web --archetype web --json >"$TMP/new.json"
 COMPOSE="$MOUNTED/p9web/docker-compose.yml"
@@ -187,9 +131,9 @@ grep -q '^app_port:' "$MOUNTED/p9old/project.yml" \
   && bad "could not simulate a project that predates the field" \
   || ok "simulated a project with no app_port"
 
-# ── 4. the lifecycle, for real ───────────────────────────────────────────────
+# ── 3. the lifecycle, for real ───────────────────────────────────────────────
 
-head "4. \$HOME survives the stop, and the handoff records it (§12)"
+head "3. \$HOME survives the stop, and the handoff records it (§12)"
 
 if [ "$DOCKER_OK" = "1" ] && docker image inspect bardolier-web:latest >/dev/null 2>&1; then
   $BARDOLIER up p9old --no-shell --json >"$TMP/up-old.json"
@@ -245,9 +189,9 @@ else
   skip "the live lifecycle (needs a daemon and bardolier-web:latest — \`bardolier build\`)"
 fi
 
-# ── 5. the app ───────────────────────────────────────────────────────────────
+# ── 4. the app ───────────────────────────────────────────────────────────────
 
-head "5. The menu says why an item is inert (§11)"
+head "4. The menu says why an item is inert (§11)"
 
 grep -q 'disabledReason' "$APP/Views/MenuChrome.swift" \
   && ok "MenuRow carries a reason" \
@@ -283,60 +227,5 @@ else
   skip "the Swift type-check (no toolchain)"
 fi
 
-# ── 6. the ladder ────────────────────────────────────────────────────────────
-
-head "6. Earlier phases"
-
-# Walked ONCE, in order, by test/regression.sh — see its header.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-8: already being walked, in order, by test/regression.sh"
-else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 8 >"$LADDER" 2>&1; then
-    ok "phases 0-8 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
-fi
-
-# ── summary ──────────────────────────────────────────────────────────────────
-
-printf '\n\033[1m%d passed, %d failed, %d manual\033[0m\n' "$pass" "$fail" "$manual"
-[ "$fail" -eq 0 ] || exit 1
-
-cat <<'MANUAL'
-
-The half a terminal cannot check — it needs a real login and a real session:
-
-  1. LOGIN, ONCE PER PROJECT. `bardolier up <p>` then `bardolier shell <p>`, and in the
-     container run `claude`. Log in. Now `bardolier down <p>` and `bardolier up <p>`
-     again, shell back in, run `claude`: STILL LOGGED IN. That is the home
-     volume doing its job — the container was destroyed and rebuilt in between.
-     (Or export CLAUDE_CODE_OAUTH_TOKEN on the Mac — `claude setup-token` — and
-     every project inherits it with no login at all.)
-  2. A REAL HANDOFF. In that shell, give Claude a small piece of real work and
-     let it finish. Exit the shell. `bardolier down <p>`. Read
-     `<project>/.bardolier/handoff.md`: the top section is Claude's own account of
-     what it was doing and what comes next, not the git log. That is the whole
-     feature.
-  3. IT IS THIS PROJECT'S SESSION. Do the same in a SECOND project, then stop
-     the first. Its note must describe the FIRST project's work. Both containers
-     work in /work, so this only holds because each has its own $HOME and
-     therefore its own Claude config dir — it is the failure mode most worth
-     catching by hand.
-  4. YOUR NAME ON THE COMMITS. In a project shell: `git commit --allow-empty -m x`
-     then `git log -1 --format='%an <%ae>'`. It is you, with no git config inside
-     the container. If the email is empty, your Mac's ~/.gitconfig has an empty
-     `user.email` — set it there, not in the container.
-  5. THE DEV SERVER. Start a web project's dev server bound to 0.0.0.0 on $PORT,
-     then open the URL `bardolier status <p>` reports. The page loads in Safari.
-     Bind it to localhost instead and it does NOT — that is the mistake the
-     seeded CLAUDE.md warns about.
-  6. THE MENU SAYS WHY. Quit Docker Desktop, open the menu: the Projects section
-     carries one line explaining that every action below it is inert, and
-     hovering a dimmed Start or Delete repeats it. Before this phase they were
-     dimmed and silent, which is why "Delete…" looked like it was missing.
-MANUAL
-printf '\033[32mDone-check passed the automated half.\033[0m\n'
+# ── Summary ───────────────────────────────────────────────────────────────────
+summary "Agent"

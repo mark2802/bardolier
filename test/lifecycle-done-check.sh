@@ -1,60 +1,18 @@
 #!/usr/bin/env bash
-# Phase 2 done-check — new → up → /work mounted and owned by the host user →
-# down (container gone, data kept) → delete, with `status` tracking each step.
-# The SSD is a temp dir (BARDOLIER_ROOT, §8); the Docker half is real and builds
-# the base image if it is missing.
+# `new` → `up` → `down` → `delete` against a real daemon, plus deterministic
+# compose generation and the human/JSON split.
 #
-#   bash test/phase2-done-check.sh
+#   bash test/lifecycle-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-cleanup() {
-  # Never leave containers behind, whatever went wrong above.
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-myapp bardolier-second >/dev/null 2>&1 || true
-    # Every project now owns a $HOME volume (cli-spec.md §9); a check that left
-    # them behind would litter the machine with one per run.
-    docker volume rm -f bardolier-myapp-home bardolier-second-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
 ABSENT="$TMP/nowhere/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
+track bardolier-myapp
+track_volume bardolier-myapp-home
 
 # ── 1. new ────────────────────────────────────────────────────────────────────
 head "1. \`new\` creates the project (§6, §10)"
@@ -270,29 +228,5 @@ else
 fi
 $BARDOLIER delete humantest --force >/dev/null
 
-# ── 7. Suites, typecheck, and the earlier phases ──────────────────────────────
-head "7. Test suites, typecheck, and earlier done-checks"
-
-if npm test >/dev/null 2>&1; then ok "npm test"; else bad "npm test"; fi
-if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
-# The ladder is walked ONCE, in order, by test/regression.sh (see its header).
-# Recursing here — each check re-running all its predecessors, which did the
-# same — made phase 0 come up dozens of times per invocation and turned this
-# section into most of the run.
-if [ -n "${BARDOLIER_REGRESSION:-}" ]; then
-  ok "phases 0-1: already being walked, in order, by test/regression.sh"
-else
-  LADDER="$(mktemp)"
-  if bash test/regression.sh --through 1 >"$LADDER" 2>&1; then
-    ok "phases 0-1 still pass (test/regression.sh)"
-  else
-    bad "an earlier phase regressed — from test/regression.sh:"
-    grep -m 6 '✗' "$LADDER" | sed 's/^/      /'
-  fi
-  rm -f "$LADDER"
-fi
-
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 2: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Lifecycle"

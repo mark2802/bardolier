@@ -1,91 +1,20 @@
 #!/usr/bin/env bash
-# Phase 12 done-check — extra ports (docs/migration-guide-gaps.md, resolved):
-# a named, per-project port published from the dev container, independent of
-# archetype. Proves both gaps it closes: a `library` project (which otherwise
-# publishes nothing) gets a browser-reachable port, and a `web` project keeps
-# its app_port while a second, caller-named port publishes alongside it. SSD
-# is a temp dir (§8); the Docker half is real.
+# Named extra ports (§5.1): declared on any archetype, published beside
+# `app_port`, stable across a restart, released on remove.
 #
-#   bash test/phase12-done-check.sh
+#   bash test/ports-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-TMP="$(mktemp -d)"
-cleanup() {
-  if [ "${DOCKER_OK:-0}" = "1" ]; then
-    docker rm -f bardolier-mylib bardolier-myapp >/dev/null 2>&1 || true
-    docker volume rm -f bardolier-mylib-home bardolier-myapp-home >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
-mkdir -p "$MOUNTED"
-
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BDLR_SSD_VOLUME="$TMP/ssd"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-json_value() { # json_value <json> <js expression over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.stdout.write(String(${2}))
-  " "$1" 2>/dev/null
-}
-
-schema_assert() { # schema_assert <schema-name> <json>
-  node --input-type=module -e "
-    import { validate } from './cli/src/schema.ts'
-    const { valid, errors } = validate(process.argv[1], JSON.parse(process.argv[2]))
-    if (!valid) { console.error(errors.join('\n')); process.exit(1) }
-  " "$1" "$2" 2>/dev/null
-}
+track bardolier-alpha
+track_volume bardolier-alpha-home
 
 manifest_extra_port() { # manifest_extra_port <project> <name>
-  node --input-type=module -e "
-    import { readFileSync } from 'node:fs'
-    import { parse } from 'yaml'
-    const m = parse(readFileSync(process.argv[1], 'utf8'))
-    process.stdout.write(String(m.extra_ports?.[process.argv[2]]?.host_port ?? ''))
-  " "$MOUNTED/$1/project.yml" "$2" 2>/dev/null
-}
-
-tcp_connect() { # tcp_connect <port> — retries for up to ~30s
-  node -e "
-    const net = require('node:net')
-    const port = Number(process.argv[1])
-    const deadline = Date.now() + 30000
-    const attempt = () => {
-      const socket = net.connect({ host: '127.0.0.1', port })
-      socket.once('connect', () => { socket.destroy(); process.exit(0) })
-      socket.once('error', () => {
-        socket.destroy()
-        if (Date.now() > deadline) process.exit(1)
-        setTimeout(attempt, 500)
-      })
-    }
-    attempt()
-  " "$1" 2>/dev/null
+  manifest_field "$1" "m.extra_ports?.['$2']?.host_port ?? ''"
 }
 
 # ── 1. library — a portless archetype gets one ────────────────────────────────
@@ -217,6 +146,4 @@ json_assert "$DELETE" "d.released_ports.includes(8888)" \
   && ok "delete releases the project's extra ports too" || bad "delete did not report the extra port as released"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 12: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Ports"

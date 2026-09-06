@@ -1,26 +1,17 @@
 #!/usr/bin/env bash
-# Phase 15 done-check — the rename: CLI, docs, artefact namespaces
-# (docs/phases/15-rename-cli.md). The engine is now `bardolier` (alias `bdlr`);
-# `cproj`/`claude-yard`/`CPROJ_`/`claude-{web,ios,and}` must be gone from the
-# CLI side of the boundary. `app/` is excluded on purpose — the Swift rename is
-# phase 16, and this file's own comments and docs/phases/{15,16} are excluded
-# because they are text ABOUT the rename, not code the rename touches.
+# One name, everywhere: the old ones are gone from the tree, `bardolier` and its
+# `bdlr` alias both work, and a project's whole lifecycle runs under the name.
 #
-#   bash test/phase15-done-check.sh
+#   bash test/naming-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+track bardolier-alpha
+track_volume bardolier-alpha-home
 
 # ── 1. The old name is gone from everything but app/ and the rename's own docs ─
 head "1. old name absent outside app/ and docs/phases/{15,16}"
@@ -33,13 +24,10 @@ OLD_WEB="claude-""web"
 OLD_IOS="claude-""ios"
 OLD_AND="claude-""and"
 
-# These test files read the app's *actual* Swift source as text (structs,
-# filenames, defaults keys) and must keep naming it correctly until the
-# human's Xcode rename (phase 16's MANUAL prerequisite) moves
-# app/claude-yard/claude-yard on disk — mirroring the app/ exclusion, not a
-# missed rename. phase16-done-check.sh names the old strings on purpose, to
-# check they're gone. .claude/settings.local.json's hit is an unrelated
-# harness scratch-path.
+# Three kinds of legitimate hit, all excluded: this check and the app check
+# name the old strings on purpose, to prove they are gone; the rename's own
+# specs and the retrospective record the history; and .claude/settings.local.json
+# carries an unrelated harness scratch-path.
 HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_WEB}|${OLD_IOS}|${OLD_AND}" . \
   --include='*' -I 2>/dev/null \
   | grep -v '^\./node_modules/' \
@@ -48,10 +36,10 @@ HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_WEB}|${OLD_IOS}|${O
   | grep -v '^\./\.claude/' \
   | grep -v '^\./docs/phases/15-rename-cli\.md$' \
   | grep -v '^\./docs/phases/16-rename-app\.md$' \
-  | grep -v '^\./test/phase15-done-check\.sh$' \
-  | grep -v '^\./test/phase16-done-check\.sh$' \
-  | grep -v '^\./test/phase[5679]-done-check\.sh$' \
-  | grep -v '^\./test/phase7\.test\.ts$' \
+  | grep -v '^\./docs/retrospective\.md$' \
+  | grep -v '^\./test/naming-done-check\.sh$' \
+  | grep -v '^\./test/app-done-check\.sh$' \
+  | grep -v '^\./test/app\.test\.ts$' \
   | grep -v '^\./test/app-models\.test\.ts$' \
   || true)"
 
@@ -139,7 +127,35 @@ fi
 
 $BARDOLIER delete rename --force --purge >/dev/null && ok "delete" || bad "delete exited non-zero"
 
-# ── Summary ────────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 15: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+# ── 4. The old name is gone from every renameable file ─────────────────────────
+head "4. old name absent, app/ included"
+
+OLD_NAME="cp""roj"
+OLD_YARD="claude-""yard"
+OLD_ENV="CP""ROJ_"
+OLD_UNDERSCORE="claude_""yard"
+
+# The MANUAL Xcode rename is done (§0 above), so the old name should be gone
+# everywhere except the historical phase specs and this script's own OLD_*
+# definitions and instructional text.
+HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_UNDERSCORE}" . \
+  --include='*' -I 2>/dev/null \
+  | grep -v '^\./node_modules/' \
+  | grep -v '^\./\.git/' \
+  | grep -v '^\./\.claude/' \
+  | grep -v '^\./docs/phases/15-rename-cli\.md$' \
+  | grep -v '^\./docs/phases/16-rename-app\.md$' \
+  | grep -v '^\./docs/retrospective\.md$' \
+  | grep -v '^\./test/naming-done-check\.sh$' \
+  | grep -v '^\./test/app-done-check\.sh$' \
+  || true)"
+
+if [ -z "$HITS" ]; then
+  ok "no leftover old name outside the Xcode project file and the paths that name the real (not yet renamed) directory"
+else
+  bad "old name still present:"
+  printf '%s\n' "$HITS" | sed 's/^/      /'
+fi
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+summary "Naming"

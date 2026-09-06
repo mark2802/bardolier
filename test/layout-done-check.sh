@@ -1,62 +1,17 @@
 #!/usr/bin/env bash
-# Phase 19 done-check — the project layout (docs/phases/19-project-layout.md).
+# The project layout: four folders, one seed, no ignore file; `/data` read-only;
+# nothing bardolier writes inside a working tree; and what `delete` refuses.
 #
-# A project directory is four bind-mounted folders around bardolier's own files,
-# with the service data among them. What only a real run can show: postgres
-# writing into `data/postgres/` on the host disk, `/data` read-only inside the
-# dev container, `project.yml` invisible from in there, and a `git clean -xdf`
-# in `work/` leaving the database alone.
-#
-#   bash test/phase19-done-check.sh
+#   bash test/layout-done-check.sh
 #   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
-set -euo pipefail
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+sandbox
 
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
-
-# The REAL path, not the symlinked one: Docker Desktop shares `/private/var/…`
-# and would otherwise create a bind source inside its VM, where the host never
-# sees the data — which is the whole thing this phase is about.
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
-DOCKER_OK=0
-cleanup() {
-  if [ "$DOCKER_OK" = "1" ]; then
-    docker rm -f bardolier-alpha bardolier-alpha-postgres >/dev/null 2>&1 || true
-  fi
-  rm -rf "$TMP"
-}
-trap cleanup EXIT
-
-MOUNTED="$TMP/ssd/claude-projects"
-mkdir -p "$MOUNTED"
-# HOME is deliberately NOT sandboxed: `docker compose` is a CLI plugin under
-# ~/.docker, and a fake home turns every compose call into "unknown flag".
-# BARDOLIER_CONFIG is what keeps this run's config out of the real one (§8).
-export BARDOLIER_CONFIG="$TMP/config.yml"
-export BARDOLIER_ROOT="$MOUNTED"
-
-json_assert() { # json_assert <json> <js body over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.exit((${2}) ? 0 : 1)
-  " "$1" 2>/dev/null
-}
-
-json_value() { # json_value <json> <js expression over `d`>
-  node -e "
-    const d = JSON.parse(process.argv[1])
-    process.stdout.write(String(${2}))
-  " "$1" 2>/dev/null
-}
+track bardolier-myapp bardolier-myapp-postgres
+track_volume bardolier-myapp-home
 
 # ── 1. new: four folders, one seed, no ignore file ────────────────────────────
 head "1. \`new\` makes four folders, one seed, and no ignore file (§3, §10)"
@@ -206,24 +161,5 @@ $BARDOLIER delete alpha --force --purge --json >/dev/null || bad "delete --purge
 json_assert "$($BARDOLIER volumes orphaned --json)" 'd.orphaned.every(v => !v.name.startsWith("alpha/"))' \
   && ok "and nothing of it is left to reclaim" || bad "a deleted project still has orphans"
 
-# ── 7. Everything below ───────────────────────────────────────────────────────
-head "7. Test suites, typecheck, and earlier done-checks"
-
-npm run test:quiet >/dev/null 2>&1 && ok "npm test" || bad "npm test"
-npm run typecheck >/dev/null 2>&1 && ok "npm run typecheck" || bad "npm run typecheck"
-
-if [ -z "${BARDOLIER_REGRESSION:-}" ]; then
-  for phase in $(seq 0 18); do
-    if env -u BARDOLIER_CONFIG -u BARDOLIER_ROOT bash "test/phase${phase}-done-check.sh" >/dev/null 2>&1; then
-      ok "phase ${phase} done-check"
-    else
-      bad "phase ${phase} done-check"
-    fi
-  done
-else
-  skip "earlier phases (the regression ladder is walking them)"
-fi
-
-printf '\n\033[1mPhase 19: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+# ── Summary ───────────────────────────────────────────────────────────────────
+summary "Layout"

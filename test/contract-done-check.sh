@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# Phase 0 done-check — `bardolier --help` lists every command, the schema and data
-# files parse, and the error-code list exists in code.
+# The contract itself: `bardolier --help` lists every command in cli-spec.md §6,
+# the schemas and data files parse, the error-code list exists in code, the §2
+# envelope holds, and the TypeScript suites and typecheck pass. This is the one
+# check that runs `npm test`.
 #
-#   bash test/phase0-done-check.sh
-set -euo pipefail
+#   bash test/contract-done-check.sh
+#   BARDOLIER_SKIP_DOCKER=1 …    offline assertions only
+#   VERBOSE=1 …                  print every passing line
+set -uo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO"
-
-BARDOLIER="node cli/bin/bardolier.js"
-pass=0
-fail=0
-
-ok()   { pass=$((pass + 1)); if [ -n "${VERBOSE:-}" ]; then printf '  \033[32m✓\033[0m %s\n' "$1"; fi; }
-bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=$((fail + 1)); }
-head() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 check() { # check <description> <command...>
   local desc="$1"; shift
@@ -149,6 +144,4 @@ check "npm test (contract suite)" npm test
 check "npm run typecheck" npm run typecheck
 
 # ── Summary ───────────────────────────────────────────────────────────────────
-printf '\n\033[1mPhase 0: %d passed, %d failed\033[0m\n' "$pass" "$fail"
-[ "$fail" -eq 0 ] || exit 1
-printf '\033[32mDone-check passed.\033[0m\n'
+summary "Contract"
