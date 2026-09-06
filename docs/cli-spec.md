@@ -4,8 +4,9 @@ Status: draft for implementation. This is the **engine**. The menu-bar app is a
 thin client over this CLI. **The CLI is the API; the app is a thin client.** All
 orchestration lives here; the app only calls commands and renders their JSON.
 
-Companion docs: `app-spec.md` (the client), `CLAUDE.md` (principles +
-boundaries).
+Companion docs: `app-spec.md` (the client), `CLAUDE.md` (how to work here, the
+environment boundary, the code map), `../INTENT.md` (the owner's invariants —
+this spec must not contradict them).
 
 ---
 
@@ -159,11 +160,15 @@ created: 2026-08-19T10:00:00Z
 | android   | `bardolier-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `bardolier-web` | full                         | none                   |
 
+The boundary of the table above is built into the images: the ios base ships no
+`xcodebuild`, `xcrun` or simulator, and the android base no `adb`, so a host-only
+step cannot be attempted in a container by mistake.
+
 Base images carry the per-archetype toolchain, plus the two things every
 archetype needs: **Claude Code** — the agent the whole tool exists to host,
 installed as the pinned standalone binary to a system path rather than under
 `$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
-ripgrep, jq, curl). See CLAUDE.md.
+ripgrep, jq, curl). See §6, Images.
 
 `bardolier-and` is built and run as `linux/amd64`: Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
@@ -363,7 +368,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   them makes the command refuse forever with nothing to quit. They are
   DiskArbitration clients, so the `diskutil eject` that follows is what actually
   asks them to let go; if one dissents, its PID and name are parsed out of the
-  refusal into the same `holders` array. A blocked eject therefore always names
+  refusal into the same `holders` array — reduced to its last path component
+  first, since recent macOS reports a dissenter as a full executable path. A blocked eject therefore always names
   something, including the root processes unprivileged `lsof` cannot see.
   The runtime is the one holder with a third answer. Docker Desktop shares
   `/Volumes` into its VM and keeps descriptors on the SSD for as long as that VM
@@ -524,7 +530,11 @@ Schema stability is the contract. Additive changes only once the app ships.
 ## 9. Compose generation rules
 
 - Generated file is deterministic and idempotent for a given manifest (stable
-  ordering, so regeneration produces no spurious diffs).
+  ordering, so regeneration produces no spurious diffs). It is rendered on every
+  `new`, `up` and service/port/deps change — never patched, and never read back
+  for facts, so a hand edit is lost rather than honoured. Writes go through
+  `workspace.ts`, which skips a write whose bytes already match the file on
+  disk: determinism made observable.
 - One user-defined network per project; services + dev container attached.
 - **Image selection rule** (Phase 13): the dev container's `image:` is
   `<base_image>:latest` when `extra_packages` is empty, or the content-addressed

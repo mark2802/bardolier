@@ -11,7 +11,7 @@ needs something bardolier cannot do yet — write that down in
 `docs/migration-guide-gaps.md` (last section) and route around it for now.
 Don't hand-invent the capability per project; a generated file a hand-edit
 "fixes" today is overwritten the next `up` (`docker-compose.yml` is generated,
-never patched — CLAUDE.md, "Generated vs seeded").
+never patched — `cli-spec.md` §9).
 
 This guide assumes the project is a **web** archetype migration (a frontend,
 maybe a backend API, maybe backing services) — by far the common case. Where

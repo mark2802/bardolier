@@ -2,7 +2,7 @@
 
 Status: draft for implementation. macOS status-bar app; a **thin client** over
 the `bardolier` CLI. Companion docs: `cli-spec.md` (the engine — authoritative for
-all behaviour), `CLAUDE.md`.
+all behaviour), `CLAUDE.md`, `../INTENT.md`.
 
 **The CLI is the API; the app is a thin client.** The app shells out to `bardolier`,
 parses `--json`, and renders. It contains no Docker/orchestration logic and holds
@@ -193,3 +193,46 @@ The CLI contract (commands, JSON schemas, error
 codes) is implemented and frozen, and the full lifecycle has been driven from the
 terminal. The app is written against that frozen contract, not in parallel with
 it.
+
+## 15. Implementation map (Swift)
+
+Sources live in `app/Bardolier/Bardolier/Bardolier/` (phase 16). The app reads
+the contract; it never re-derives it.
+
+- `BardolierClient` — builds argv, appends `--json` itself (no caller may), and
+  turns a non-zero exit into `BardolierFailure.cli` carrying the `cli-spec.md`
+  §2 code. It is the only place a `Process` is spawned.
+- `BardolierModels.swift` — one struct per object in `cli/schema/*.json`. Closed
+  string enums decode as open tokens, so an additive CLI change cannot break an
+  older build. `test/app-models.test.ts` holds structs and schemas together as
+  text in both directions: a missed field, an invented one, an impossible error
+  code, or a `Process` spawned outside the client fails there.
+- `BardolierExecutable.swift` — a GUI app inherits no shell `PATH`, so this
+  locates `bardolier` and hands the child a `PATH` reaching `node`, `docker`,
+  `lsof`, `diskutil`. The only environment knowledge in Swift.
+- `BardolierStore` — `activity` names the one operation in flight; while it is
+  set, mutating items are disabled, and every mutation is followed by a forced
+  `status` refresh rather than a local patch (§4). `ejectPhase` holds
+  blocked/working/ejected/failed apart from `lastError`, which the next refresh
+  clears — that is what makes a blocked eject (§10) a place to come back to.
+  `defaultRootRemovable`/`anyRootRemovable` read `doctor`'s per-root `removable`
+  (§5, §10). `bardolierMissing` shows `FirstRunPanel` — listing the paths
+  `BardolierExecutable` actually searched — rather than letting each item fail
+  its own way (§13).
+- `EjectPanel` renders `ejectPhase` and offers **Retry**. Nothing in Swift can
+  force an unmount or kill a holder, and `eject` has no `--force`
+  (`test/phase7.test.ts`).
+- `MenuRow` takes a `disabledReason` and serves it as help; `DisabledNotice`
+  says it once per group — a dimmed row and an absent row otherwise look the
+  same, and with Docker down every mutating item is disabled for one reason.
+- `BardolierTerminal` runs `bardolier shell`'s argv via AppleScript or a
+  `.command` file (§7). It launches no process itself.
+- Refusals are relayed verbatim: `PROJECT_RUNNING` becomes "Stop the project to
+  change its services" (§6), never an unrequested stop-change-start.
+  Destructive confirmation happens in the view before the call, because the
+  client passes `--force` and the CLI cannot prompt.
+- Build settings the human sets in Xcode (`app/README.md`): SwiftUI
+  `MenuBarExtra`, `LSUIElement` YES, App Sandbox off for v1,
+  `NSAppleEventsUsageDescription` (without it macOS kills the app the first
+  time it drives a terminal). The target uses a synchronized folder group, so
+  new `.swift` files build without an Add-Files step.

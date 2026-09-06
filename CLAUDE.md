@@ -1,21 +1,47 @@
 # CLAUDE.md — Container Project Manager
 
 A CLI (`bardolier`) plus a macOS menu-bar app that manage containerised dev projects
-whose data lives on an external SSD.
+whose data lives under one or more configured roots — typically an external SSD.
 
-- `docs/cli-spec.md` — the engine. **Authoritative for all behaviour.**
-- `docs/app-spec.md` — the menu-bar app; a thin client over the CLI.
+- `INTENT.md` — the owner's purpose, invariants, non-goals and settled
+  decisions. **Read-only to you.**
+- `docs/cli-spec.md` — the engine. **Authoritative for all behaviour**: layout
+  §3, data model §4, ports §5, commands §6, `status` schema §7, config §8,
+  compose §9, seeds §10, handoff §12.
+- `docs/app-spec.md` — the menu-bar app; a thin client over the CLI. §15 maps
+  the Swift sources.
 - `docs/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
   Phases 0-9 are done; their plan is history in `docs/archive/`.
 - `docs/migration-guide.md` — bringing an existing (non-bardolier) project onto
   bardolier; `docs/migration-guide-gaps.md` tracks capabilities it needs that
   don't exist yet.
 
+This file holds only what the specs cannot: how to work here, the environment
+boundary, and where the code is. **A rule about behaviour belongs in the spec.**
 Read only the spec **section** a task needs (`sed -n` a range), not the whole file.
 
-## Token discipline (read first)
+## Intent and decisions (read before planning)
 
-Recent work has cost far more tokens than the changes warranted. Rules:
+- **`INTENT.md` belongs to the owner.** Quote it, never edit it. Check a phase's
+  goal against its invariants before writing anything, and **raise** a conflict
+  between intent and code rather than resolving it in either direction — a spec
+  you maintain will otherwise follow the implementation silently.
+- **Irreversible decisions leave the work item.** If reversing a choice would
+  touch more than ~20 files — language, name, licence, storage layout, an
+  on-disk or wire format — it is never a bullet inside a plan. Stop and ask; the
+  answer lands in `INTENT.md`'s decision table before the phase that needs it.
+- **One acceptance criterion per phase is the owner's**, written before the work
+  and observable from outside the code. Checks you write test internal
+  self-consistency; they cannot test intent.
+- **Size by review capacity, not output rate.** One command or one seam per
+  commit, ~400 lines of new logic. If it cannot be reviewed today, it is not
+  started today.
+- **Use beats reading.** Putting a real project through a change (the migration
+  guide) finds gaps that spec review does not — phases 12 and 13 came from it.
+- **Freeze the envelope, not the payload.** Error codes and the single-JSON-value
+  rule are stable; a payload shape is stable once something real has run against it.
+
+## Token discipline
 
 - **Read narrowly.** `grep`/`sed -n` a range over `cat` of a whole file. Never
   re-read a file you just wrote — the edit would have errored.
@@ -27,14 +53,13 @@ Recent work has cost far more tokens than the changes warranted. Rules:
   done-checks print failures and a summary by default (`VERBOSE=1` for every
   passing line); pipe anything else long through `tail`/`grep`.
 - **Batch independent tool calls** into one message.
-- **Match prose to the change.** This repo's older comments, script headers and
-  docs are written at essay length. *Do not extend that style.* Explain a
-  non-obvious "why" in one or two sentences and stop. Summaries state what
-  changed and what proves it — they do not re-narrate the diff.
+- **Match prose to the change.** Older comments and docs here run to essay
+  length. *Do not extend that style.* Explain a non-obvious "why" in a sentence
+  or two and stop. Summaries state what changed and what proves it.
 - **Don't add unasked work**: no extra docs, changelogs, formatting passes,
   review rounds, or subagents unless requested.
-- **Keep this file short.** A new principle edits or replaces an existing line;
-  it does not append another essay.
+- **Budget prose.** A phase spec is one page; this file targets ~100 lines and
+  only shrinks — an edit removes at least as much as it adds.
 
 ## Environment boundary (critical)
 
@@ -47,6 +72,8 @@ works on the macOS host for anything macOS-native.
 - **You never create or edit `.xcodeproj`/`.pbxproj`.** Note new Swift files in
   your summary (MANUAL markers in the plan).
 - Android Gradle builds/tests run in-container; the emulator is host-side.
+- The same boundary is built into the images: the ios base has no `xcodebuild`,
+  `xcrun` or simulator; the android base has no `adb` (`cli-spec.md` §4.3).
 - These rules **override any agent tooling or workflow skill.**
 
 ## Engineering principles
@@ -54,25 +81,16 @@ works on the macOS host for anything macOS-native.
 - **The CLI is the API; the app is a thin client.** All orchestration, state and
   side effects live in the CLI. If the app seems to need logic, add a CLI
   command. Never duplicate orchestration in Swift.
-- **One source of truth.** `project.yml` is the truth for a project; compose is
-  generated from it. Ports live in the manifest, not a second registry.
-- **Stable contracts.** Every command supports `--json`, emits a documented
-  schema, and fails with a §2 error code. From Phase 5 on, schema changes are
-  additive only. Human and machine output are separate renderers.
-- **Determinism.** Compose generation is byte-stable for a given manifest.
-- **No partial mutation of running state.** Service add/remove require the
-  project stopped and fail `PROJECT_RUNNING`. No hot-apply paths.
-- **Safety over convenience.** Detaching a service keeps its data (it becomes
-  a listed orphan); deletion is explicit and confirmed; eject reports holders
-  rather than forcing. Never destroy data to save a step.
-- **Disk frugality.** Images on the internal disk and shared; project data on
-  the SSD. Prefer shared official service images over baking services in.
+- **One source of truth.** `project.yml` is the truth for a project; everything
+  else — compose, ports, orphans — is generated or derived from the manifests.
 - **Prod-like dev topology.** The dev app reaches services over the Docker
-  network by name (`postgres:5432`). The allocated host port is a debugging tap
-  only — never wire the app to `localhost:<port>`.
+  network by name (`postgres:5432`). An allocated host port is a debugging tap
+  only — never wire the app to `localhost:<port>`. The exceptions are declared,
+  not assumed: `app_port` and `extra_ports` (§5.1, §9).
+- **Safety over convenience**, **disk frugality**, **determinism**, **no partial
+  mutation of running state** — these are `INTENT.md` invariants; the spec says
+  how each is enforced. Do not re-decide one inside a phase.
 - **Test the contract from the terminal**, via `--json`, before app work.
-- **Incremental, verifiable changes.** Small commits, tests green, existing
-  patterns over new ones.
 
 ## Toolchain
 
@@ -90,7 +108,6 @@ npm install                      # once, from the repo root
 npm run bardolier -- --help
 node cli/bin/bardolier.js status --json
 npm run test:quiet               # contract tests (dot reporter — use this)
-npm test                         # same, one line per test
 npm run typecheck
 bash test/phaseN-done-check.sh   # N = 0..9; each covers everything below it
 bash test/regression.sh [--through N]   # every check, once, in order
@@ -116,249 +133,36 @@ what keeps `--json` a single JSON value.
 `Context` (`cli/src/context.ts`): config, `Docker`, deferred catalogue loader,
 host-port probe, `SsdDevice` (`lsof` + `diskutil`), confirm prompt, `Git`, host
 UID/GID, clock, `wait`. It never touches `process.env`, spawns processes, binds
-sockets, prompts, or hard-codes the SSD path. That is what lets mutations be
+sockets, prompts, or hard-codes a root path — which is what lets mutations be
 tested with a temp dir and stubs (`test/helpers.ts`). **Anything with an
-observable side effect belongs on the Context**, including passing time. Config
-comes from `~/.config/bardolier/config.yml` with a `BARDOLIER_ROOT` override (phase
-18; replaces the whole `roots` list with one root named after the path's
-basename) and `BARDOLIER_CONFIG` to relocate the file — which is how done-checks
-stay hermetic. There is no `ssd_volume` override: each root's mount point is
-derived from its `path` (phase 17), never a second setting to disagree with it.
-`roots` is never empty, so `root remove` refuses the only configured one
-(`INVALID_ARGUMENT`) rather than silently rematerialising the built-in default
-in its place — add a replacement root first.
+observable side effect belongs on the Context**, including passing time.
+`BARDOLIER_CONFIG` relocates the config file, which is how done-checks stay
+hermetic (§8).
 
-## Behaviour that is easy to get wrong
+## Code map
 
-**The project directory is not a repository.** `cli/src/layout.ts` owns the
-four folders bardolier's files sit above — `work/` (`/work`, the agent's cwd and
-the only place a clone lives), `data/` (`/data`, **read-only** in the dev
-container: writing a live data directory from a second container corrupts it),
-`local/`, `home/` (`CONTAINER_HOME`). Nothing this tool writes is inside a
-working tree, so nothing needs ignoring and `git clean -xdf` cannot reach the
-data. `new` creates them and every `up` re-ensures them: Docker would create a
-missing bind source itself, as root, leaving `home/` unwritable by the
-container's own uid. `data/.metadata_never_index` keeps `mds` — a holder
-`eject` already has to filter — off the volume.
+Behaviour is in `cli-spec.md`; this is only where to find it. A constant named
+here is read by several files that must agree — change it in one place.
 
-**Generated vs seeded.** `docker-compose.yml` is rendered by `cli/src/compose.ts`
-on every `new`, `up` and service change — never patched, never read back for
-facts; a hand edit loses. The one §10 seed, `work/CLAUDE.md`, is written once
-and is the user's. Writes go through `cli/src/workspace.ts`, which skips a write
-when bytes match — determinism made observable.
-
-**Ports: chosen once, written once.** `cli/src/allocator.ts` scans every
-manifest under *every configured root* *and* probes the host socket — free
-means both. A root that cannot be read makes the scan refuse (`ROOT_UNREADABLE`,
-phase 18) rather than allocate from a partial view — the same reasoning as the
-orphan scan below. The port persists in `project.yml` and is never revisited:
-`up` re-probes and fails `PORT_UNAVAILABLE` naming it rather than remapping,
-because users have connection strings. Search starts at the catalogue's
-`host_port_base`, bounded to keep bands readable (§5). `cli/src/services.ts`
-joins manifest to catalogue, so `status` and `service list` cannot disagree.
-The catalogue has no `volume` key (phase 19): a service's data directory is its
-catalogue key.
-
-**An orphan is derived, never recorded, and has two kinds.** `cli/src/volumes.ts`
-asks the manifests what is still claimed. A **directory** orphan is `ls data/`
-minus the manifest's attached keys, named `<project>/<key>` — one root, no
-labels, no cross-root reasoning, because the project that holds it is the
-answer. A **volume** orphan is what is left of named volumes: the shared
-toolchain caches (claimed while any manifest names their base image) and
-whatever an older layout left behind. The volume half still needs EVERY
-manifest, so it keeps the refusals: `SSD_NOT_MOUNTED` when *no* root is readable
-at all, `ROOT_UNREADABLE` when *some* are (phase 18 — never call another root's
-cache orphaned just because this one answered), `CONFIG_INVALID` for a broken
-manifest; `status` catches all three and reports an empty list, because `status`
-must never fail. `volumes rm` takes either kind, and `delete` refuses
-`PROJECT_HAS_DATA` rather than taking a project's data silently — with the data
-inside the directory, "keep the data" cannot mean anything, so there is no
-`--keep-data`.
-
-**`eject` never forces, and a holder is someone you can act on.** With more
-than one configured root (phase 18), `eject [<root>]` needs a name unless
-exactly one root is a mounted, removable volume; otherwise it's
-`INVALID_ARGUMENT` naming every configured root — there is no safe guess among
-disks. `down-all` stays global, because containers don't belong to a root.
-Stop containers → ask `lsof` → unmount; a held volume is `EJECT_BLOCKED`
-carrying `holders`. `isActionableHolder` excludes the container runtime (it keeps
-descriptors on bind mounts after containers stop) and the OS volume agents
-(`mds`, QuickLook — counting them made eject refuse forever on an indexed SSD).
-Filtering is safe because both are DiskArbitration clients and the following
-`diskutil eject` *is* the request to let go; a refusal is parsed by
-`parseDissenter` into the same `holders` array — "close it" for Xcode, "try
-again in a moment" for a system agent. Reduce a dissenter's name to its last
-path component before classifying (recent macOS reports full executable paths).
-`holders()` runs unprivileged, so a root dissenter is named there or nowhere.
-**A blocked eject always names something.**
-
-**Docker's VM gets a third answer: stop the engine, with consent.** Docker
-Desktop shares `/Volumes` into its VM and holds descriptors while that VM lives
-— nothing to close, no retry that works. When the runtime *alone* refused (named
-by the dissenter, or via `device.runtimeHolders()`), `eject` asks and
-`docker.stopEngine()` runs `docker desktop stop`. Consent is `--stop-docker` or
-the prompt; no terminal means NO, i.e. `EJECT_BLOCKED` naming Docker. Then
-**wait for the signal, not the command**: `docker desktop stop` returns before
-launchd tears down the VM helper, so poll `device.runtimeHolders()` (bounded,
-15s) until the runtime is off the volume, unmount, retry a runtime dissent twice
-more. A spent budget is `EJECT_BLOCKED` with
-`reason: 'runtime-holds-volume-after-stop'`, so the refusal cannot re-advise the
-flag just used and the app withdraws the button. If lsof says the runtime let go
-and the unmount still fails, relay diskutil's words untouched. Never force.
-
-**Base images** live in `cli/images/<image>/Dockerfile`, built by `bardolier build`
-with `HOST_UID`/`HOST_GID` so bind-mounted `/work` files come back owned by the
-Mac user. `bardolier-web` (Node), `bardolier-ios` (Swift + swiftlint), `bardolier-and`
-(JDK, Android SDK, Gradle). No Dockerfile → `unavailable`, not an error.
-
-**The boundary is built into the images.** The ios base has no `xcodebuild`,
-`xcrun` or simulator; the android base has no `adb`. What they can do is §4.3:
-`swift build`/`test`/`swiftlint`, Gradle builds and unit tests.
-
-**One image is pinned to an architecture, in one place.** aapt2 is x86_64-only,
-so `bardolier-and` builds and runs `linux/amd64` (emulated on Apple Silicon).
-`IMAGE_PLATFORM` in `cli/src/images.ts` is the single constant — `build` turns
-it into `--platform`, `compose.ts` into the dev service's `platform:`. Every
-other image builds native and emits **no** `platform:` key.
-
-**The Gradle cache is shared and is not project data.** `GRADLE_USER_HOME` is
-`/cache/gradle`, a named volume (`bardolier-gradle-cache`, `IMAGE_CACHE`) mounted
-into every android dev container — hundreds of identical, re-downloadable
-megabytes belong once, on the internal disk. Three readers must match the
-constant: the Dockerfile `ENV`, the mount `compose.ts` writes, and `up`, which
-creates the volume. Compose marks it `external: true` so no project stamps its
-labels on it. `volumes.ts` knows it by `bardolier.role: cache`: claimed while any
-manifest names that base image, and never touched by `delete`.
-`bardolier-web` carries the same for `uv`'s wheels (`bardolier-uv-cache`,
-`/cache/uv`) — a Python API and its React frontend run in one dev container,
-no second port published; the dev server proxies to it (Phase 11).
-
-**The agent ships in the base image.** All three install Claude Code,
-checksum-verified, into `/usr/local/bin`. It is the one toolchain version in
-these images that is NOT pinned by default — `bardolier build` resolves
-`latest` at build time (`--claude-code-version <X.Y.Z>` pins an exact release
-when reproducibility matters more); every other component stays a fixed ARG.
-Not a catalogue service (the catalogue is for sibling containers with an
-image, port and data directory), and not under `$HOME`, which is a mounted
-directory that would copy 236MB per project.
-
-**`$HOME` is a bind, because `down` destroys the container.**
-`CONTAINER_HOME` = `/state/home`, with the project's own `home/` mounted there —
-otherwise every stop loses shell history, dotfiles, and the `claude` login
-(`$HOME/.claude`). It is **per project**: Claude Code files sessions by working
-directory and every container works in `/work`, so one shared home would make
-`claude --continue` resume whichever project ran last. Four readers must agree
-(the constant and three Dockerfiles). Being inside the project directory is what
-attributes it, so it needs no label and `delete` takes it with the folder.
-
-**The host is lent, never copied.** `PASSTHROUGH_ENV` in `compose.ts` uses
-Compose's **list** form (bare `NAME`, no `=`) — the only shape meaning "pass
-through if set, otherwise leave unset". `${NAME:-}` would inject an empty
-credential, i.e. a failing login instead of a prompt. Fixed and sorted, so the
-file is byte-identical on a Mac holding every token and one holding none. `up`
-fills `GIT_*` from the host's `git config` through the `Git` seam. No credential
-is ever written to `config.yml`.
-
-**The dev container publishes exactly one *fixed* thing, plus what's declared.**
-`ARCHETYPE_APP_PORT`: fixed inside the container (3000, with `PORT` set),
-allocated from a host band and persisted as `app_port`, assigned once and never
-revisited. Projects predating the field get one on their next `up`. This is
-the first exception to "a published port is a debugging tap" — a browser on
-the Mac cannot join the Docker network. `status` reports `app_url`, as it
-reports `connection_hint`.
-
-**Extra ports are the same exception, opted into by name.** `bardolier port
-add <project> <name> --container-port <n>` (§5.1, `cli/src/extraports.ts`)
-declares a port independent of archetype — no catalogue, no image, no volume,
-just a name and two port numbers persisted under `extra_ports` and published
-in compose alongside `app_port`. It closes two gaps: a mobile client or a
-second UI app that must reach a project's own process directly (not just the
-browser, which can go through the frontend dev server's proxy config instead),
-and a browser-reachable dev tool on `library`/`ios`/`android`, which otherwise
-publish nothing at all. Allocated like `app_port` — search starts at
-`--container-port` itself, no band to inherit from a catalogue that doesn't
-apply. `port add`/`remove` require the project stopped, same as `service`.
-
-**`deps add` is the same "declare, don't bake in or install live" shape, for OS
-packages.** `bardolier deps add <project> <package...>` (§6 Deps, `cli/src/deps.ts`)
-persists apt package names under `extra_packages`; `up` builds a
-content-addressed derived image — `bardolier-deps-<base_image>:<hash>` — from a
-generated Dockerfile that goes `USER root` for one `apt-get install` and back
-to the base image's own uid:gid, and Compose's `image:` switches to it. Never
-baked into the shared base image (every project would pay for packages it
-doesn't need) and never installed at runtime inside the container (no root
-there, and `down` throws the writable layer away regardless) — root is
-confined to image-build time, on the internal disk, like the base images
-themselves. Content-addressed rather than per-project so two projects on the
-same base image with the same package list share one image and one build, the
-same reasoning as `IMAGE_CACHE`. `deps add`/`remove` require the project
-stopped, same as `service`/`port`.
-
-**`down` writes down where you were.** `cli/src/handoff.ts` writes
-`.bardolier/handoff.md` on every stop: the state of each repository under
-`work/*/` from `Git` (or a line saying there are none), plus the agent's own
-account via `claude --print --continue` **inside the still-running dev
-container** — after `compose down` there is nobody to ask. Everything is
-best-effort: missing container, agent, session or credentials, a timeout, or a
-read-only disk degrades the note and never fails the stop. A non-zero exit or
-empty output is reported as such, not pasted under the heading. `delete` skips
-it.
-
-**Two commands exist because the app asked.** `bardolier catalogue` and
-`bardolier config get|set` are Phase 6 additions under §1's rule that the CLI grows
-to serve the app — the alternative was a copy of `services.yml` in Swift and a
-second config writer that knew only some of §8's precedence rules. `status`
-gained `dir` the same way, so the app never composes a path from `ssd.root`.
-
-## The app
-
-**It reads the contract; it never re-derives it.** `app/Bardolier/Bardolier/Bardolier/`
-(renamed in phase 16, along with everything below in this section):
-`BardolierClient` builds argv, appends `--json` itself (no caller may), and turns a
-non-zero exit into `BardolierFailure.cli` with the §2 code. `BardolierModels.swift`
-mirrors `cli/schema/*.json`, one struct per schema object; closed string enums
-decode as open tokens so additive changes can't break an older build.
-`test/app-models.test.ts` checks it as text in both directions — a missed field,
-an invented one, an impossible error code, or a `Process` spawned outside the
-client fails there. A GUI app inherits no shell `PATH`, so
-`BardolierExecutable.swift` locates `bardolier` and hands the child a `PATH` reaching
-`node`, `docker`, `lsof`, `diskutil` — the only environment knowledge in Swift.
-
-- **A blocked eject is a place to come back to.** `BardolierStore.ejectPhase` holds
-  blocked/working/ejected/failed (not `lastError`, which the next refresh
-  clears); `EjectPanel` renders it, offers **Retry** (the same call again), and
-  the menu row says where the flow got to. Nothing in Swift can force an unmount
-  or kill a holder, and `eject` has no `--force` (`test/phase7.test.ts`).
-- **"SSD" is a claim about a specific root, not a synonym for "root."**
-  `doctor`'s `ssd` finding carries per-root `removable` (phase 18, null when
-  unmounted — nothing to ask `diskutil`); `BardolierStore.defaultRootRemovable`
-  and `.anyRootRemovable` read it so the status line says "Root: …" instead of
-  "SSD: …" for an internal-disk root, and the menu offers plain **Close all**
-  (routed straight to `down-all`, never through `eject`) when no configured
-  root is removable — `eject` would refuse `EJECT_NOT_APPLICABLE` before
-  stopping anything, so a button promising "eject" there would close nothing.
-- **A dimmed row and an absent row look the same.** `MenuRow` takes a
-  `disabledReason` and serves it as help; `DisabledNotice` says it once per
-  group — with Docker down, every mutating item is disabled for one reason.
-- **A missing `bardolier` is the state of the whole menu.** `BardolierStore.bardolierMissing`
-  shows `FirstRunPanel` — listing the paths `BardolierExecutable` actually searched
-  — instead of letting each item fail its own way (§13).
-- **One operation at a time, then ask.** `BardolierStore.activity` names it; while
-  set, mutating items are disabled, and every mutation is followed by a forced
-  `status` refresh rather than a local patch (§4). Refusals are relayed verbatim
-  — `PROJECT_RUNNING` becomes "Stop the project to change its services", never
-  an unrequested stop-change-start. Destructive confirmation happens in the view
-  before the call, because the client passes `--force` and the CLI cannot prompt.
-  `BardolierTerminal` runs `bardolier shell`'s argv via AppleScript or a `.command` file
-  and launches no process itself.
-- Build settings the human sets in Xcode (`app/README.md`): SwiftUI
-  `MenuBarExtra`, `LSUIElement` YES, App Sandbox off for v1,
-  `NSAppleEventsUsageDescription` (without it macOS kills the app on first
-  terminal drive). The target uses a synchronized folder group, so new `.swift`
-  files build without an Add-Files step.
+| File | Owns | Spec |
+| --- | --- | --- |
+| `layout.ts` | the four folders — `work`/`data`/`local`/`home` — created by `new`, re-ensured by every `up` | §3 |
+| `compose.ts` | rendering; `PASSTHROUGH_ENV` — Compose **list** form, bare `NAME`, never `${NAME:-}`, which would inject an empty credential | §9 |
+| `model/archetype.ts` | `ARCHETYPE_APP_PORT` — fixed inside the container, allocated on the host | §9 |
+| `workspace.ts` | every write; skips one whose bytes already match | §9 |
+| `allocator.ts` | manifest scan + host probe; free means both | §5 |
+| `extraports.ts`, `deps.ts` | declared ports; declared apt packages and the content-addressed derived image | §5.1, §9 |
+| `services.ts` | manifest ⋈ catalogue, so `status` and `service list` cannot disagree | §4.1 |
+| `volumes.ts` | orphans, derived and never recorded; knows the shared cache by `bardolier.role: cache` | §6 |
+| `device.ts` (`SsdDevice`) | `isActionableHolder`, `parseDissenter`; `commands/ssd.ts` drives down-all → holders → eject, with the bounded wait after `docker desktop stop` | §6 |
+| `images.ts` | `IMAGE_PLATFORM` (`bardolier-and` is amd64), `IMAGE_CACHE` (shared gradle/uv caches), `CONTAINER_HOME` — this constant plus three Dockerfiles must agree | §4.3, §9 |
+| `handoff.ts` | the stop note; every part best-effort, none may fail the `down` | §12 |
+| `cli/images/<image>/Dockerfile` | the three base images, built with `HOST_UID`/`HOST_GID`; Claude Code is the one unpinned component | §4.3, §6 |
 
 ## Definition of done
 
 New work gets a scoped spec in `docs/phases/` and a terminal done-check; it is
 not done until that check passes, and a CLI check then joins `regression.sh`
-and stays.
+and stays. The spec names the owner's acceptance criterion and any decision that
+must be answered first; the check covers that criterion and any `INTENT.md`
+invariant the work could break.
