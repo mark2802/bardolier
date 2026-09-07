@@ -494,6 +494,29 @@ final class BardolierStore: ObservableObject {
         return result
     }
 
+    /// Move a project to another root (phase 21, §8.2). Returns the payload so
+    /// the panel closes only on success, like `clone`.
+    ///
+    /// The notice names the destination and, when `mode == .copy`, the bytes
+    /// moved — an instant rename does not need the byte count advertised. A
+    /// no-op (`moved == false`) gets its own line rather than a `Moved…` that
+    /// implies something happened.
+    @discardableResult
+    func move(project name: String, to root: String) async -> MoveOutput? {
+        let result = await perform("Moving \(name) to \(root)") { client in
+            try await client.move(project: name, root: root)
+        }
+        guard let result else { return nil }
+        if !result.moved {
+            notice = "\(name) is already on \(result.to.root)."
+        } else if result.mode == .copy {
+            notice = "Moved \(name) to \(result.to.root) — \(BardolierFormat.bytes(result.bytes)) moved."
+        } else {
+            notice = "Moved \(name) to \(result.to.root)."
+        }
+        return result
+    }
+
     /// Open a shell in the configured terminal (§7). The CLI names the command;
     /// the app is what runs it.
     ///

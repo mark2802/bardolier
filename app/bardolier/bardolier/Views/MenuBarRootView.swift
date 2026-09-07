@@ -28,6 +28,7 @@ enum MenuPanel: Equatable {
     case root
     case services(project: String)
     case clone(source: String)
+    case move(project: String)
     case newProject
     case reclaim
     case eject
@@ -63,6 +64,8 @@ struct MenuBarRootView: View {
                     ServicesPanel(projectName: project) { panel = .root }
                 case .clone(let source):
                     ClonePanel(source: source) { panel = .root }
+                case .move(let project):
+                    MovePanel(project: project) { panel = .root }
                 case .newProject:
                     NewProjectPanel { panel = .root }
                 case .reclaim:
@@ -229,6 +232,7 @@ struct MenuBarRootView: View {
                     toggleExpanded: { toggle(project.name) },
                     openServices: { panel = .services(project: project.name) },
                     openClone: { panel = .clone(source: project.name) },
+                    openMove: { panel = .move(project: project.name) },
                     confirm: request
                 )
             }
@@ -349,6 +353,7 @@ struct ProjectRow: View {
     var toggleExpanded: () -> Void
     var openServices: () -> Void
     var openClone: () -> Void
+    var openMove: () -> Void
     var confirm: (ConfirmationRequest) -> Void
 
     var body: some View {
@@ -423,6 +428,18 @@ struct ProjectRow: View {
                         disabledReason: disabledReason
                     ) {
                         openClone()
+                    }
+                    // Only with somewhere to move to (phase 26, §8.2): with one
+                    // configured root the row would always lead nowhere.
+                    if store.roots.count > 1 {
+                        MenuTextRow(
+                            title: "Move to…",
+                            systemImage: "arrow.right.doc.on.clipboard",
+                            isDisabled: !canMutate || project.state.isUp,
+                            disabledReason: disabledReason ?? (project.state.isUp ? "Stop \(project.name) to move it." : nil)
+                        ) {
+                            openMove()
+                        }
                     }
                     MenuTextRow(title: "Open folder in Finder", systemImage: "folder") {
                         revealInFinder(project.dir)

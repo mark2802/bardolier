@@ -135,6 +135,34 @@ else
   bad "the clone shares a host port with its source"
 fi
 
+# The move panel (§8.2) needs somewhere to move TO — switch to a config file
+# with two named roots, the same way lifecycle-done-check's own move section
+# does. HOME is faked only for the switch, then restored.
+if docker_ready; then
+  ORIGINAL_HOME="$HOME"
+  unset BARDOLIER_ROOT
+  mkdir -p "$TMP/home-move"
+  export HOME="$TMP/home-move"
+
+  $BARDOLIER root add "$MOUNTED" --name a --json >/dev/null || bad "root add a exited non-zero"
+  DEFAULT_NAME="$(json_value "$($BARDOLIER root list --json)" "d.roots[0].name")"
+  if [ "$DEFAULT_NAME" != "a" ]; then
+    $BARDOLIER root remove "$DEFAULT_NAME" --json >/dev/null || bad "root remove of the materialised default exited non-zero"
+  fi
+  ROOT_B="$TMP/ssd2/claude-projects"
+  mkdir -p "$ROOT_B"
+  $BARDOLIER root add "$ROOT_B" --name b --json >/dev/null || bad "root add b exited non-zero"
+  export HOME="$ORIGINAL_HOME"
+
+  MOVE="$($BARDOLIER move alpha --root b --json)" || bad "move exited non-zero"
+  if schema_assert move "$MOVE"; then ok "move --json matches move.schema.json"; else bad "move --json"; fi
+  if json_assert "$MOVE" 'd.moved === true && d.to.root === "b"'; then
+    ok "the move panel's contract lands the project on the chosen root"
+  else
+    bad "move did not report what the panel renders"
+  fi
+fi
+
 # ── 4. Sources (app-spec.md §5-§13) ───────────────────────────────────────────
 head "4. Sources"
 
@@ -151,6 +179,7 @@ for file in \
   "$APP/Views/ServicesPanel.swift" \
   "$APP/Views/NewProjectPanel.swift" \
   "$APP/Views/ClonePanel.swift" \
+  "$APP/Views/MovePanel.swift" \
   "$APP/Views/ReclaimPanel.swift" \
   "$APP/Views/PreferencesPanel.swift" \
   "$APP/DebugStatusView.swift" \
@@ -191,6 +220,33 @@ if grep -q 'store.clone(' "$APP/Views/ClonePanel.swift" && grep -q 'client.clone
   ok "the panel goes through the store and the store through the client (§4)"
 else
   bad "ClonePanel does not route its call through the store and client"
+fi
+
+# Move in the menu (phase 26, §8.2).
+if grep -q 'case move(project: String)' "$APP/Views/MenuBarRootView.swift"; then
+  ok "the panel carries the project it is for, like .clone does"
+else
+  bad "MenuPanel has no .move(project:) case"
+fi
+if grep -q 'title: "Move to…"' "$APP/Views/MenuBarRootView.swift"; then
+  ok "the project submenu offers Move to…"
+else
+  bad "ProjectRow has no Move to… row"
+fi
+if grep -q 'moveBlockedReason' "$APP/Views/MovePanel.swift"; then
+  ok "a running project disables the move action with a reason, not silently (§11)"
+else
+  bad "MovePanel disables its action without saying why"
+fi
+if grep -q 'destinationRoots' "$APP/Views/MovePanel.swift" && grep -q 'sourceProject?.root' "$APP/Views/MovePanel.swift"; then
+  ok "the root picker excludes the project's own root"
+else
+  bad "MovePanel does not filter out the project's own root"
+fi
+if grep -q 'store.move(' "$APP/Views/MovePanel.swift" && grep -q 'client.move(' "$APP/BardolierStore.swift"; then
+  ok "the panel goes through the store and the store through the client (§4)"
+else
+  bad "MovePanel does not route its call through the store and client"
 fi
 
 # ── 5. Build settings (the human's manual step) ───────────────────────────────

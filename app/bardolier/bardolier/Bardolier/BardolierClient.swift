@@ -123,6 +123,14 @@ nonisolated struct BardolierClient: Sendable {
         return try await run(argv)
     }
 
+    /// Move a project to another configured root (phase 21, §8.2). `root` is
+    /// required by the CLI — unlike `clone`'s, there is no meaningful default.
+    /// Fails PROJECT_RUNNING on a running project; the app relays that refusal
+    /// rather than stopping the project to get around it.
+    func move(project: String, root: String) async throws -> MoveOutput {
+        try await run(["move", project, "--root", root])
+    }
+
     /// Start a project. `openShell` only sets the CUE in the response — the CLI
     /// spawns no terminal; the app does (app-spec.md §7).
     func up(project: String, openShell: Bool) async throws -> UpOutput {

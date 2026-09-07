@@ -85,6 +85,14 @@ nonisolated struct ProjectState: BardolierToken {
     var isUp: Bool { self != .stopped }
 }
 
+/// `rename | copy` — cli-spec.md §6. `rename` on one filesystem (also reported
+/// for the no-op); `copy` when EXDEV forced a staged copy.
+nonisolated struct MoveMode: BardolierToken {
+    let rawValue: String
+    static let rename = MoveMode(rawValue: "rename")
+    static let copy = MoveMode(rawValue: "copy")
+}
+
 /// `running | stopped` for one service container.
 nonisolated struct ServiceState: BardolierToken {
     let rawValue: String
@@ -336,6 +344,26 @@ nonisolated struct CloneOutput: Codable, Hashable, Sendable {
     let withContent: Bool
     /// Bytes copied; 0 for a shape-only clone.
     let bytesCopied: Int
+}
+
+/// What `move` did (phase 21, §8.2) — a project's ports never change, so this
+/// is reported by the manifest's new location, never by rewriting anything
+/// inside the directory.
+nonisolated struct MoveOutput: Codable, Hashable, Sendable {
+    let project: String
+    /// False when the project was already under the target root — `move` is
+    /// idempotent (§2).
+    let moved: Bool
+    let from: MoveLocation
+    let to: MoveLocation
+    /// The project's size on disk, reported in both modes; 0 for a no-op.
+    let bytes: Int
+    let mode: MoveMode
+}
+
+nonisolated struct MoveLocation: Codable, Hashable, Sendable {
+    let root: String
+    let dir: String
 }
 
 /// The manifest's host port joined with the catalogue's identity — the shape

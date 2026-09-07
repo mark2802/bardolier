@@ -54,12 +54,14 @@ Projects
       Open shell
       Services…      ▸
       Clone…
+      Move to…                          ← only with more than one root
       Open folder in Finder
       Delete…
   ○ otherapp         ▸
       Start
       Services…      ▸
       Clone…
+      Move to…                          ← only with more than one root
       Open folder in Finder
       Delete…
 ────────────────────────────────
@@ -140,6 +142,29 @@ is nothing to pick:
 
 No confirmation sheet: clone creates and never destroys, so the button is its
 own confirmation.
+
+### 8.2 Move project panel
+
+Opened from a project row, shown only when more than one root is configured
+(with one root there is nowhere to move a project). `move` takes no name and no
+content choice, so this is not §8's form — a root picker and a button:
+
+- **Root** — every configured root EXCEPT the project's own. Naming the
+  project's own root is a valid, idempotent CLI call (`moved: false`), but not
+  a choice the UI offers.
+- **Move** → `bardolier move … --root … --json`. Unlike `clone`'s
+  `--with-content`, a running project cannot be moved at all — `PROJECT_RUNNING`
+  is a whole-command refusal, not a per-field one — so the panel's one action
+  disables with a reason while the project is up (§11), not a control inside
+  it. The app never stops the project to make it available (§6).
+- On success the panel closes and the notice names the destination root and,
+  when the move crossed filesystems (`mode: "copy"`), the bytes moved. A no-op
+  (`moved: false`) gets its own notice rather than one implying something
+  happened.
+
+No confirmation sheet: `move` relocates a project, it never destroys one, so
+the button is its own confirmation. No progress bar: the activity label says a
+copy is working, same as clone.
 
 ## 9. Reclaim disk view
 
@@ -269,6 +294,10 @@ the contract; it never re-derives it.
 - `ClonePanel` (§8.1) mirrors `NewProjectPanel`, and disables its
   `--with-content` checkbox — with a reason — while the source is running,
   rather than disabling the panel or stopping the project.
+- `MovePanel` (§8.2) is a root picker and a button — `move` has nothing else to
+  decide. Unlike `ClonePanel`, a running source disables the panel's one action
+  with a reason rather than one control inside it, and the picker offers only
+  the roots the project is not already on.
 - Refusals are relayed verbatim: `PROJECT_RUNNING` becomes "Stop the project to
   change its services" (§6), never an unrequested stop-change-start.
   Destructive confirmation happens in the view before the call, because the

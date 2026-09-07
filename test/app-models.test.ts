@@ -132,6 +132,8 @@ const MIRRORS: readonly (readonly [schema: string, path: string, swift: string])
   ['clone', '', 'CloneOutput'],
   ['clone', 'properties/project', 'CreatedProject'],
   ['clone', '$defs/attached_service', 'AttachedService'],
+  ['move', '', 'MoveOutput'],
+  ['move', '$defs/location', 'MoveLocation'],
   ['up', '', 'UpOutput'],
   ['up', 'properties/services/items', 'UpService'],
   ['down', '', 'DownOutput'],
