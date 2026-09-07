@@ -10,7 +10,10 @@
 //       then `diskutil` (cli-spec.md §6). The app calls one command; it does
 //       not stop projects itself and then unmount, because ordering that
 //       sequence is the CLI's job and doing it twice is how the two get out of
-//       step.
+//       step. `--all` (phase 22) is the same command widened to every
+//       removable root at once, best-effort: it is never thrown for a single
+//       blocked disk, so the panel renders `EjectAllOutput`'s per-root list
+//       instead of picking one result to show.
 //    2. EJECT_BLOCKED — the holders are rendered by name and the user is
 //       offered RETRY. Nothing here forces, and nothing here offers to kill a
 //       holder: `bardolier` deliberately has no `--force` to pass, because forcing
@@ -27,20 +30,30 @@
 //    3. Ejected — "safe to unplug", which is also the icon state (§11).
 //
 //  Retry is simply the same call again, which is why this panel holds no state
-//  of its own: `store.ejectPhase` is where the flow lives, so quitting Xcode,
-//  reopening the menu and clicking Retry finds the holder list still there.
+//  of its own beyond WHICH disk: `store.ejectPhase` is where the flow lives, so
+//  quitting Xcode, reopening the menu and clicking Retry finds the holder list
+//  still there.
 //
 
 import SwiftUI
+
+/// Which disk the panel is aimed at — a single configured root, or every
+/// removable one at once (phase 22). Kept apart from a bare `String?` so the
+/// "All roots" choice can't be confused with "no choice made yet".
+private enum EjectTarget: Hashable {
+    case root(String)
+    case all
+}
 
 struct EjectPanel: View {
     @EnvironmentObject private var store: BardolierStore
 
     var back: () -> Void
 
-    /// Which configured root to eject (phase 18) — nil until the picker below
-    /// resolves one, which it does itself when there is only one candidate.
-    @State private var root: String?
+    /// The user's explicit pick, if they made one. `nil` doesn't mean "no
+    /// target" — see `effectiveTarget`, which resolves the common case (one
+    /// removable root) without making the user pick it.
+    @State private var target: EjectTarget?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -62,6 +75,8 @@ struct EjectPanel: View {
                         dockerHoldState(holders: holders, message: message, engineStopped: engineStopped)
                     case .ejected(let volume, let stopped):
                         ejectedState(volume: volume, stopped: stopped)
+                    case .ejectedAll(let results, let stopped):
+                        ejectedAllState(results: results, stopped: stopped)
                     case .notApplicable(let message):
                         notApplicableState(message: message)
                     case .failed(let message):
@@ -73,30 +88,59 @@ struct EjectPanel: View {
             .frame(maxHeight: 340)
         }
         .padding(.bottom, 12)
-        .task {
-            if root == nil && store.roots.count == 1 { root = store.roots.first?.name }
-        }
     }
 
-    /// Only shown when the CLI would otherwise have to guess (phase 18): more
-    /// than one configured root. A single root resolves itself in `.task`
-    /// above, so the common case shows nothing here.
+    /// The pick that actually drives the button: the user's explicit choice,
+    /// or — the common case — the one removable root, resolved without
+    /// making them choose it. `nil` here means the picker below is showing
+    /// and genuinely has not been answered yet.
+    private var effectiveTarget: EjectTarget? {
+        if let target { return target }
+        if store.removableRoots.count == 1 { return .root(store.removableRoots[0].name) }
+        return nil
+    }
+
+    /// Only shown when the CLI would otherwise have to guess (phase 18, 22):
+    /// more than one MOUNTED, REMOVABLE root. A plain internal-disk root is
+    /// never offered — picking one would only ever answer
+    /// EJECT_NOT_APPLICABLE — and a single removable root resolves itself via
+    /// `effectiveTarget`, so the common case shows nothing here.
     @ViewBuilder
-    private var rootPicker: some View {
-        if store.roots.count > 1 {
+    private var targetPicker: some View {
+        if store.removableRoots.count > 1 {
             VStack(alignment: .leading, spacing: 2) {
-                Picker("Root", selection: $root) {
-                    Text("Choose one…").tag(String?.none)
-                    ForEach(store.roots) { configured in
-                        Text(configured.name).tag(Optional(configured.name))
+                Picker("Disk", selection: $target) {
+                    Text("Choose one…").tag(EjectTarget?.none)
+                    ForEach(store.removableRoots) { configured in
+                        Text(configured.name).tag(EjectTarget?.some(.root(configured.name)))
                     }
+                    Text("All roots").tag(EjectTarget?.some(.all))
                 }
                 .pickerStyle(.menu)
                 .disabled(store.isBusy)
-                Text("More than one root is configured; eject needs to know which disk.")
+                Text("More than one disk is configured; eject needs to know which — or all of them.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Retry IS this method, whatever state landed here: the same target,
+    /// called again. A held disk that already ejected on a prior call has
+    /// unmounted itself out of `--all`'s next candidate list, so repeating it
+    /// only ever revisits what is still stuck.
+    private func trigger(stopDocker: Bool = false) {
+        switch effectiveTarget {
+        case .root(let name):
+            Task { await store.closeAllAndEject(root: name, stopDocker: stopDocker) }
+        case .all:
+            Task { await store.closeAllAndEject(all: true, stopDocker: stopDocker) }
+        case nil:
+            // The button that reaches here is disabled until a choice is
+            // made; this only covers a Retry after `doctor` has changed its
+            // mind mid-flow, and defers to the CLI's own single-candidate
+            // guess rather than doing nothing.
+            Task { await store.closeAllAndEject(stopDocker: stopDocker) }
         }
     }
 
@@ -107,7 +151,7 @@ struct EjectPanel: View {
         if !store.anyRootRemovable {
             // No configured root is a removable volume — this is `down-all`
             // wearing the same panel, not eject waiting on a mount (§10,
-            // phase 18): no SSD gate, no root picker, no disk to name.
+            // phase 18): no disk gate, no picker, no disk to name.
             Text("Every running project is stopped. Nothing is unmounted — none of the configured roots is a removable disk.")
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
@@ -118,8 +162,11 @@ struct EjectPanel: View {
                 Task { await store.closeAllAndEject() }
             }
             .disabled(store.isBusy)
-        } else if store.status?.ssd.mounted == false {
-            Text("The SSD isn’t mounted, so there is nothing to eject.")
+        } else if store.removableRoots.isEmpty {
+            // At least one configured root CAN be a removable disk (that's
+            // what got us into this branch of the header), but none of them
+            // currently is — unmounted, or `doctor` hasn't answered yet.
+            Text("No configured disk is currently mounted, so there is nothing to eject yet.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
@@ -132,12 +179,12 @@ struct EjectPanel: View {
 
             runningProjectsList
 
-            rootPicker
+            targetPicker
 
-            actionButton("Close all & eject", role: .destructive) {
-                Task { await store.closeAllAndEject(root: root) }
+            actionButton(effectiveTarget == .all ? "Close all & eject every disk" : "Close all & eject", role: .destructive) {
+                trigger()
             }
-            .disabled(store.isBusy || store.status?.ssd.mounted != true || (store.roots.count > 1 && root == nil))
+            .disabled(store.isBusy || effectiveTarget == nil)
         }
     }
 
@@ -193,7 +240,7 @@ struct EjectPanel: View {
 
         HStack(spacing: 8) {
             actionButton("Retry", role: nil) {
-                Task { await store.closeAllAndEject(root: root) }
+                trigger()
             }
             .disabled(store.isBusy)
 
@@ -260,17 +307,17 @@ struct EjectPanel: View {
             // effect has already happened is a loop, not a move.
             if engineStopped {
                 actionButton("Retry", role: nil) {
-                    Task { await store.closeAllAndEject(root: root) }
+                    trigger()
                 }
                 .disabled(store.isBusy)
             } else {
                 actionButton("Stop Docker & eject", role: nil) {
-                    Task { await store.closeAllAndEject(root: root, stopDocker: true) }
+                    trigger(stopDocker: true)
                 }
                 .disabled(store.isBusy)
 
                 Button("Retry") {
-                    Task { await store.closeAllAndEject(root: root) }
+                    trigger()
                 }
                 .controlSize(.small)
                 .disabled(store.isBusy)
@@ -326,6 +373,80 @@ struct EjectPanel: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// `eject --all` (phase 22) — one row per candidate rather than picking a
+    /// single result to show, because a mixed batch (two clean, one still
+    /// held) is the whole point of best-effort: nothing here is a failure to
+    /// dismiss until every row says so.
+    @ViewBuilder
+    private func ejectedAllState(results: [EjectAllResult], stopped: [String]) -> some View {
+        let allClean = results.allSatisfy(\.ejected)
+
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: allClean ? "eject.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(allClean ? .green : .orange)
+            Text(allClean ? "Safe to unplug." : "Some disks are still held.")
+                .font(.caption.weight(.medium))
+        }
+
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(results) { result in
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: result.ejected ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(result.ejected ? .green : .orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(result.ejected ? "\(result.root) — safe to unplug" : "\(result.root) — still held")
+                            .font(.caption)
+                        if !result.ejected {
+                            if result.holders.isEmpty {
+                                Text(result.message ?? "The SSD wouldn’t unmount.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                HolderList(holders: result.holders)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if stopped.isEmpty {
+            Text("Nothing was running.").font(.caption2).foregroundStyle(.tertiary)
+        } else {
+            Text("Stopped \(stopped.joined(separator: ", ")). Their data is untouched.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        if allClean {
+            Text("Plug a disk back in and the menu picks it up on the next open.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("Quit whatever's still holding the ones above, then Retry — bardolier will not force an unmount.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                actionButton("Retry", role: nil) {
+                    trigger()
+                }
+                .disabled(store.isBusy)
+
+                Button("Not now") {
+                    store.resetEject()
+                    back()
+                }
+                .controlSize(.small)
+            }
+        }
+    }
+
     // MARK: - Not applicable (phase 10: a local, non-removable root path)
 
     /// Nothing is wrong — there is simply nothing to eject, so this reads as
@@ -359,7 +480,7 @@ struct EjectPanel: View {
         }
         HStack(spacing: 8) {
             actionButton("Try again", role: nil) {
-                Task { await store.closeAllAndEject(root: root) }
+                trigger()
             }
             .disabled(store.isBusy)
 

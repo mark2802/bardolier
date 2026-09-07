@@ -29,8 +29,12 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
 
   test('Retry re-runs the same command (§10.2)', () => {
     assert.match(panel, /"Retry"/)
-    const retries = panel.match(/await store\.closeAllAndEject\(root: root\)/g) ?? []
-    assert.ok(retries.length >= 2, 'the panel starts the eject and retries it with the same call')
+    // `trigger()` is the one place the eject call is written (phase 22 adds
+    // --all alongside it); the initial button and every Retry call the same
+    // helper rather than repeating the CLI call inline.
+    assert.match(panel, /func trigger\(stopDocker: Bool = false\)[\s\S]*?closeAllAndEject\(root: name, stopDocker: stopDocker\)/)
+    const calls = panel.match(/\btrigger\(\)/g) ?? []
+    assert.ok(calls.length >= 2, 'the panel starts the eject and retries it with the same call')
   })
 
   test('the ejected state is reported, and cleared by the disk coming back (§11)', () => {
@@ -69,7 +73,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     assert.match(store, /case blockedByDocker\(holders: \[SsdHolder\], message: String, engineStopped: Bool\)/)
     assert.match(store, /failure\.isRuntimeHold/)
     assert.match(panel, /"Stop Docker & eject"/)
-    assert.match(panel, /closeAllAndEject\(root: root, stopDocker: true\)/)
+    assert.match(panel, /trigger\(stopDocker: true\)/)
   })
 
   test('and once the engine IS stopped, that button is not offered again (§10)', () => {
@@ -94,7 +98,7 @@ describe('the app renders the eject flow rather than re-deciding it', () => {
     const client = readFileSync(repo(`${APP_DIR}/Bardolier/BardolierClient.swift`), 'utf8')
     assert.match(client, /func eject\(root: String\? = nil, stopDocker: Bool = false\)/)
     assert.match(client, /stopDocker \? \["--stop-docker"\] : \[\]/)
-    assert.match(store, /func closeAllAndEject\(root: String\? = nil, stopDocker: Bool = false\)/)
+    assert.match(store, /func closeAllAndEject\(root: String\? = nil, all: Bool = false, stopDocker: Bool = false\)/)
   })
 
   test('the holders are shown by name, from the CLI’s own fields', () => {

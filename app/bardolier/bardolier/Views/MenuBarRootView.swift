@@ -305,6 +305,8 @@ struct MenuBarRootView: View {
             return holders.isEmpty ? "Eject was blocked…" : "Eject blocked — \(holders.count) holder\(holders.count == 1 ? "" : "s")…"
         case .ejected:
             return "Ejected — safe to unplug"
+        case .ejectedAll(let results, _):
+            return results.allSatisfy(\.ejected) ? "Ejected — safe to unplug" : "Eject blocked — some disks still held…"
         case .working:
             return "Ejecting…"
         case .notApplicable:
@@ -321,6 +323,7 @@ struct MenuBarRootView: View {
         switch store.ejectPhase {
         case .blocked, .blockedByDocker: return "exclamationmark.triangle"
         case .ejected: return "eject.circle"
+        case .ejectedAll(let results, _): return results.allSatisfy(\.ejected) ? "eject.circle" : "exclamationmark.triangle"
         default: return store.anyRootRemovable ? "eject" : "stop.circle"
         }
     }

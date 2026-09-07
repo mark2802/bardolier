@@ -325,12 +325,23 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Lifecycle / SSD
 - `bardolier down-all` — stop + remove all bardolier containers, across every root.
   Containers don't belong to a root, so this stays global.
-- `bardolier eject [<root>]` — the volume is derived from the named root's path
-  (the last ancestor directory sharing its `st_dev`); there is no
+- `bardolier eject [<root> | --all]` — the volume is derived from the named root's
+  path (the last ancestor directory sharing its `st_dev`); there is no
   `ssd_volume` key that could disagree with it. `[<root>]` may be omitted only
   when exactly one configured root is a mounted, removable volume
   (`diskutil info -plist`); otherwise its absence is `INVALID_ARGUMENT` naming
-  every configured root.
+  every configured root, unless `--all` is given.
+  - **`--all`** ejects every mounted, removable root instead of guessing among
+    them — a plain internal-disk root is never a candidate, `--all` or not.
+    `down-all` runs once, then each candidate is unmounted independently and
+    **best-effort**: one disk still held by an Xcode is that disk's problem
+    alone, and must not cost the user an eject on a second, clean one. The
+    payload is `{ stopped, results: [{ root, volume, ejected, holders,
+    docker_stopped, message? }] }` — one entry per candidate, in configured
+    order, `ejected: false` naming what blocked it rather than throwing.
+    Nothing is forced on any of them. Mutually exclusive with `<root>`
+    (`INVALID_ARGUMENT`). Zero candidates is `EJECT_NOT_APPLICABLE` naming
+    `down-all`, before anything is stopped.
   - **Not removable → `EJECT_NOT_APPLICABLE`, immediately**, before anything is
     stopped, naming `bardolier down-all` as the command to run instead. A root on
     the internal disk is a first-class mode (§8), and `diskutil eject`-ing `/`

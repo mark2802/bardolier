@@ -551,6 +551,28 @@ nonisolated struct SsdHolder: Codable, Hashable, Identifiable, Sendable {
     var id: Int { pid }
 }
 
+/// `bardolier eject --all` (phase 22): down-all once, then every mounted
+/// removable root, best-effort — one blocked disk must not hide a clean one.
+nonisolated struct EjectAllOutput: Codable, Hashable, Sendable {
+    let stopped: [String]
+    let results: [EjectAllResult]
+}
+
+/// One root's outcome within `EjectAllOutput`. Never a thrown failure — a
+/// blocked disk is `ejected: false` naming why, alongside any that succeeded.
+nonisolated struct EjectAllResult: Codable, Hashable, Identifiable, Sendable {
+    let root: String
+    let volume: String
+    let ejected: Bool
+    /// Who still held it, when `ejected` is false. Empty on success.
+    let holders: [SsdHolder]
+    let dockerStopped: Bool
+    /// The refusal's own sentence, when `ejected` is false.
+    let message: String?
+
+    var id: String { root }
+}
+
 // MARK: - build / version
 
 nonisolated struct BuildOutput: Codable, Hashable, Sendable {

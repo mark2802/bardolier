@@ -98,9 +98,12 @@ shows its host port and a copy-connection action.
 - The terminal is a **Preference** (Terminal.app default; iTerm, Ghostty, …).
 - When only a lesser route is available (macOS refusing the Automation
   permission), the app opens the shell anyway and says why in a banner that
-  **survives refreshes** — opening the menu is a refresh, so an ordinary notice
-  would be wiped before it could be read. The user dismisses it, or a shell
-  opened by the good route clears it.
+  **survives refreshes and does not self-dismiss** — an ordinary notice
+  self-dismisses after a few seconds (§13; a success is a receipt, not
+  something to act on), and opening the menu is itself a refresh, so a
+  downgrade the user has to actually fix would otherwise be gone before it
+  could be read. The user dismisses it, or a shell opened by the good route
+  clears it.
 - **Start auto-opens a shell by default** (preference-controlled), so a
   single-project start drops you straight in; turning it off avoids a stack of
   windows when starting several.
@@ -148,12 +151,28 @@ Small modal:
 3. On success, switch the icon to **ejected** ("safe to unplug"). If the payload
    says `docker_stopped`, say so: the engine must be started again before the
    next `up`.
+4. With more than one configured root, the picker offers only roots `doctor`
+   reports mounted AND removable — never a plain internal-disk root, which
+   would only ever answer `EJECT_NOT_APPLICABLE` (phase 22). A single such
+   root resolves itself without a picker, same as a single configured root
+   always has. Among more than one, the picker adds an **All roots** choice
+   driving `bardolier eject --all --json`: every candidate, best-effort. The
+   payload is never a thrown failure for a single blocked disk — render
+   `results` as one row per root (ejected, or still held naming why) rather
+   than picking one to show; **Retry** is the same call again, since a root
+   already ejected has unmounted itself out of the next call's candidates.
 
 ## 11. Icon states
 
 Mounted-idle · activity (operation running) · SSD-absent (dimmed, actions
 disabled) · ejected (distinct, safe-to-unplug). Derive purely from the latest
-`status`/`doctor`.
+`status`/`doctor`; busy wins over every other state.
+
+**One base glyph at every state** — a different pictogram per state (an eject
+symbol here, a drive-with-badge there) reads as a different app each time the
+state changes, which is worse than any one state being less distinctive on its
+own. State is a small corner badge (warning = degraded, checkmark = ejected)
+and a pulse on the same glyph while busy, never a swapped symbol.
 
 ## 12. Preferences
 
@@ -178,6 +197,11 @@ that explains itself.
   the `error.message` string. Never surface a raw stack trace.
 - If `bardolier` itself is missing/not on PATH, show a clear first-run message with
   the expected install location.
+- A success notice (an assigned host port, a reclaimed size — §6, §9) self-
+  dismisses a few seconds after it appears; it also carries a dismiss control
+  for closing it sooner, never the only way it goes away. A failure or a
+  state the user must act on (`EJECT_BLOCKED`, a shell downgrade — §7, §10)
+  is not a notice and does not self-dismiss.
 
 ## 14. What must be true before the app is built
 

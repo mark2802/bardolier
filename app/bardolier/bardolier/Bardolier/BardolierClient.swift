@@ -177,6 +177,14 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["eject"] + (root.map { [$0] } ?? []) + (stopDocker ? ["--stop-docker"] : []))
     }
 
+    /// Every mounted, removable root, best-effort (phase 22). Never throws for
+    /// a blocked disk — that comes back as one `EjectAllResult` with
+    /// `ejected: false` alongside whichever others succeeded; only
+    /// `EJECT_NOT_APPLICABLE` (no removable root at all) is a thrown failure.
+    func ejectAll(stopDocker: Bool = false) async throws -> EjectAllOutput {
+        try await run(["eject", "--all"] + (stopDocker ? ["--stop-docker"] : []))
+    }
+
     func build(archetype: Archetype? = nil) async throws -> BuildOutput {
         try await run(["build"] + (archetype.map { ["--archetype", $0.rawValue] } ?? []))
     }

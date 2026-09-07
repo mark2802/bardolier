@@ -187,6 +187,18 @@ json_assert "$EJECT_NO_ARG" 'd.error && d.error.code === "INVALID_ARGUMENT" && d
   && ok "\`eject\` with two roots and no argument is INVALID_ARGUMENT, naming both" \
   || bad "eject did not ask which root: $EJECT_NO_ARG"
 
+EJECT_ROOT_AND_ALL="$($BARDOLIER eject a --all --json 2>/dev/null || true)"
+json_assert "$EJECT_ROOT_AND_ALL" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
+  && ok "\`eject <root> --all\` is INVALID_ARGUMENT — mutually exclusive" \
+  || bad "eject accepted both a root and --all: $EJECT_ROOT_AND_ALL"
+
+# Neither root here is removable (phase 22): `--all` finds zero candidates,
+# same as the CLI would tell a single removable-less root.
+EJECT_ALL="$($BARDOLIER eject --all --json 2>/dev/null || true)"
+json_assert "$EJECT_ALL" 'd.error && d.error.code === "EJECT_NOT_APPLICABLE"' \
+  && ok "\`eject --all\` with no removable root is EJECT_NOT_APPLICABLE" \
+  || bad "eject --all did not refuse a non-removable pair of roots: $EJECT_ALL"
+
 # ── 12. \`root remove\` forgets a location; it never touches it ────────────────
 head "12. \`root remove\` (§8)"
 

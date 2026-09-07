@@ -69,6 +69,11 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     case blockedByDocker(holders: [SsdHolder], message: String, engineStopped: Bool)
     /// Unmounted. The "safe to unplug" state (§10, §11).
     case ejected(volume: String, stopped: [String])
+    /// `eject --all` returned (phase 22) — never a thrown failure for a
+    /// blocked disk, so this is what BOTH a clean sweep and a mixed one land
+    /// in: `results` names each root, `ejected` per-root telling the two
+    /// apart in one panel rather than picking one to show.
+    case ejectedAll(results: [EjectAllResult], stopped: [String])
     /// EJECT_NOT_APPLICABLE (phase 10): the root's path is a plain directory on the
     /// internal disk, not a removable volume. Kept apart from `failed` because
     /// it isn't one — nothing is wrong, there is simply nothing to eject, so the
@@ -81,10 +86,42 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     var isBlocked: Bool {
         switch self {
         case .blocked, .blockedByDocker: return true
+        case .ejectedAll(let results, _): return results.contains { !$0.ejected }
         default: return false
         }
     }
-    var isEjected: Bool { if case .ejected = self { return true }; return false }
+    var isEjected: Bool {
+        switch self {
+        case .ejected: return true
+        case .ejectedAll(let results, _): return results.allSatisfy { $0.ejected }
+        default: return false
+        }
+    }
+}
+
+/// The menu bar icon (§11, app-spec.md). ONE base glyph at every state —
+/// `shippingbox` — so the icon reads as the same app across the whole state
+/// machine. A previous version swapped in a wholly different pictogram per
+/// state (`eject.circle`, `externaldrive.badge.exclamationmark`), which is
+/// exactly what made the menu bar look like a different app from one moment
+/// to the next; state is now a small corner badge and a pulse on the SAME
+/// glyph, never a different one.
+nonisolated struct MenuBarIcon: Equatable {
+    /// Outline before the first status answer, filled once there is one —
+    /// the one difference that predates any state beyond "loading".
+    let filled: Bool
+    /// A small corner badge — nil when nothing needs flagging.
+    let badge: Badge?
+    /// A subtle pulse on the same glyph while an operation runs (§4) —
+    /// motion says "busy", not a shape swap.
+    let animated: Bool
+
+    nonisolated enum Badge: Equatable {
+        /// Degraded: the SSD is absent, or Docker isn't available.
+        case warning
+        /// Ejected: safe to unplug.
+        case done
+    }
 }
 
 @MainActor
@@ -100,13 +137,24 @@ final class BardolierStore: ObservableObject {
     /// The most recent failure, already reduced to a human sentence (§13).
     @Published private(set) var lastError: BardolierFailure?
     /// The result of the last action worth reporting — an assigned host port,
-    /// a kept volume, reclaimed bytes (§6, §9).
-    @Published private(set) var notice: String?
+    /// a kept volume, reclaimed bytes (§6, §9). Self-dismisses a few seconds
+    /// after being set: a success is a receipt, not something the user must
+    /// act on, and the small `×` was too fiddly a way to have to say "seen it".
+    @Published private(set) var notice: String? {
+        didSet {
+            noticeDismissTask?.cancel()
+            guard notice != nil else { return }
+            noticeDismissTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.notice = nil
+            }
+        }
+    }
     /// Why the last shell had to open by the lesser route (§7). Kept out of
-    /// `notice` because opening the menu IS a refresh, and a refresh wipes
-    /// `notice` — so the one sentence explaining a silent downgrade was gone
-    /// before it could be read. Same reasoning as `ejectPhase`: a state the
-    /// user acts on, not a receipt that flashes past.
+    /// `notice` because it self-dismisses (above) and a downgrade is a state
+    /// the user has to act on to actually fix (installing the terminal
+    /// bardolier prefers), not a receipt that is fine to have flashed past.
     @Published private(set) var shellDowngrade: String?
     /// What is running right now, or nil when idle. Drives the activity icon
     /// (§11) and disables conflicting actions (§4).
@@ -131,6 +179,10 @@ final class BardolierStore: ObservableObject {
 
     private let client: BardolierClient
     private var refreshTask: Task<Void, Never>?
+    /// Cancelled and replaced every time `notice` is set — the auto-dismiss
+    /// below — so a fast second notice doesn't get wiped early by the first
+    /// one's timer, and no timer outlives the notice it was set for.
+    private var noticeDismissTask: Task<Void, Never>?
 
     /// §4 asks for a refresh on every menu open; reopening the menu twice in a
     /// second shouldn't queue two subprocesses behind each other.
@@ -144,17 +196,17 @@ final class BardolierStore: ObservableObject {
 
     var isBusy: Bool { activity != nil }
 
-    /// Icon state, derived purely from the latest status/doctor (§11).
-    var iconSymbol: String {
-        if isBusy { return "shippingbox.circle" }
-        if ejected { return "eject.circle" }
-        guard let status else { return "shippingbox" }
-        // `externaldrive.badge.exclamationmark` rather than a shipping box with
-        // a badge: no such box symbol exists, and an icon macOS can't resolve
-        // draws as NOTHING — a blank menu bar for exactly the state §11 most
-        // needs to show. Symbol names are checked in test/phase6-done-check.sh.
-        if !status.ssd.mounted || !status.docker.available { return "externaldrive.badge.exclamationmark" }
-        return "shippingbox.fill"
+    /// Icon state, derived purely from the latest status/doctor (§11). Busy
+    /// wins over everything else — while a command is running, that is the
+    /// one thing worth the icon saying.
+    var menuBarIcon: MenuBarIcon {
+        if isBusy { return MenuBarIcon(filled: true, badge: nil, animated: true) }
+        if ejected { return MenuBarIcon(filled: true, badge: .done, animated: false) }
+        guard let status else { return MenuBarIcon(filled: false, badge: nil, animated: false) }
+        if !status.ssd.mounted || !status.docker.available {
+            return MenuBarIcon(filled: true, badge: .warning, animated: false)
+        }
+        return MenuBarIcon(filled: true, badge: nil, animated: false)
     }
 
     /// True when the environment can't do the thing the menu is offering —
@@ -505,8 +557,12 @@ final class BardolierStore: ObservableObject {
     ///
     /// `root` names which configured root to eject (phase 18) — `nil` defers
     /// to the CLI, which requires a name only when more than one configured
-    /// root is a mounted, removable volume.
-    func closeAllAndEject(root: String? = nil, stopDocker: Bool = false) async {
+    /// root is a mounted, removable volume. `all` (phase 22) ejects every
+    /// removable root instead, best-effort — mutually exclusive with `root`,
+    /// and Retry after a mixed result is this method again unchanged: a root
+    /// this call already ejected has unmounted itself out of the next call's
+    /// candidates, so a retry only ever revisits what is still stuck.
+    func closeAllAndEject(root: String? = nil, all: Bool = false, stopDocker: Bool = false) async {
         guard !isBusy else { return }
 
         // No configured root is a removable volume: `eject` would only ever
@@ -525,6 +581,39 @@ final class BardolierStore: ObservableObject {
         }
 
         ejectPhase = .working
+
+        if all {
+            let result = await perform(stopDocker ? "Stopping Docker, then ejecting every disk" : "Ejecting every disk") { client in
+                try await client.ejectAll(stopDocker: stopDocker)
+            }
+
+            if let result {
+                ejected = result.results.allSatisfy(\.ejected)
+                ejectPhase = .ejectedAll(results: result.results, stopped: result.stopped)
+                // A banner only for the clean sweep — a mixed result is
+                // rendered in the panel itself (who ejected, who is still
+                // held), the same reasoning that keeps a single blocked eject
+                // out of the banner (§10, §13).
+                if ejected {
+                    let names = result.results.map(\.root).joined(separator: ", ")
+                    let stopped = result.stopped.isEmpty ? "" : " Stopped \(result.stopped.joined(separator: ", "))."
+                    notice = "\(names) ejected — safe to unplug.\(stopped)"
+                }
+                return
+            }
+
+            guard let failure = lastError else {
+                ejectPhase = .ready
+                return
+            }
+            if failure.code == .ejectNotApplicable {
+                ejectPhase = .notApplicable(message: failure.failureReason ?? failure.errorDescription ?? "There’s nothing to eject.")
+                lastError = nil
+            } else {
+                ejectPhase = .failed(message: failure.errorDescription ?? "The eject didn’t happen.")
+            }
+            return
+        }
 
         let result = await perform(stopDocker ? "Stopping Docker, then ejecting" : "Ejecting") { client in
             try await client.eject(root: root, stopDocker: stopDocker)
@@ -629,6 +718,20 @@ final class BardolierStore: ObservableObject {
     var defaultRootRemovable: Bool? {
         guard let name = roots.first?.name else { return nil }
         return doctorRoots?.first { $0.name == name }?.removable
+    }
+
+    /// Configured roots that are actually eject candidates: mounted, and an
+    /// actually-removable volume — never a plain directory on the internal
+    /// disk (phase 22). What `EjectPanel`'s root picker offers, so it cannot
+    /// hand the user a choice that would only ever answer
+    /// EJECT_NOT_APPLICABLE. `doctor` not having answered yet reads as "none
+    /// known" rather than "all of them" here — the opposite default from
+    /// `anyRootRemovable` — because the picker offering a root that turns out
+    /// not to qualify is worse than the picker briefly offering none.
+    var removableRoots: [ConfiguredRoot] {
+        guard let doctorRoots else { return [] }
+        let names = Set(doctorRoots.filter { $0.removable == true }.map(\.name))
+        return roots.filter { names.contains($0.name) }
     }
 
     /// Register a root. Adding one means everything the menu shows might now

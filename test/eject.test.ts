@@ -19,7 +19,7 @@ import {
   type SsdDevice,
 } from '../cli/src/device.ts'
 import { runNew } from '../cli/src/commands/new.ts'
-import { runDownAll, runEject } from '../cli/src/commands/ssd.ts'
+import { runDownAll, runEject, runEjectAll } from '../cli/src/commands/ssd.ts'
 import { containingVolume } from '../cli/src/projects.ts'
 import type { Context } from '../cli/src/context.ts'
 import {
@@ -36,9 +36,11 @@ import {
   stubDocker,
   type StubDocker,
   stubWait,
+  tempDirs,
 } from './helpers.ts'
 
 const sandbox = sandboxes()
+const tempDir = tempDirs('bardolier-eject-all-')
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 
@@ -943,5 +945,79 @@ describe('the eject flow the menu drives (app-spec.md §10)', () => {
   test('there is no way to force an unmount, so the menu cannot offer one', () => {
     const source = readFileSync(repo('cli/src/commands/ssd.ts'), 'utf8')
     assert.doesNotMatch(source, /'--force'|"--force"/, 'eject must not grow a force flag for the app to reach for')
+  })
+})
+
+// ── eject --all (cli-spec.md §6, phase 22) ────────────────────────────────────
+describe('eject --all (cli-spec.md §6, phase 22)', () => {
+  test('zero removable roots is EJECT_NOT_APPLICABLE, before anything is stopped', async () => {
+    const box = sandbox()
+    const docker = stubDocker({ running: ['bardolier-alpha'] })
+    const device = stubDevice([], { removable: false })
+    const ctx = makeContext(box, docker, { device })
+    await project(ctx, 'alpha')
+
+    await assert.rejects(
+      () => runEjectAll(ctx),
+      (error: unknown) => {
+        assert.ok(error instanceof BardolierError)
+        assert.equal(error.code, 'EJECT_NOT_APPLICABLE')
+        return true
+      },
+    )
+    assert.deepEqual(docker.calls.filter((call) => call.kind === 'down'), [], 'down-all must not run when nothing qualifies')
+  })
+
+  test('every candidate clean: both roots eject, in configured order', async () => {
+    const box = sandbox()
+    const rootB = tempDir()
+    box.writeConfig({ roots: [{ name: 'a', path: box.root }, { name: 'b', path: rootB }] })
+    const device = stubDevice([], { removable: true })
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '' }, device })
+
+    const output = await runEjectAll(ctx)
+    assert.deepEqual(output.results.map((r) => r.root), ['a', 'b'])
+    assert.ok(output.results.every((r) => r.ejected === true && r.holders.length === 0))
+    assert.equal(device.ejected.length, 2)
+    assert.ok(validate('eject-all', output).valid)
+  })
+
+  test('one root blocked does not stop the other from being attempted (best-effort)', async () => {
+    const box = sandbox()
+    const rootB = tempDir()
+    box.writeConfig({ roots: [{ name: 'a', path: box.root }, { name: 'b', path: rootB }] })
+
+    // `containingVolume` resolves both temp dirs to the same real volume
+    // (disk-done-check.sh notes the same fiction), so the blocked disk is told
+    // apart by CALL ORDER — `runEjectAll` visits candidates in configured
+    // order (a, then b) — rather than by which mount string it was asked about.
+    let holderCalls = 0
+    const ejected: string[] = []
+    const device: SsdDevice = {
+      async removable() {
+        return true
+      },
+      async holders() {
+        holderCalls += 1
+        return holderCalls === 1 ? [holder({ pid: 501, command: 'Xcode' })] : []
+      },
+      async runtimeHolders() {
+        return []
+      },
+      async eject(mountPoint) {
+        ejected.push(mountPoint)
+      },
+    }
+    const ctx = makeContext(box, stubDocker(), { env: { BARDOLIER_ROOT: '' }, device })
+
+    const output = await runEjectAll(ctx)
+    assert.equal(output.results.length, 2)
+    assert.equal(output.results[0]?.root, 'a')
+    assert.equal(output.results[0]?.ejected, false)
+    assert.equal(output.results[0]?.holders[0]?.command, 'Xcode')
+    assert.equal(output.results[1]?.root, 'b')
+    assert.equal(output.results[1]?.ejected, true)
+    assert.deepEqual(ejected, [output.results[1]?.volume])
+    assert.ok(validate('eject-all', output).valid, 'a mixed batch still validates as one payload')
   })
 })

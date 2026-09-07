@@ -66,3 +66,26 @@ export type EjectOutput = {
   /** The configured root's name that was ejected. Additive since phase 18. */
   root?: string
 }
+
+/** One root's outcome within `eject --all` (phase 22) — never thrown, so a blocked disk cannot hide a clean one. */
+export type EjectAllResult = {
+  /** The configured root's name. */
+  root: string
+  /** The mount point attempted, e.g. `/Volumes/ssd`. */
+  volume: string
+  ejected: boolean
+  /** Who still held it, when `ejected` is false. Empty on success. */
+  holders: EjectHolder[]
+  /** True when the Docker engine had to be stopped for this volume specifically. */
+  docker_stopped: boolean
+  /** The refusal's own sentence, when `ejected` is false — EJECT_BLOCKED's message, verbatim. */
+  message?: string
+}
+
+/** `eject --all`: down-all once, then every mounted removable root, best-effort (§6). */
+export type EjectAllOutput = {
+  /** What `down-all` stopped on the way, sorted. */
+  stopped: string[]
+  /** One entry per candidate root, in configured order. */
+  results: EjectAllResult[]
+}

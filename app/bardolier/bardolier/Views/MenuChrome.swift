@@ -168,25 +168,67 @@ struct PanelHeader: View {
     }
 }
 
+/// Every banner's `×`. A `9pt` glyph with no padding of its own was a hard
+/// thing to land a click on; the icon stays small but the tappable area
+/// around it doesn't.
+struct BannerDismissButton: View {
+    var dismiss: () -> Void
+
+    var body: some View {
+        Button(action: dismiss) {
+            Image(systemName: "xmark").font(.system(size: 9))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+    }
+}
+
+/// Shared shell for the three banners below. The surface is neutral — never a
+/// large saturated fill — and state lives in the icon plus this thin leading
+/// stripe instead: a `MenuBarExtra` popover's backdrop is a vibrant, blurred
+/// material, and a big block of translucent colour on top of that can bleed
+/// or read far more saturated than the number in `.opacity()` suggests,
+/// making a single banner look like it tinted the whole menu.
+struct BannerShell<Content: View>: View {
+    var accent: Color
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(8)
+            .padding(.leading, 4)
+            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(accent)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+            }
+            .padding(.horizontal, 8)
+    }
+}
+
 /// The last action's result — an assigned host port, a reclaimed size (§6, §9).
+/// Self-dismisses on its own (`BardolierStore.notice`); the `×` is for
+/// dismissing it sooner, not the only way it ever goes away.
 struct NoticeBanner: View {
     var text: String
     var dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text(text).font(.caption).textSelection(.enabled)
-            Spacer(minLength: 0)
-            Button(action: dismiss) {
-                Image(systemName: "xmark").font(.system(size: 9))
+        BannerShell(accent: .green) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                // Without this, a longer notice truncates to one line and a
+                // click on the truncated text pops the AppKit "expand" tooltip
+                // — a floating overlay that ignores the popover's own bounds.
+                Text(text).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                BannerDismissButton(dismiss: dismiss)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.green.opacity(0.12)))
-        .padding(.horizontal, 8)
     }
 }
 
@@ -198,19 +240,14 @@ struct WarningBanner: View {
     var dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-            Text(text).font(.caption).textSelection(.enabled)
-            Spacer(minLength: 0)
-            Button(action: dismiss) {
-                Image(systemName: "xmark").font(.system(size: 9))
+        BannerShell(accent: .yellow) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                Text(text).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                BannerDismissButton(dismiss: dismiss)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.yellow.opacity(0.12)))
-        .padding(.horizontal, 8)
     }
 }
 
@@ -222,45 +259,41 @@ struct ErrorBanner: View {
     var dismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                Text(failure.errorDescription ?? "Something went wrong.")
-                    .font(.caption.weight(.medium))
-                    .textSelection(.enabled)
-                Spacer(minLength: 0)
-                Button(action: dismiss) {
-                    Image(systemName: "xmark").font(.system(size: 9))
+        BannerShell(accent: .orange) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text(failure.errorDescription ?? "Something went wrong.")
+                        .font(.caption.weight(.medium))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    BannerDismissButton(dismiss: dismiss)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
 
-            // The CLI's own message, when it says more than the short one.
-            if let reason = failure.failureReason, reason != failure.errorDescription {
-                Text(reason)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
+                // The CLI's own message, when it says more than the short one.
+                if let reason = failure.failureReason, reason != failure.errorDescription {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
 
-            // EJECT_BLOCKED's holders (§10): who to quit, by name. The same
-            // rows the eject panel shows, so a holder reads identically
-            // wherever it surfaces.
-            if !failure.holders.isEmpty {
-                HolderList(holders: failure.holders)
-            }
+                // EJECT_BLOCKED's holders (§10): who to quit, by name. The same
+                // rows the eject panel shows, so a holder reads identically
+                // wherever it surfaces.
+                if !failure.holders.isEmpty {
+                    HolderList(holders: failure.holders)
+                }
 
-            if let suggestion = failure.recoverySuggestion {
-                Text(suggestion)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                if let suggestion = failure.recoverySuggestion {
+                    Text(suggestion)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.12)))
-        .padding(.horizontal, 8)
     }
 }
 

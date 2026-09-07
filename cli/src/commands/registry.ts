@@ -38,7 +38,7 @@ import {
   renderVolumeRemove,
   runVolumeRemove,
 } from './volumes.ts'
-import { renderDownAll, renderEject, runDownAll, runEject } from './ssd.ts'
+import { renderDownAll, renderEject, renderEjectAll, runDownAll, runEject, runEjectAll } from './ssd.ts'
 import {
   collectServiceList,
   renderServiceAdd,
@@ -519,10 +519,14 @@ export const COMMANDS: readonly CommandNode[] = [
   {
     path: ['eject'],
     group: 'Lifecycle / SSD',
-    usage: 'eject [<root>] [--stop-docker]',
+    usage: 'eject [<root> | --all] [--stop-docker]',
     summary:
-      'down-all, check host holders via lsof, then eject a root\'s volume. Never forces. The root name is required unless exactly one configured root is a removable volume.',
+      'down-all, check host holders via lsof, then eject a root\'s volume. Never forces. The root name is required unless exactly one configured root is a removable volume, or --all is given to eject every removable root, best-effort.',
     flags: [
+      {
+        name: '--all',
+        description: 'Eject every mounted, removable root instead of exactly one. Mutually exclusive with <root>.',
+      },
       {
         name: '--stop-docker',
         description: "Stop the Docker engine without asking, if its VM is what holds the volume.",
@@ -531,8 +535,16 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['SSD_NOT_MOUNTED', 'EJECT_BLOCKED', 'EJECT_NOT_APPLICABLE', 'INVALID_ARGUMENT', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const root = atMostOneArg(inv, 'eject', '<root>')
+      const all = boolFlag(inv, '--all')
+      const stopDocker = boolFlag(inv, '--stop-docker')
+      if (all && root !== null) {
+        throw new BardolierError('INVALID_ARGUMENT', '`bardolier eject` takes either <root> or --all, not both.')
+      }
+      if (all) {
+        return output(await runEjectAll(createContext(), { stopDocker }), renderEjectAll)
+      }
       return output(
-        await runEject(createContext(), { ...(root !== null ? { root } : {}), stopDocker: boolFlag(inv, '--stop-docker') }),
+        await runEject(createContext(), { ...(root !== null ? { root } : {}), stopDocker }),
         renderEject,
       )
     },

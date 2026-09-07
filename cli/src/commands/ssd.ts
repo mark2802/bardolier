@@ -14,7 +14,12 @@
  * an explicit `[root]` argument, or — when only one configured root turns out
  * to be an actually-removable, mounted volume — that one implicitly. Anything
  * else (none, or more than one, removable) is INVALID_ARGUMENT naming every
- * configured root, because there is no safe guess among disks.
+ * configured root, because there is no safe guess among disks — unless the
+ * caller says `--all` (phase 22), which drops the guess entirely and unmounts
+ * every removable candidate, best-effort: one disk still held by an Xcode
+ * does not cost the user an eject on a second, clean one. `--all` and
+ * `[root]` are mutually exclusive; a plain internal-disk root is never a
+ * candidate for either.
  *
  * **It never forces.** A held volume is EJECT_BLOCKED carrying `holders`, and
  * the user decides what to close (CLAUDE.md: safety over convenience). Forcing
@@ -49,7 +54,7 @@ import { devContainerName, isBardolierContainer, serviceContainerName } from '..
 import { attachedKeys } from '../compose.ts'
 import { discoverProjects, probeRoot } from '../projects.ts'
 import { observeState, runningNames } from '../workspace.ts'
-import type { DownAllOutput, DownAllProject, EjectHolder, EjectOutput } from '../model/ssd.ts'
+import type { DownAllOutput, DownAllProject, EjectAllOutput, EjectAllResult, EjectHolder, EjectOutput } from '../model/ssd.ts'
 import { runDown } from './down.ts'
 
 /** Every container name the discovered manifests account for. */
@@ -132,6 +137,25 @@ export type EjectOptions = {
   readonly root?: string
 }
 
+/** A root that is actually a candidate for `diskutil eject`: mounted, and removable. */
+type EjectCandidate = { root: RootConfig; volume: string }
+
+/**
+ * Every configured root that is currently a mounted, removable volume — a
+ * plain internal-disk root is never a candidate, whether picked implicitly
+ * (one root) or gathered for `--all` (every root).
+ */
+async function removableCandidates(ctx: Context): Promise<EjectCandidate[]> {
+  const candidates: EjectCandidate[] = []
+  for (const root of ctx.config.roots) {
+    const probe = probeRoot(root)
+    if (probe.mounted && probe.volume && (await ctx.device.removable(probe.volume))) {
+      candidates.push({ root, volume: probe.volume })
+    }
+  }
+  return candidates
+}
+
 /**
  * Which root `eject` targets. An explicit name wins; otherwise a single
  * configured root is unambiguous outright, and among several the only safe
@@ -154,16 +178,12 @@ async function pickEjectTarget(ctx: Context, name: string | undefined): Promise<
   }
   if (roots.length === 1) return roots[0]!
 
-  const removable: RootConfig[] = []
-  for (const root of roots) {
-    const probe = probeRoot(root)
-    if (probe.mounted && probe.volume && (await ctx.device.removable(probe.volume))) removable.push(root)
-  }
-  if (removable.length === 1) return removable[0]!
+  const removable = await removableCandidates(ctx)
+  if (removable.length === 1) return removable[0]!.root
 
   throw new BardolierError(
     'INVALID_ARGUMENT',
-    `More than one root is configured; say which to eject: ${roots.map((r) => r.name).join(', ')}.`,
+    `More than one root is configured; say which to eject (or pass --all): ${roots.map((r) => r.name).join(', ')}.`,
   )
 }
 
@@ -180,6 +200,35 @@ function toHolders(holders: readonly { pid: number; command: string; user: strin
 function detailHolders(error: BardolierError): EjectHolder[] {
   const holders = error.details?.holders
   return Array.isArray(holders) ? (holders as EjectHolder[]) : []
+}
+
+/**
+ * Unmount one volume whose containers are already down: the holder check,
+ * then `diskutil eject`, then — only if the runtime itself is what refused —
+ * the stop-the-engine dance. Shared by the single-root path and `--all`, both
+ * of which have already called `down-all` before reaching here.
+ */
+async function ejectMountedVolume(ctx: Context, volume: string, options: EjectOptions): Promise<{ dockerStopped: boolean }> {
+  const holders: EjectHolder[] = toHolders(await ctx.device.holders(volume))
+
+  if (holders.length > 0) {
+    throw new BardolierError(
+      'EJECT_BLOCKED',
+      `${volume} is still held by ${holders.length} process(es): ${holders.map(describeHolder).join('; ')}. Close them and try again — bardolier will not force an unmount.`,
+      { holders },
+    )
+  }
+
+  try {
+    await ctx.device.eject(volume)
+  } catch (error) {
+    if (!(error instanceof BardolierError) || error.code !== 'EJECT_BLOCKED') throw error
+    const held = await stopEngineFor(ctx, volume, error, options)
+    if (held === null) throw error
+    await ejectAfterEngineStop(ctx, volume, held)
+    return { dockerStopped: true }
+  }
+  return { dockerStopped: false }
 }
 
 export async function runEject(ctx: Context, options: EjectOptions = {}): Promise<EjectOutput> {
@@ -201,29 +250,49 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
   }
 
   const down = await runDownAll(ctx)
+  const { dockerStopped } = await ejectMountedVolume(ctx, ssd.volume, options)
 
-  const holders: EjectHolder[] = toHolders(await ctx.device.holders(ssd.volume))
+  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [], docker_stopped: dockerStopped, root: target.name }
+}
 
-  if (holders.length > 0) {
+/**
+ * `eject --all`: every mounted, removable root, best-effort. `down-all` runs
+ * once up front — it is global already — and then each candidate is unmounted
+ * independently: one disk still held by an Xcode is that disk's problem alone,
+ * and reporting it must not cost the user an eject on a second, clean one.
+ * Nothing here is forced; a blocked disk comes back in `results` naming why,
+ * the same way a single blocked `eject` would, just not thrown.
+ */
+export async function runEjectAll(ctx: Context, options: EjectOptions = {}): Promise<EjectAllOutput> {
+  const candidates = await removableCandidates(ctx)
+  if (candidates.length === 0) {
     throw new BardolierError(
-      'EJECT_BLOCKED',
-      `${ssd.volume} is still held by ${holders.length} process(es): ${holders.map(describeHolder).join('; ')}. Close them and try again — bardolier will not force an unmount.`,
-      { holders },
+      'EJECT_NOT_APPLICABLE',
+      'No configured root is a mounted, removable volume, so there is nothing to eject. Use `bardolier down-all` to stop every project instead.',
     )
   }
 
-  let dockerStopped = false
-  try {
-    await ctx.device.eject(ssd.volume)
-  } catch (error) {
-    if (!(error instanceof BardolierError) || error.code !== 'EJECT_BLOCKED') throw error
-    const held = await stopEngineFor(ctx, ssd.volume, error, options)
-    if (held === null) throw error
-    dockerStopped = true
-    await ejectAfterEngineStop(ctx, ssd.volume, held)
+  const down = await runDownAll(ctx)
+
+  const results: EjectAllResult[] = []
+  for (const { root, volume } of candidates) {
+    try {
+      const { dockerStopped } = await ejectMountedVolume(ctx, volume, options)
+      results.push({ root: root.name, volume, ejected: true, holders: [], docker_stopped: dockerStopped })
+    } catch (error) {
+      if (!(error instanceof BardolierError)) throw error
+      results.push({
+        root: root.name,
+        volume,
+        ejected: false,
+        holders: detailHolders(error),
+        docker_stopped: false,
+        message: error.message,
+      })
+    }
   }
 
-  return { volume: ssd.volume, ejected: true, stopped: down.stopped, holders: [], docker_stopped: dockerStopped, root: target.name }
+  return { stopped: down.stopped, results }
 }
 
 /**
@@ -405,5 +474,20 @@ export function renderEject(output: EjectOutput): string[] {
   if (output.stopped.length > 0) lines.push(`Stopped ${output.stopped.join(', ')}.`)
   lines.push(`Ejected ${output.volume} (root: ${output.root}). Safe to unplug.`)
   if (output.docker_stopped) lines.push('  Stopped the Docker engine to release the volume — `docker desktop start` when you need it.')
+  return lines
+}
+
+function renderEjectAllResult(result: EjectAllResult): string {
+  if (result.ejected) return `  ${result.root}: ejected ${result.volume}. Safe to unplug.`
+  return `  ${result.root}: still held — ${result.message ?? 'blocked'}`
+}
+
+export function renderEjectAll(output: EjectAllOutput): string[] {
+  const lines: string[] = []
+  if (output.stopped.length > 0) lines.push(`Stopped ${output.stopped.join(', ')}.`)
+  lines.push(...output.results.map(renderEjectAllResult))
+  if (output.results.some((r) => r.docker_stopped)) {
+    lines.push('  Stopped the Docker engine to release a volume — `docker desktop start` when you need it.')
+  }
   return lines
 }

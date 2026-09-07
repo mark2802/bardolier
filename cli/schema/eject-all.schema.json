@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/eject-all.schema.json",
+  "title": "bardolier eject --all output",
+  "description": "down-all once, then every mounted removable root, best-effort. cli-spec.md §6 (Lifecycle / SSD). A blocked disk never throws here — it is one entry in `results` with `ejected: false` and its own `holders`, so a stuck disk cannot hide a clean one.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stopped", "results"],
+  "properties": {
+    "stopped": {
+      "type": "array",
+      "description": "Projects down-all stopped on the way, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "results": {
+      "type": "array",
+      "description": "One entry per candidate root, in configured order.",
+      "items": { "$ref": "#/$defs/result" }
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "volume", "ejected", "holders", "docker_stopped"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1, "description": "The configured root's name." },
+        "volume": { "type": "string", "minLength": 1, "description": "The mount point attempted, e.g. /Volumes/ssd." },
+        "ejected": { "type": "boolean" },
+        "holders": {
+          "type": "array",
+          "description": "Who still held it, when ejected is false. Empty on success.",
+          "items": { "$ref": "#/$defs/holder" }
+        },
+        "docker_stopped": { "type": "boolean", "description": "True when the Docker engine had to be stopped for this volume specifically." },
+        "message": { "type": "string", "description": "The refusal's own sentence, when ejected is false." }
+      }
+    },
+    "holder": {
+      "type": "object",
+      "description": "A process holding files open on the SSD, as lsof reports it — the same shape eject.schema.json uses.",
+      "additionalProperties": false,
+      "required": ["pid", "command", "user", "paths"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 0 },
+        "command": { "type": "string", "minLength": 1 },
+        "user": { "type": ["string", "null"] },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
