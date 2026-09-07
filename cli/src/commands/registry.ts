@@ -28,6 +28,7 @@ import { collectCatalogue, renderCatalogue } from './catalogue.ts'
 import { collectConfigGet, renderConfigGet, renderConfigSet, runConfigSet } from './config.ts'
 import { renderNew, runNew } from './new.ts'
 import { renderClone, runClone } from './clone.ts'
+import { renderMove, runMove } from './move.ts'
 import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
 import { renderDelete, runDelete } from './delete.ts'
@@ -230,6 +231,28 @@ export const COMMANDS: readonly CommandNode[] = [
         }),
         renderClone,
       )
+    },
+  },
+  {
+    path: ['move'],
+    group: 'Projects',
+    usage: 'move <name> --root <target>',
+    summary: 'Move a project to another configured root — its ports and everything inside stay unchanged.',
+    flags: [{ name: '--root', arg: '<name>', description: 'The configured root to move the project onto. Required.' }],
+    errors: [
+      'SSD_NOT_MOUNTED',
+      'PROJECT_NOT_FOUND',
+      'PROJECT_AMBIGUOUS',
+      'PROJECT_EXISTS',
+      'PROJECT_RUNNING',
+      'ROOT_UNREADABLE',
+      'INSUFFICIENT_SPACE',
+      'INVALID_ARGUMENT',
+    ],
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('move'), 1)
+      const root = stringFlag(inv, '--root')
+      return output(await runMove(createContext(), { name, root }), renderMove)
     },
   },
   {

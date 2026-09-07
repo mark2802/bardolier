@@ -327,5 +327,96 @@ else
 fi
 $BARDOLIER delete humantest --force >/dev/null
 
+# ── 8. move (phase 21) ──────────────────────────────────────────────────────
+head "8. \`move\` relocates a project between roots, unchanged"
+
+# From here on the roots come from the config file the CLI writes (§8), the
+# same switch roots-done-check makes before its own multi-root section. HOME
+# is faked only for that switch, then restored — a bogus HOME hides `docker
+# compose` from the docker CLI, and this section still needs a real daemon.
+ORIGINAL_HOME="$HOME"
+unset BARDOLIER_ROOT
+mkdir -p "$TMP/home-move"
+export HOME="$TMP/home-move"
+
+$BARDOLIER root add "$MOUNTED" --name a --json >/dev/null || bad "root add a exited non-zero"
+DEFAULT_NAME="$(json_value "$($BARDOLIER root list --json)" "d.roots[0].name")"
+if [ "$DEFAULT_NAME" != "a" ]; then
+  $BARDOLIER root remove "$DEFAULT_NAME" --json >/dev/null || bad "root remove of the materialised default exited non-zero"
+fi
+ROOT_B="$TMP/ssd2/claude-projects"
+mkdir -p "$ROOT_B"
+$BARDOLIER root add "$ROOT_B" --name b --json >/dev/null || bad "root add b exited non-zero"
+export HOME="$ORIGINAL_HOME"
+
+track bardolier-mover
+$BARDOLIER new mover --archetype web --services postgres --json >/dev/null || bad "could not create the move source"
+echo 'repo file' > "$MOUNTED/mover/work/README.md"
+echo 'service state' > "$MOUNTED/mover/data/postgres/DATA"
+
+BEFORE_MANIFEST="$(shasum "$MOUNTED/mover/project.yml" | cut -d' ' -f1)"
+BEFORE_COMPOSE="$(shasum "$MOUNTED/mover/docker-compose.yml" | cut -d' ' -f1)"
+BEFORE_APP_PORT="$(manifest_field mover 'm.app_port')"
+BEFORE_PG_PORT="$(manifest_field mover 'm.services.postgres.host_port')"
+
+MOVE="$($BARDOLIER move mover --root b --json)" || bad "move exited non-zero"
+schema_assert move "$MOVE" && ok "move --json validates against move.schema.json" || bad "move output does not match its schema"
+json_assert "$MOVE" 'd.moved === true && d.mode === "rename" && d.bytes > 0 && d.from.root === "a" && d.to.root === "b"' \
+  && ok "move reports what it did" || bad "move misreported the transfer: $MOVE"
+
+[ ! -e "$MOUNTED/mover" ] && ok "the source directory is gone" || bad "the source directory survived the move"
+[ -f "$ROOT_B/mover/project.yml" ] && ok "the project landed at the target root" || bad "the project did not land at $ROOT_B/mover"
+[ "$(cat "$ROOT_B/mover/work/README.md")" = 'repo file' ] && ok "work/ survived the move" || bad "work/ did not survive the move"
+[ "$(cat "$ROOT_B/mover/data/postgres/DATA")" = 'service state' ] && ok "data/postgres/ survived the move" || bad "service data did not survive the move"
+
+[ "$(shasum "$ROOT_B/mover/project.yml" | cut -d' ' -f1)" = "$BEFORE_MANIFEST" ] \
+  && ok "project.yml is byte-identical after the move" || bad "project.yml changed during the move"
+[ "$(shasum "$ROOT_B/mover/docker-compose.yml" | cut -d' ' -f1)" = "$BEFORE_COMPOSE" ] \
+  && ok "docker-compose.yml is byte-identical after the move" || bad "docker-compose.yml changed during the move"
+
+AFTER_APP_PORT="$(manifest_field mover 'm.app_port' "$ROOT_B")"
+AFTER_PG_PORT="$(manifest_field mover 'm.services.postgres.host_port' "$ROOT_B")"
+[ "$AFTER_APP_PORT" = "$BEFORE_APP_PORT" ] && [ "$AFTER_PG_PORT" = "$BEFORE_PG_PORT" ] \
+  && ok "app_port and service host ports are unchanged (§5, invariant 4)" || bad "a port changed across the move"
+
+json_assert "$($BARDOLIER list --json)" 'd.projects.find((p) => p.name === "mover")?.root === "b"' \
+  && ok "list reports mover under its new root" || bad "list still reports mover under the old root"
+
+AGAIN="$($BARDOLIER move mover --root b --json)" || bad "a second move exited non-zero"
+json_assert "$AGAIN" 'd.moved === false && d.bytes === 0' \
+  && ok "moving to the root it already occupies is an idempotent no-op" || bad "the no-op move reported something happened"
+[ -f "$ROOT_B/mover/project.yml" ] && ok "the no-op left the project exactly where it was" || bad "the no-op moved the project"
+
+NOARG="$($BARDOLIER move mover --json 2>/dev/null || true)"
+json_assert "$NOARG" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
+  && ok "move without --root is INVALID_ARGUMENT" || bad "move without --root did not fail correctly"
+
+UNKNOWN="$($BARDOLIER move mover --root nowhere --json 2>/dev/null || true)"
+json_assert "$UNKNOWN" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
+  && ok "an unknown --root is INVALID_ARGUMENT" || bad "an unknown root did not fail correctly"
+
+mkdir -p "$TMP/squatter/mover"
+$BARDOLIER root add "$TMP/squatter" --name c --json >/dev/null || bad "root add c exited non-zero"
+EXISTS="$($BARDOLIER move mover --root c --json 2>/dev/null || true)"
+json_assert "$EXISTS" 'd.error && d.error.code === "PROJECT_EXISTS"' \
+  && ok "an occupied target name is PROJECT_EXISTS" || bad "an occupied target did not fail PROJECT_EXISTS"
+$BARDOLIER root remove c --json >/dev/null || bad "root remove c exited non-zero"
+
+if [ "$DOCKER_OK" = "1" ]; then
+  $BARDOLIER up mover --json >/dev/null || bad "up mover failed"
+  RUNNING="$($BARDOLIER move mover --root a --json 2>/dev/null || true)"
+  json_assert "$RUNNING" 'd.error && d.error.code === "PROJECT_RUNNING"' \
+    && ok "a running project refuses PROJECT_RUNNING" || bad "a running project was moved anyway"
+  [ -f "$ROOT_B/mover/project.yml" ] && ok "the refused move left the project where it was" || bad "the refused move relocated the project"
+
+  $BARDOLIER down mover --json >/dev/null || bad "down mover failed"
+  $BARDOLIER move mover --root a --json >/dev/null || bad "move back to root a failed"
+  $BARDOLIER up mover --json >/dev/null || bad "up mover (after moving back) failed"
+  json_assert "$($BARDOLIER status mover --json)" "d.projects[0].state === 'running' && d.projects[0].app_port === $BEFORE_APP_PORT" \
+    && ok "down → move → up: the project runs again on exactly the same app_port" || bad "the app_port changed across a move"
+fi
+
+$BARDOLIER delete mover --force --purge --json >/dev/null || bad "could not clean up mover"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 summary "Lifecycle"

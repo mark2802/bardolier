@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/move.schema.json",
+  "title": "bardolier move output",
+  "description": "What `bardolier move` did — a project's ports never change, so this is reported by the manifest's new location, never by rewriting anything inside the directory. cli-spec.md §6 (Projects), phase 21. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "moved", "from", "to", "bytes", "mode"],
+  "properties": {
+    "project": { "type": "string", "minLength": 1 },
+    "moved": {
+      "type": "boolean",
+      "description": "False when the project was already under the target root — `move` is idempotent (§2)."
+    },
+    "from": { "$ref": "#/$defs/location" },
+    "to": { "$ref": "#/$defs/location" },
+    "bytes": {
+      "type": "integer",
+      "description": "The project's size on disk, reported in both modes; 0 for a no-op.",
+      "minimum": 0
+    },
+    "mode": {
+      "type": "string",
+      "description": "`rename` on one filesystem (also reported for the no-op); `copy` when `EXDEV` forced a staged copy.",
+      "enum": ["rename", "copy"]
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "dir"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "dir": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

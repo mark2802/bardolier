@@ -23,6 +23,7 @@ import { cpSync, mkdirSync, renameSync, rmSync, statfsSync } from 'node:fs'
 import { join } from 'node:path'
 import { BardolierError } from './errors.ts'
 import { directorySize } from './layout.ts'
+import type { MoveMode } from './model/lifecycle.ts'
 import { formatBytes } from './volumes.ts'
 
 /** One directory to copy: an absolute `from`, and its name inside the staged project. */
@@ -111,4 +112,66 @@ export function stageProject(
     rmSync(staging, { recursive: true, force: true })
     throw cause
   }
+}
+
+/** Renaming a directory in place — the seam a test replaces to force `EXDEV`. */
+export type Rename = (from: string, to: string) => void
+export const renameDir: Rename = (from, to) => renameSync(from, to)
+
+export type Relocated = {
+  readonly dir: string
+  readonly bytes: number
+  readonly mode: MoveMode
+}
+
+/** Seams `move` (phase 21) can replace in a test — same idea as `stageProject`'s `populate`. */
+export type Relocation = {
+  readonly rename?: Rename
+  readonly free?: FreeSpace
+  readonly copy?: typeof copyInto
+}
+
+/**
+ * Move `sourceDir` to `<targetRoot>/<name>`.
+ *
+ * `rename(2)` first: two roots on one filesystem move instantly and
+ * atomically, with no window in which the project exists twice. Only `EXDEV`
+ * — a genuine cross-device move — falls back to the staged copy; anything
+ * else `rename` throws propagates as-is.
+ *
+ * The whole directory moves, not just §3's four folders: `project.yml`,
+ * `docker-compose.yml`, `.bardolier/`, any stray file the user left. Nothing
+ * inside is rewritten, so `to: '.'` copies the source's contents straight
+ * into the staging directory `stageProject` already made.
+ *
+ * The source is removed LAST, after the copy is complete and in place. If
+ * that removal itself fails, the copy has already landed — the move
+ * succeeded and the old directory is now a leftover the caller must say so
+ * about, not a reason to undo a finished copy.
+ */
+export function relocate(
+  sourceDir: string,
+  targetRoot: string,
+  name: string,
+  seams: Relocation = {},
+): Relocated {
+  const rename = seams.rename ?? renameDir
+  const bytes = directorySize(sourceDir)
+  const dir = join(targetRoot, name)
+
+  try {
+    rename(sourceDir, dir)
+    return { dir, bytes, mode: 'rename' }
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'EXDEV') throw cause
+  }
+
+  const copy = seams.copy ?? copyInto
+  requireSpace(targetRoot, bytes, seams.free)
+  const staged = stageProject(targetRoot, name, (staging) => {
+    copy(staging, [{ from: sourceDir, to: '.' }])
+    return bytes
+  })
+  rmSync(sourceDir, { recursive: true, force: true })
+  return { dir: staged.dir, bytes: staged.bytes, mode: 'copy' }
 }

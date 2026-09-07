@@ -85,6 +85,30 @@ export type UpOutput = {
   extra_ports?: AttachedExtraPort[]
 }
 
+export type MoveMode = 'rename' | 'copy'
+
+export type MoveLocation = {
+  root: string
+  dir: string
+}
+
+/**
+ * What `move` did (phase 21). A project's ports never change — moving it is
+ * reported by the manifest's new location, never by rewriting anything inside
+ * the directory.
+ */
+export type MoveOutput = {
+  project: string
+  /** False when the project was already under the target root — `move` is idempotent (§2). */
+  moved: boolean
+  from: MoveLocation
+  to: MoveLocation
+  /** The project's size on disk, reported in both modes; 0 for a no-op. */
+  bytes: number
+  /** `rename` on one filesystem; `copy` when `EXDEV` forced a staged copy. */
+  mode: MoveMode
+}
+
 export type DownOutput = {
   project: string
   /**

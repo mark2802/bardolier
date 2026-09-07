@@ -20,6 +20,7 @@ export const SCHEMA_NAMES = [
   'list',
   'new',
   'clone',
+  'move',
   'up',
   'down',
   'delete',

@@ -540,6 +540,7 @@ describe('command surface (cli-spec.md §6)', () => {
     'down-all',
     'eject',
     'list',
+    'move',
     'new',
     'port add',
     'port list',

@@ -272,6 +272,20 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   the source is ever modified. Errors: `PROJECT_NOT_FOUND`, `PROJECT_EXISTS`
   (in any root), `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`, `ROOT_UNREADABLE`,
   `PORT_UNAVAILABLE`, `INSUFFICIENT_SPACE`, `INVALID_ARGUMENT`.
+- `bardolier move <name> --root <target>` — relocate a project to another
+  configured root. `--root` is required; naming the root the project already
+  occupies is an idempotent no-op (`moved: false`), even against a running
+  project — nothing moves, so nothing needs stopping. Otherwise the project
+  must be stopped (`PROJECT_RUNNING`): moving the bind sources out from under
+  live containers leaves them running against a directory that no longer
+  exists. Two roots on one filesystem move with `rename(2)` — instant, atomic,
+  no window where the project exists twice; across devices (`EXDEV`) falls back
+  to the staged copy `<target>/.<name>.incoming` (as `clone`), removing the
+  source only once the copy is complete. Nothing inside the directory is
+  rewritten — not the manifest, not the compose file — so ports never change
+  (§5). Errors: `PROJECT_NOT_FOUND`, `PROJECT_AMBIGUOUS`, `PROJECT_EXISTS` (the
+  target already holds a directory by that name), `PROJECT_RUNNING`,
+  `ROOT_UNREADABLE`, `INSUFFICIENT_SPACE`, `INVALID_ARGUMENT`.
 - `bardolier list` — array of projects with archetype + running state + root
 
 - `bardolier status [<name>]` — full status object(s) (see §7). No arg = all.
@@ -533,7 +547,8 @@ Schema stability is the contract. Additive changes only once the app ships.
   never builds one itself.
 - **Four RELATIVE binds on the dev container** — resolved against the compose
   file's own directory, so the file holds no absolute path and the project stays
-  a self-contained, relocatable folder: `./work` → `/work` (also `working_dir`),
+  a self-contained, relocatable folder — `move` (§6) is how it relocates one:
+  `./work` → `/work` (also `working_dir`),
   `./data` → `/data` **read-only**, `./local` → `/local`, `./home` →
   `CONTAINER_HOME`. Plus `sleep infinity`. `/data` is read-only because writing
   a live data directory from a second container corrupts it; the service that

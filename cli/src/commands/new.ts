@@ -70,9 +70,15 @@ function requireArchetype(value: string | undefined): Archetype {
 /**
  * Which readable root to create under. `fallback` is `roots[0]` for `new` and
  * the SOURCE's root for `clone` — a clone is another one of these, and that is
- * where its kind lives (phase 20).
+ * where its kind lives (phase 20). `purpose` only changes the ROOT_UNREADABLE
+ * wording — `move` (phase 21) isn't creating anything.
  */
-export function requireRoot(ctx: Context, name: string | undefined, fallback: RootConfig): RootConfig {
+export function requireRoot(
+  ctx: Context,
+  name: string | undefined,
+  fallback: RootConfig,
+  purpose = 'refusing to create a project on the internal disk',
+): RootConfig {
   const root = name === undefined ? fallback : ctx.config.roots.find((r) => r.name === name)
   if (!root) {
     throw new BardolierError(
@@ -83,7 +89,7 @@ export function requireRoot(ctx: Context, name: string | undefined, fallback: Ro
   if (!probeRoot(root).mounted) {
     throw new BardolierError(
       'ROOT_UNREADABLE',
-      `Root \`${root.name}\` (${root.path}) is not readable; refusing to create a project on the internal disk.`,
+      `Root \`${root.name}\` (${root.path}) is not readable; ${purpose}.`,
       { roots: [root.name] },
     )
   }
