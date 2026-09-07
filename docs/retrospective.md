@@ -73,7 +73,7 @@ divergence becomes unobservable.
 lines across five commits and parts of four days. The CLI and the app should
 have shared one name from the first identifier typed, and the trademark problem
 — a product named after another company's product — surfaced late enough that
-Phase 20 must now ship a NOTICE disclaiming affiliation.
+Phase 23 must now ship a NOTICE disclaiming affiliation.
 
 **9. "Phase 8 — the last planned phase," and there were eleven more.** The
 upfront 0-9 ladder implied a finished product and got the product's shape

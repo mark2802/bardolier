@@ -1,4 +1,4 @@
-# Phase 20 — the publishing set
+# Phase 23 — the publishing set
 
 **Goal:** Everything a stranger needs and nothing this developer's machine
 left behind. The repo currently has no LICENSE, no README, docs written for
@@ -59,4 +59,4 @@ Apache 2.0; `NOTICE` and `README.md` exist and the README has the required
 sections including Security; `grep -ri "dangerously-skip-permissions"` over the
 tree returns nothing; no personal path or email appears in any tracked file;
 and — folding in phases 15 and 16 — no occurrence of the old names remains.
-Land as a section in `test/regression.sh` (`LAST=20`).
+It joins `test/regression.sh`'s list of checks.

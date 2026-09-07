@@ -1,8 +1,8 @@
-# Phase 21 — the clean repo
+# Phase 24 — the clean repo
 
 **Goal:** Publish as a first commit, under the new name, with no history.
 
-Not a code phase — a checklist, and the point at which phase 20's work is
+Not a code phase — a checklist, and the point at which phase 23's work is
 actually tested, because the only honest test of a README is a machine that has
 never run the tool.
 
