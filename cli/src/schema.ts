@@ -19,6 +19,7 @@ export const SCHEMA_NAMES = [
   'doctor',
   'list',
   'new',
+  'clone',
   'up',
   'down',
   'delete',

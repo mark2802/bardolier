@@ -27,6 +27,7 @@ import { collectDoctor, renderDoctor } from './doctor.ts'
 import { collectCatalogue, renderCatalogue } from './catalogue.ts'
 import { collectConfigGet, renderConfigGet, renderConfigSet, runConfigSet } from './config.ts'
 import { renderNew, runNew } from './new.ts'
+import { renderClone, runClone } from './clone.ts'
 import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
 import { renderDelete, runDelete } from './delete.ts'
@@ -190,6 +191,44 @@ export const COMMANDS: readonly CommandNode[] = [
           ...(root !== undefined ? { root } : {}),
         }),
         renderNew,
+      )
+    },
+  },
+  {
+    path: ['clone'],
+    group: 'Projects',
+    usage: 'clone <source> <name> [--root <name>] [--with-content]',
+    summary: "Copy a project's shape — manifest, services, ports, packages — under a new name and fresh ports.",
+    flags: [
+      { name: '--root', arg: '<name>', description: "Which configured root to clone into. Defaults to the source's own." },
+      {
+        name: '--with-content',
+        description: 'Also copy work/, data/, local/ and home/ byte-for-byte. Requires the source stopped.',
+      },
+    ],
+    errors: [
+      'SSD_NOT_MOUNTED',
+      'PROJECT_NOT_FOUND',
+      'PROJECT_AMBIGUOUS',
+      'PROJECT_EXISTS',
+      'PROJECT_RUNNING',
+      'ROOT_UNREADABLE',
+      'SERVICE_UNKNOWN',
+      'PORT_UNAVAILABLE',
+      'INSUFFICIENT_SPACE',
+      'INVALID_ARGUMENT',
+    ],
+    run: async (inv) => {
+      const [source, name] = exactArgs(inv, byPath('clone'), 2)
+      const root = stringFlag(inv, '--root')
+      return output(
+        await runClone(createContext(), {
+          source,
+          name,
+          withContent: boolFlag(inv, '--with-content'),
+          ...(root !== undefined ? { root } : {}),
+        }),
+        renderClone,
       )
     },
   },

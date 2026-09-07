@@ -139,8 +139,9 @@ here is read by several files that must agree — change it in one place.
 | `extraports.ts`, `deps.ts` | declared ports; declared apt packages and the content-addressed derived image | §5.1, §9 |
 | `services.ts` | manifest ⋈ catalogue, so `status` and `service list` cannot disagree | §4.1 |
 | `volumes.ts` | orphans, derived and never recorded; knows the shared cache by `bardolier.role: cache` | §6 |
-| `device.ts` (`SsdDevice`) | `isActionableHolder`, `parseDissenter`; `commands/ssd.ts` drives down-all → holders → eject, with the bounded wait after `docker desktop stop` | §6 |
-| `images.ts` | `IMAGE_PLATFORM` (`bardolier-and` is amd64), `IMAGE_CACHE` (shared gradle/uv caches), `CONTAINER_HOME` — this constant plus three Dockerfiles must agree | §4.3, §9 |
+| `device.ts` (`SsdDevice`) | `isActionableHolder`, `parseDissenter`; `commands/ssd.ts` drives down-all → holders → eject | §6 |
+| `images.ts` | `IMAGE_PLATFORM` (`bardolier-and` is amd64), `IMAGE_CACHE` (shared gradle/uv caches), `CONTAINER_HOME` | §4.3, §9 |
+| `transfer.ts` | staged copies: `.<name>.incoming`, renamed only once complete; space checked first | §6 |
 | `handoff.ts` | the stop note; every part best-effort, none may fail the `down` | §12 |
 | `cli/images/<image>/Dockerfile` | the three base images, built with `HOST_UID`/`HOST_GID`; Claude Code is the one unpinned component | §4.3, §6 |
 

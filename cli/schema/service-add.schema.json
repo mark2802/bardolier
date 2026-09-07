@@ -23,7 +23,7 @@
   "$defs": {
     "attached_service": {
       "type": "object",
-      "description": "An attached service: the manifest's host port joined with the catalogue's identity. cli-spec.md §4.1, §4.2, §5. This block is duplicated verbatim in new/service-add/service-remove/service-list; test/contracts.test.ts asserts the copies stay identical.",
+      "description": "An attached service: the manifest's host port joined with the catalogue's identity. cli-spec.md §4.1, §4.2, §5. This block is duplicated verbatim in new/clone/service-add/service-remove/service-list; test/contracts.test.ts asserts the copies stay identical.",
       "additionalProperties": false,
       "required": ["key", "display", "host_port", "container_port", "connection_hint", "data_dir"],
       "properties": {

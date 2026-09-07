@@ -27,6 +27,7 @@ import SwiftUI
 enum MenuPanel: Equatable {
     case root
     case services(project: String)
+    case clone(source: String)
     case newProject
     case reclaim
     case eject
@@ -60,6 +61,8 @@ struct MenuBarRootView: View {
                     rootMenu
                 case .services(let project):
                     ServicesPanel(projectName: project) { panel = .root }
+                case .clone(let source):
+                    ClonePanel(source: source) { panel = .root }
                 case .newProject:
                     NewProjectPanel { panel = .root }
                 case .reclaim:
@@ -225,6 +228,7 @@ struct MenuBarRootView: View {
                     disabledReason: mutationBlockedReason,
                     toggleExpanded: { toggle(project.name) },
                     openServices: { panel = .services(project: project.name) },
+                    openClone: { panel = .clone(source: project.name) },
                     confirm: request
                 )
             }
@@ -344,6 +348,7 @@ struct ProjectRow: View {
     var disabledReason: String?
     var toggleExpanded: () -> Void
     var openServices: () -> Void
+    var openClone: () -> Void
     var confirm: (ConfirmationRequest) -> Void
 
     var body: some View {
@@ -408,6 +413,16 @@ struct ProjectRow: View {
 
                     MenuTextRow(title: "Services…", systemImage: "cylinder.split.1x2", isDisabled: store.isBusy) {
                         openServices()
+                    }
+                    // Cloning creates; it never touches this project. The panel
+                    // itself decides whether the content can travel (§8.1).
+                    MenuTextRow(
+                        title: "Clone…",
+                        systemImage: "plus.square.on.square",
+                        isDisabled: !canMutate,
+                        disabledReason: disabledReason
+                    ) {
+                        openClone()
                     }
                     MenuTextRow(title: "Open folder in Finder", systemImage: "folder") {
                         revealInFinder(project.dir)

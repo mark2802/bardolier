@@ -39,6 +39,7 @@
             "EJECT_NOT_APPLICABLE",
             "PROJECT_AMBIGUOUS",
             "ROOT_UNREADABLE",
+            "INSUFFICIENT_SPACE",
             "INTERNAL_ERROR"
           ]
         },

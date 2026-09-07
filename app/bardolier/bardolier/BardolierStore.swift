@@ -474,6 +474,26 @@ final class BardolierStore: ObservableObject {
         return result
     }
 
+    /// Clone a project (phase 20, §8.1). Returns the payload so the panel closes
+    /// only on success, like `create`.
+    ///
+    /// The notice names the two things the user cannot predict: the host ports
+    /// the allocator picked, and — under `--with-content` — how much moved.
+    @discardableResult
+    func clone(source: String, name: String, root: String? = nil, withContent: Bool = false) async -> CloneOutput? {
+        let label = withContent ? "Cloning \(source) with its content" : "Cloning \(source)"
+        let result = await perform(label) { client in
+            try await client.clone(source: source, name: name, root: root, withContent: withContent)
+        }
+        guard let result else { return nil }
+        var parts = ["Cloned \(source) → \(name)"]
+        let ports = result.services.map { "\($0.key) :\($0.hostPort)" }.joined(separator: ", ")
+        if !ports.isEmpty { parts.append(ports) }
+        if result.withContent { parts.append("\(BardolierFormat.bytes(result.bytesCopied)) copied") }
+        notice = parts.joined(separator: " — ") + "."
+        return result
+    }
+
     /// Open a shell in the configured terminal (§7). The CLI names the command;
     /// the app is what runs it.
     ///

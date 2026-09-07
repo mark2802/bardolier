@@ -296,7 +296,7 @@ nonisolated struct ShellInvocation: Codable, Hashable, Sendable {
     let workdir: String
 }
 
-// MARK: - new / up / down / delete
+// MARK: - new / clone / up / down / delete
 
 nonisolated struct NewOutput: Codable, Hashable, Sendable {
     let project: CreatedProject
@@ -316,6 +316,26 @@ nonisolated struct CreatedProject: Codable, Hashable, Sendable {
     let created: String
     /// The configured root's name this project was created under. Additive since phase 18.
     let root: String?
+}
+
+/// What `clone` created (phase 20) — `NewOutput`'s fields plus what makes it a
+/// copy. The same `project` and `services` blocks, because a clone IS a new
+/// project; only the three trailing fields are its own.
+nonisolated struct CloneOutput: Codable, Hashable, Sendable {
+    let project: CreatedProject
+    let manifestPath: String
+    let composePath: String
+    /// Seeded file names in write order (§10). Empty when the copy brought them.
+    let seeded: [String]
+    /// Carried over from the source, each with a FRESHLY assigned host port —
+    /// no host port is ever copied (cli-spec.md §5, §6).
+    let services: [AttachedService]
+    /// The project this one was shaped from. Never modified by the clone.
+    let source: String
+    /// Whether the project's four folders (§3) were copied byte-for-byte.
+    let withContent: Bool
+    /// Bytes copied; 0 for a shape-only clone.
+    let bytesCopied: Int
 }
 
 /// The manifest's host port joined with the catalogue's identity — the shape

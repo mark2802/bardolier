@@ -105,6 +105,24 @@ nonisolated struct BardolierClient: Sendable {
         return try await run(argv)
     }
 
+    /// Clone a project (phase 20). `root` defaults to the SOURCE's root, not the
+    /// first configured one, so omitting it keeps a clone beside its original.
+    ///
+    /// `withContent` copies `work/`, `data/` and `local/` and fails
+    /// PROJECT_RUNNING unless the source is stopped — the app relays that
+    /// refusal, it does not stop the project to get around it (§6). `home/` is
+    /// never copied, under any flag.
+    func clone(source: String, name: String, root: String? = nil, withContent: Bool = false) async throws -> CloneOutput {
+        var argv = ["clone", source, name]
+        if let root {
+            argv += ["--root", root]
+        }
+        if withContent {
+            argv.append("--with-content")
+        }
+        return try await run(argv)
+    }
+
     /// Start a project. `openShell` only sets the CUE in the response — the CLI
     /// spawns no terminal; the app does (app-spec.md §7).
     func up(project: String, openShell: Bool) async throws -> UpOutput {

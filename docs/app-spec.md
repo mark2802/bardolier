@@ -53,11 +53,13 @@ Projects
       Stop
       Open shell
       Services…      ▸
+      Clone…
       Open folder in Finder
       Delete…
   ○ otherapp         ▸
       Start
       Services…      ▸
+      Clone…
       Open folder in Finder
       Delete…
 ────────────────────────────────
@@ -116,6 +118,28 @@ Small modal:
 - **Services** — checkbox list from the catalogue (from `bardolier status`/catalogue).
 - **Create** → `bardolier new … --json`; on success the window closes and the menu
   refreshes, showing assigned host ports for any initial services.
+
+### 8.1 Clone project panel
+
+Opened from a project row, so the source is always a named project. §8's window
+with one field fewer and one checkbox more — a clone takes its archetype,
+services, extra ports and packages from its source (cli-spec.md §4.2), so there
+is nothing to pick:
+
+- **New name** — the same courtesy validation §8 does; the CLI still decides.
+- **Root** — shown only with more than one configured root; left unset it means
+  the CLI's own default, which for `clone` is the SOURCE's root.
+- **Also copy its files and data** → `--with-content`, which copies all four
+  folders of cli-spec.md §3, the container's home included. The CLI refuses this
+  on a running project and a shape clone of that same project succeeds, so a
+  running source disables the CHECKBOX, not the panel, and says why (§11). The
+  app never stops the project to make it available (§6).
+- **Clone** → `bardolier clone … --json`; on success the panel closes and the
+  notice names the freshly assigned host ports and, with content, the bytes
+  copied — the two things the user cannot predict.
+
+No confirmation sheet: clone creates and never destroys, so the button is its
+own confirmation.
 
 ## 9. Reclaim disk view
 
@@ -242,6 +266,9 @@ the contract; it never re-derives it.
   same, and with Docker down every mutating item is disabled for one reason.
 - `BardolierTerminal` runs `bardolier shell`'s argv via AppleScript or a
   `.command` file (§7). It launches no process itself.
+- `ClonePanel` (§8.1) mirrors `NewProjectPanel`, and disables its
+  `--with-content` checkbox — with a reason — while the source is running,
+  rather than disabling the panel or stopping the project.
 - Refusals are relayed verbatim: `PROJECT_RUNNING` becomes "Stop the project to
   change its services" (§6), never an unrequested stop-change-start.
   Destructive confirmation happens in the view before the call, because the

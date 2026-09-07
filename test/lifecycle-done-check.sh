@@ -189,8 +189,107 @@ if [ "$DOCKER_OK" = "1" ]; then
     && ok "down on a stopped project is an idempotent no-op (§2)" || bad "a second down was not a no-op"
 fi
 
-# ── 5. delete ─────────────────────────────────────────────────────────────────
-head "5. \`delete\` is explicit and confirmed"
+# ── 5. clone (phase 20) ───────────────────────────────────────────────────────
+head "5. \`clone\` reproduces the shape, never the ports"
+
+$BARDOLIER new source --archetype web --services postgres --json >/dev/null || bad "could not create the clone source"
+$BARDOLIER port add source api --container-port 8081 --json >/dev/null || bad "port add failed"
+$BARDOLIER deps add source libnss3 --json >/dev/null || bad "deps add failed"
+
+SOURCE_BEFORE="$(shasum "$MOUNTED/source/project.yml" | cut -d' ' -f1)"
+
+CLONE="$($BARDOLIER clone source twin --json)" || bad "clone exited non-zero"
+schema_assert clone "$CLONE" && ok "clone --json validates against clone.schema.json" || bad "clone output does not match its schema"
+json_assert "$CLONE" 'd.source === "source" && d.with_content === false && d.bytes_copied === 0' \
+  && ok "a shape clone reports what it did and did not copy" || bad "clone misreported a shape-only copy"
+
+node --input-type=module -e "
+  import { readFileSync } from 'node:fs'
+  import { parse } from 'yaml'
+  const read = (p) => parse(readFileSync(p, 'utf8'))
+  const a = read(process.argv[1]), b = read(process.argv[2])
+  const shape = (m) => JSON.stringify([m.archetype, m.base_image, m.extra_packages,
+    Object.keys(m.services ?? {}).sort(),
+    Object.fromEntries(Object.entries(m.extra_ports ?? {}).map(([n, p]) => [n, p.container_port]))])
+  if (shape(a) !== shape(b)) { console.error('shape differs'); process.exit(1) }
+  const ports = (m) => [m.app_port, ...Object.values(m.services ?? {}).map((s) => s.host_port),
+    ...Object.values(m.extra_ports ?? {}).map((p) => p.host_port)]
+  if (ports(a).length !== 3) process.exit(1)
+  if (ports(a).some((p) => ports(b).includes(p))) { console.error('a host port was copied'); process.exit(1) }
+  if (b.name !== 'twin' || b.created === undefined) process.exit(1)
+" "$MOUNTED/source/project.yml" "$MOUNTED/twin/project.yml" \
+  && ok "the clone's manifest matches the source but for name, created and every host port" \
+  || bad "the clone's manifest is not a faithful reshaping of the source"
+
+[ "$SOURCE_BEFORE" = "$(shasum "$MOUNTED/source/project.yml" | cut -d' ' -f1)" ] \
+  && ok "the source's project.yml is byte-identical afterwards" || bad "clone modified the source"
+
+TWIN_APP="$(manifest_field twin 'm.app_port')"
+grep -q "$TWIN_APP:3000" "$MOUNTED/twin/docker-compose.yml" \
+  && ok "compose is rendered from the new manifest, not copied" || bad "the clone's compose file does not carry its own app port"
+grep -q 'bardolier-twin' "$MOUNTED/twin/docker-compose.yml" \
+  && ok "the clone's compose file names the clone" || bad "the clone's compose file still names the source"
+[ ! -e "$MOUNTED/twin/.bardolier" ] && ok "the source's handoff record did not travel" || bad ".bardolier/ was copied"
+
+DUPE="$($BARDOLIER clone source twin --json 2>/dev/null || true)"
+json_assert "$DUPE" 'd.error && d.error.code === "PROJECT_EXISTS"' \
+  && ok "cloning onto an existing name is PROJECT_EXISTS" || bad "a second clone did not fail PROJECT_EXISTS"
+
+# ── content ───────────────────────────────────────────────────────────────────
+mkdir -p "$MOUNTED/source/work" "$MOUNTED/source/data/postgres" "$MOUNTED/source/home"
+echo 'the users own file' > "$MOUNTED/source/work/README.md"
+echo 'service state' > "$MOUNTED/source/data/postgres/DATA"
+echo 'secrets' > "$MOUNTED/source/home/.zsh_history"
+
+FULL="$($BARDOLIER clone source copy --with-content --json)" || bad "clone --with-content exited non-zero"
+schema_assert clone "$FULL" && ok "clone --with-content validates against its schema" || bad "clone --with-content broke its schema"
+json_assert "$FULL" 'd.with_content === true && d.bytes_copied > 0' \
+  && ok "clone --with-content reports the bytes it moved" || bad "clone --with-content reported no content"
+[ "$(cat "$MOUNTED/copy/work/README.md")" = 'the users own file' ] \
+  && ok "work/ was reproduced" || bad "work/ did not survive the copy"
+[ "$(cat "$MOUNTED/copy/data/postgres/DATA")" = 'service state' ] \
+  && ok "data/postgres/ was reproduced" || bad "service data did not survive the copy"
+[ "$(cat "$MOUNTED/copy/home/.zsh_history")" = 'secrets' ] \
+  && ok "home/ was reproduced — a clone is an identical copy" || bad "home/ did not survive the copy"
+
+# ── the Docker half: two projects, disjoint ports ─────────────────────────────
+if [ "$DOCKER_OK" = "1" ]; then
+  track bardolier-plain bardolier-plaintwin
+
+  $BARDOLIER new plain --archetype web --json >/dev/null || bad "could not create the clone-and-run source"
+  $BARDOLIER clone plain plaintwin --json >/dev/null || bad "clone of a runnable project failed"
+
+  $BARDOLIER up plain --json >/dev/null || bad "up plain failed"
+
+  RUNNING="$($BARDOLIER clone plain torn --with-content --json 2>/dev/null || true)"
+  json_assert "$RUNNING" 'd.error && d.error.code === "PROJECT_RUNNING"' \
+    && ok "clone --with-content of a running project is PROJECT_RUNNING" || bad "a running source was copied anyway"
+  [ ! -e "$MOUNTED/torn" ] && ok "the refused copy left no directory behind" || bad "the refused copy left $MOUNTED/torn"
+
+  $BARDOLIER clone plain shapeonly --json >/dev/null \
+    && ok "a shape clone of that same running project succeeds" || bad "a shape clone needed the source stopped"
+  $BARDOLIER delete shapeonly --force --purge --json >/dev/null
+
+  $BARDOLIER up plaintwin --json >/dev/null || bad "up plaintwin failed"
+  json_assert "$($BARDOLIER status --json)" '
+    (() => {
+      const both = d.projects.filter((p) => p.name === "plain" || p.name === "plaintwin")
+      if (both.length !== 2 || both.some((p) => p.state !== "running")) return false
+      const ports = both.map((p) => p.app_port)
+      return ports.every((p) => typeof p === "number") && ports[0] !== ports[1]
+    })()
+  ' && ok "clone → up → status: both run at once on disjoint ports" || bad "the clone and its source do not run side by side"
+
+  $BARDOLIER delete plain --force --purge --json >/dev/null
+  $BARDOLIER delete plaintwin --force --purge --json >/dev/null
+fi
+
+for project in source twin copy; do
+  $BARDOLIER delete "$project" --force --purge --json >/dev/null || bad "could not clean up $project"
+done
+
+# ── 6. delete ─────────────────────────────────────────────────────────────────
+head "6. \`delete\` is explicit and confirmed"
 
 REFUSED="$($BARDOLIER delete myapp --purge --json 2>/dev/null || true)"
 json_assert "$REFUSED" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
@@ -216,8 +315,8 @@ GONE="$($BARDOLIER status myapp --json 2>/dev/null || true)"
 json_assert "$GONE" 'd.error && d.error.code === "PROJECT_NOT_FOUND"' \
   && ok "the deleted project is no longer addressable" || bad "status still resolves the deleted project"
 
-# ── 6. Renderers stay separate (§2) ───────────────────────────────────────────
-head "6. Renderers stay separate (§2)"
+# ── 7. Renderers stay separate (§2) ───────────────────────────────────────────
+head "7. Renderers stay separate (§2)"
 
 $BARDOLIER new humantest --archetype library >/dev/null
 HUMAN="$($BARDOLIER down humantest)"

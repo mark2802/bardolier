@@ -13,9 +13,10 @@ import { validate } from '../cli/src/schema.ts'
 import { COMPOSE_FILENAME, attachedKeys } from '../cli/src/compose.ts'
 import { PROJECT_DIRS } from '../cli/src/layout.ts'
 import { composeProject, devContainerName, serviceContainerName } from '../cli/src/naming.ts'
-import { requireProject } from '../cli/src/workspace.ts'
+import { requireProject, writeManifest } from '../cli/src/workspace.ts'
 import { seededFiles } from '../cli/src/scaffold.ts'
 import { runNew } from '../cli/src/commands/new.ts'
+import { runClone } from '../cli/src/commands/clone.ts'
 import { runUp } from '../cli/src/commands/up.ts'
 import { runDown } from '../cli/src/commands/down.ts'
 import { runDelete } from '../cli/src/commands/delete.ts'
@@ -27,7 +28,8 @@ import { runServiceRemove } from '../cli/src/commands/service.ts'
 import { runShell } from '../cli/src/commands/shell.ts'
 import { collectOrphanedVolumes, runVolumeRemove } from '../cli/src/commands/volumes.ts'
 import { runDownAll, runEject } from '../cli/src/commands/ssd.ts'
-import { containingVolume } from '../cli/src/projects.ts'
+import { containingVolume, discoverProjects } from '../cli/src/projects.ts'
+import { requireSpace, stageProject, stagingPath } from '../cli/src/transfer.ts'
 import {
   FIXED_NOW,
   holder,
@@ -35,6 +37,7 @@ import {
   manifest,
   ports,
   project,
+  readManifest,
   sandboxes,
   seedServiceData,
   stubConfirm,
@@ -168,6 +171,205 @@ describe('new (cli-spec.md §6, §10)', () => {
       // It says where it is, because `work/` is only part of the project.
       assert.ok(claudeMd.includes('/data'), `${archetype} CLAUDE.md does not describe the layout`)
     }
+  })
+})
+
+// ── clone (§6, phase 20) ──────────────────────────────────────────────────────
+describe('clone (cli-spec.md §6)', () => {
+  /** A source worth reproducing: a service, an extra port, an extra package. */
+  function richSource(name = 'source'): ProjectManifest {
+    return manifest(name, {
+      extra_packages: ['libnss3'],
+      services: { postgres: { host_port: 5433 } },
+      app_port: 3000,
+      extra_ports: { api: { container_port: 8081, host_port: 8081 } },
+    })
+  }
+
+  /** Everything a clone must reproduce exactly — no host port among it. */
+  function shape(m: ProjectManifest) {
+    return {
+      archetype: m.archetype,
+      base_image: m.base_image,
+      extra_packages: m.extra_packages,
+      services: Object.keys(m.services ?? {}).sort(),
+      extra_ports: Object.fromEntries(
+        Object.entries(m.extra_ports ?? {}).map(([name, port]) => [name, port.container_port]),
+      ),
+    }
+  }
+
+  function hostPorts(m: ProjectManifest): number[] {
+    return [
+      ...(m.app_port === undefined ? [] : [m.app_port]),
+      ...Object.values(m.services ?? {}).map((s) => s.host_port),
+      ...Object.values(m.extra_ports ?? {}).map((p) => p.host_port),
+    ].sort((a, b) => a - b)
+  }
+
+  test('reproduces the shape with fresh ports, and leaves the source untouched', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    const before = box.read('source', 'project.yml')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: false })
+    assert.ok(validate('clone', result).valid, 'clone output must match clone.schema.json')
+    assert.equal(result.source, 'source')
+    assert.equal(result.with_content, false)
+    assert.equal(result.bytes_copied, 0)
+    assert.equal(result.project.dir, box.path('twin'), 'the clone did not land in the source root')
+
+    const cloned = readManifest(box, 'twin')
+    assert.deepEqual(shape(cloned), shape(richSource()))
+    assert.equal(cloned.name, 'twin')
+    assert.equal(cloned.created, FIXED_NOW.toISOString())
+
+    const taken = new Set(hostPorts(richSource()))
+    for (const port of hostPorts(cloned)) assert.ok(!taken.has(port), `clone kept host port ${port}`)
+    assert.equal(hostPorts(cloned).length, 3)
+
+    // Generated from the new manifest, never copied (INTENT.md invariant 7).
+    const compose = box.read('twin', COMPOSE_FILENAME) ?? ''
+    assert.ok(compose.includes(`${cloned.app_port}:3000`), 'compose does not publish the clone`s own app port')
+    assert.ok(compose.includes('bardolier-twin'), 'compose still names the source')
+
+    assert.equal(box.read('source', 'project.yml'), before, 'clone modified the source manifest')
+    assert.deepEqual(result.seeded, ['work/CLAUDE.md'])
+  })
+
+  test('--with-content copies all four folders of §3, home/ included', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    seedServiceData(box, 'source', 'postgres')
+    mkdirSync(box.path('source', 'work'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'README.md'), 'the users own file')
+    mkdirSync(box.path('source', 'home'), { recursive: true })
+    writeFileSync(box.path('source', 'home', '.zsh_history'), 'secrets')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.ok(validate('clone', result).valid)
+    assert.equal(result.with_content, true)
+    assert.ok(result.bytes_copied > 0, 'reported no bytes copied')
+
+    assert.equal(box.read('twin', 'work', 'README.md'), 'the users own file')
+    assert.equal(box.read('twin', 'data', 'postgres', 'DATA'), box.read('source', 'data', 'postgres', 'DATA'))
+    // A clone is an identical copy: the login, the dotfiles and the shell
+    // history travel with it (owner's decision, amending the original spec).
+    assert.equal(box.read('twin', 'home', '.zsh_history'), 'secrets')
+  })
+
+  test('a seed the copy brought is left alone; one it did not is re-seeded', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    mkdirSync(box.path('source', 'work'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'CLAUDE.md'), '# hand-edited')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.deepEqual(result.seeded, [])
+    assert.equal(box.read('twin', 'work', 'CLAUDE.md'), '# hand-edited')
+  })
+
+  test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    const docker = stubDocker({ running: [devContainerName('source')] })
+
+    await assert.rejects(
+      () => runClone(makeContext(box, docker), { source: 'source', name: 'twin', withContent: true }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_RUNNING',
+    )
+    assert.equal(box.exists('twin'), false, 'a refused clone left a directory behind')
+
+    const result = await runClone(makeContext(box, docker), { source: 'source', name: 'twin', withContent: false })
+    assert.equal(result.project.name, 'twin')
+  })
+
+  test('a name taken in another root is PROJECT_EXISTS, and leaves nothing behind', async () => {
+    const box = sandbox()
+    const other = secondRoot()
+    box.writeProject('source', richSource())
+    mkdirSync(join(other, 'twin'), { recursive: true })
+    writeManifest(join(other, 'twin'), manifest('twin'))
+
+    const ctx = twoRoots(box, other)
+    await assert.rejects(
+      () => runClone(ctx, { source: 'source', name: 'twin', withContent: false }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_EXISTS',
+    )
+    assert.equal(box.exists('twin'), false)
+    assert.equal(existsSync(stagingPath(box.root, 'twin')), false)
+  })
+
+  test('--root places the clone elsewhere; the default is the source`s own root', async () => {
+    const box = sandbox()
+    const other = secondRoot()
+    box.writeProject('source', richSource())
+
+    const elsewhere = await runClone(twoRoots(box, other), { source: 'source', name: 'twin', root: 'b', withContent: false })
+    assert.equal(elsewhere.project.root, 'b')
+    assert.equal(elsewhere.project.dir, join(other, 'twin'))
+
+    const home = await runClone(twoRoots(box, other), { source: 'source', name: 'triplet', withContent: false })
+    assert.equal(home.project.root, 'a')
+
+    await assert.rejects(
+      () => runClone(twoRoots(box, other), { source: 'source', name: 'nope', root: 'c', withContent: false }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
+    )
+  })
+
+  test('an unknown source is PROJECT_NOT_FOUND and an unusable name INVALID_ARGUMENT', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    await assert.rejects(
+      () => runClone(makeContext(box), { source: 'ghost', name: 'twin', withContent: false }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_NOT_FOUND',
+    )
+    await assert.rejects(
+      () => runClone(makeContext(box), { source: 'source', name: 'Twin', withContent: false }),
+      (error: unknown) => error instanceof BardolierError && error.code === 'INVALID_ARGUMENT',
+    )
+  })
+})
+
+// ── transfer.ts (phase 20) ────────────────────────────────────────────────────
+describe('staged copies (transfer.ts)', () => {
+  test('a copy in progress is not a project `status` can see', () => {
+    const box = sandbox()
+    const staging = stagingPath(box.root, 'halfway')
+    mkdirSync(staging, { recursive: true })
+    writeManifest(staging, manifest('halfway'))
+
+    assert.deepEqual(discoverProjects(makeContext(box).config).projects, [])
+  })
+
+  test('a copy that throws leaves neither a project nor a staging directory', () => {
+    const box = sandbox()
+    assert.throws(
+      () =>
+        stageProject(box.root, 'halfway', (staging) => {
+          writeFileSync(join(staging, 'partial'), 'x')
+          throw new Error('the disk went away')
+        }),
+      /the disk went away/,
+    )
+    assert.equal(existsSync(stagingPath(box.root, 'halfway')), false)
+    assert.equal(existsSync(join(box.root, 'halfway')), false)
+    assert.deepEqual(discoverProjects(makeContext(box).config).projects, [])
+  })
+
+  test('a copy that would not fit is refused before any byte moves', () => {
+    const box = sandbox()
+    assert.throws(
+      () => requireSpace(box.root, 10_000_000, () => 1_000_000),
+      (error: unknown) =>
+        error instanceof BardolierError &&
+        error.code === 'INSUFFICIENT_SPACE' &&
+        error.details?.needed_bytes === 10_000_000 &&
+        error.details?.free_bytes === 1_000_000,
+    )
+    // Room to spare is silence, not a warning.
+    assert.equal(requireSpace(box.root, 1_000, () => 1_000_000), undefined)
   })
 })
 

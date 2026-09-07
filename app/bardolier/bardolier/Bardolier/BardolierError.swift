@@ -50,6 +50,7 @@ nonisolated struct BardolierErrorCode: BardolierToken {
     static let ejectNotApplicable = BardolierErrorCode(rawValue: "EJECT_NOT_APPLICABLE")
     static let projectAmbiguous = BardolierErrorCode(rawValue: "PROJECT_AMBIGUOUS")
     static let rootUnreadable = BardolierErrorCode(rawValue: "ROOT_UNREADABLE")
+    static let insufficientSpace = BardolierErrorCode(rawValue: "INSUFFICIENT_SPACE")
     static let internalError = BardolierErrorCode(rawValue: "INTERNAL_ERROR")
 
     /// A short line for the UI, or nil when only the CLI's own message will do.

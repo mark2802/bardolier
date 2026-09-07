@@ -16,6 +16,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { RootConfig } from '../config.ts'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { ARCHETYPES, ARCHETYPE_APP_PORT, ARCHETYPE_BASE_IMAGE, isArchetype } from '../model/archetype.ts'
@@ -44,8 +45,9 @@ export type NewRequest = {
   readonly root?: string
 }
 
-function requireName(name: string | undefined): string {
-  if (!name) throw new BardolierError('INVALID_ARGUMENT', 'Usage: bardolier new <name> --archetype <a>')
+/** Shared with `clone`, whose new name is validated by exactly this rule (phase 20). */
+export function requireProjectName(name: string | undefined, usage: string): string {
+  if (!name) throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${usage}`)
   if (!NAME_PATTERN.test(name)) {
     throw new BardolierError(
       'INVALID_ARGUMENT',
@@ -65,40 +67,48 @@ function requireArchetype(value: string | undefined): Archetype {
   return value
 }
 
-function requireTargetRoot(ctx: Context, name: string | undefined) {
-  if (name === undefined) return defaultRoot(ctx.config)
-  const root = ctx.config.roots.find((r) => r.name === name)
+/**
+ * Which readable root to create under. `fallback` is `roots[0]` for `new` and
+ * the SOURCE's root for `clone` — a clone is another one of these, and that is
+ * where its kind lives (phase 20).
+ */
+export function requireRoot(ctx: Context, name: string | undefined, fallback: RootConfig): RootConfig {
+  const root = name === undefined ? fallback : ctx.config.roots.find((r) => r.name === name)
   if (!root) {
     throw new BardolierError(
       'INVALID_ARGUMENT',
       `Unknown root \`${name}\`. Configured roots: ${ctx.config.roots.map((r) => r.name).join(', ')}.`,
     )
   }
+  if (!probeRoot(root).mounted) {
+    throw new BardolierError(
+      'ROOT_UNREADABLE',
+      `Root \`${root.name}\` (${root.path}) is not readable; refusing to create a project on the internal disk.`,
+      { roots: [root.name] },
+    )
+  }
   return root
 }
 
-export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutput> {
-  const name = requireName(request.name)
-  const archetype = requireArchetype(request.archetype)
-  const target = requireTargetRoot(ctx, request.root)
-
-  const probe = probeRoot(target)
-  if (!probe.mounted) {
-    throw new BardolierError(
-      'ROOT_UNREADABLE',
-      `Root \`${target.name}\` (${target.path}) is not readable; refusing to create a project on the internal disk.`,
-      { roots: [target.name] },
-    )
-  }
-
-  const dir = join(target.path, name)
-  // PROJECT_EXISTS means "in any root": two projects sharing a name would
-  // share a container name and a home volume (§9), which is destructive.
-  const discovery = discoverProjects(ctx.config)
-  const elsewhere = findProject(discovery, name) ?? null
+/**
+ * Refuse a name anything already answers to. PROJECT_EXISTS means "in any
+ * root": two projects sharing a name would share a container name and a home
+ * volume (§9), which is destructive.
+ */
+export function requireFreeName(ctx: Context, name: string, dir: string): void {
+  const elsewhere = findProject(discoverProjects(ctx.config), name) ?? null
   if (elsewhere || existsSync(dir)) {
     throw new BardolierError('PROJECT_EXISTS', `\`${name}\` already exists at ${elsewhere?.dir ?? dir}.`)
   }
+}
+
+export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutput> {
+  const name = requireProjectName(request.name, 'new <name> --archetype <a>')
+  const archetype = requireArchetype(request.archetype)
+  const target = requireRoot(ctx, request.root, defaultRoot(ctx.config))
+
+  const dir = join(target.path, name)
+  requireFreeName(ctx, name, dir)
 
   // Everything that can fail happens before the directory exists: an unknown
   // service key or an exhausted port band must leave nothing behind (§5, §6).

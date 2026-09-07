@@ -52,6 +52,8 @@ const EXTENDED_ERROR_CODES = [
   'PROJECT_AMBIGUOUS',
   /** A configured root could not be read where the answer must be complete (phase 18). */
   'ROOT_UNREADABLE',
+  /** A copy would not fit on the target root, refused before any byte moved (phase 20). */
+  'INSUFFICIENT_SPACE',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
 ] as const

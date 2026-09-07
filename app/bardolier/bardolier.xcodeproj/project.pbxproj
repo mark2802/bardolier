@@ -66,7 +66,7 @@
 			name = bardolier;
 			packageProductDependencies = (
 			);
-			productName = "bardolier";
+			productName = bardolier;
 			productReference = 4D0D7613303C7014002CD416 /* bardolier.app */;
 			productType = "com.apple.product-type.application";
 		};

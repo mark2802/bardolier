@@ -38,7 +38,7 @@ grows to provide it.
   `EXTRA_PORT_ATTACHED`, `EXTRA_PORT_NOT_ATTACHED`,
   `PACKAGE_ATTACHED`, `PACKAGE_NOT_ATTACHED`,
   `PORT_UNAVAILABLE`, `VOLUME_IN_USE`, `EJECT_BLOCKED`, `EJECT_NOT_APPLICABLE`,
-  `ROOT_UNREADABLE`, `DOCKER_UNAVAILABLE`.
+  `ROOT_UNREADABLE`, `INSUFFICIENT_SPACE`, `DOCKER_UNAVAILABLE`.
 - **No partial mutation of a running project:** service add/remove, port
   add/remove and deps add/remove require the project stopped and fail
   `PROJECT_RUNNING` otherwise.
@@ -252,6 +252,26 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   target root, or another root the port allocation cannot see past),
   `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
   (unknown `--root`, naming the configured roots).
+- `bardolier clone <source> <name> [--root <name>] [--with-content]`
+  A second project shaped like one that already works. Copies the source
+  manifest's `archetype`, `base_image`, `extra_packages`, attached service keys
+  and each extra port's `container_port`; **no host port is copied** — `app_port`,
+  every service port and every extra port is allocated fresh (§5), and `created`
+  is now. Compose is rendered from the new manifest, `work/CLAUDE.md` re-seeded,
+  `.bardolier/` left behind. `--root` defaults to the SOURCE's root.
+  `--with-content` copies all four folders of §3 — `work/`, `data/`, `local/`
+  and `home/` — byte-for-byte, and requires the source stopped
+  (`PROJECT_RUNNING`), because service state copied out from under a running
+  Postgres is torn. A clone means an identical copy; the consequence to know is
+  that Claude Code files its transcripts by working directory and every dev
+  container works in `/work` (§9), so `claude --continue` in a fresh clone
+  resumes the SOURCE's last conversation until a new one is started. The copy is
+  staged under
+  `<root>/.<name>.incoming` and renamed into place only once complete, and is
+  refused up front with `INSUFFICIENT_SPACE` if it would not fit. Nothing about
+  the source is ever modified. Errors: `PROJECT_NOT_FOUND`, `PROJECT_EXISTS`
+  (in any root), `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`, `ROOT_UNREADABLE`,
+  `PORT_UNAVAILABLE`, `INSUFFICIENT_SPACE`, `INVALID_ARGUMENT`.
 - `bardolier list` — array of projects with archetype + running state + root
 
 - `bardolier status [<name>]` — full status object(s) (see §7). No arg = all.

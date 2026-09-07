@@ -272,8 +272,8 @@ describe('list contract (cli-spec.md §6)', () => {
 })
 
 describe('service contracts (cli-spec.md §6, Services)', () => {
-  /** The one row shape shared by new/service-add/service-remove/service-list. */
-  const CARRIERS = ['new', 'service-add', 'service-remove', 'service-list'] as const
+  /** The one row shape shared by new/clone/service-add/service-remove/service-list. */
+  const CARRIERS = ['new', 'clone', 'service-add', 'service-remove', 'service-list'] as const
 
   const attached: AttachedService = {
     key: 'postgres',
@@ -530,6 +530,7 @@ describe('command surface (cli-spec.md §6)', () => {
    */
   const SPEC_COMMANDS = [
     'build',
+    'clone',
     'delete',
     'deps add',
     'deps list',

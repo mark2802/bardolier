@@ -38,6 +38,21 @@ export type NewOutput = {
   services: AttachedService[]
 }
 
+/**
+ * What `clone` created (phase 20) — `new`'s fields, plus what makes it a copy.
+ *
+ * The same shape as `NewOutput` on purpose: a clone IS a new project, and the
+ * caller that renders one renders the other.
+ */
+export type CloneOutput = NewOutput & {
+  /** The project this one was shaped from. Unchanged by the clone, always. */
+  source: string
+  /** True when all four folders of §3 were copied byte-for-byte. */
+  with_content: boolean
+  /** Bytes copied across those four folders; 0 for a shape-only clone. */
+  bytes_copied: number
+}
+
 /** What `up` published. Mirrors the §7 service fields the app needs immediately. */
 export type UpService = {
   key: string

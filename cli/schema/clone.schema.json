@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://bardolier.local/schema/new.schema.json",
-  "title": "bardolier new output",
-  "description": "What `bardolier new` created. cli-spec.md §6 (Projects), §10 (seeded files). Additive changes only once the app ships (Phase 5+).",
+  "$id": "https://bardolier.local/schema/clone.schema.json",
+  "title": "bardolier clone output",
+  "description": "What `bardolier clone` created — the `new` fields plus what makes it a copy. cli-spec.md §6 (Projects), phase 20. Additive changes only once the app ships (Phase 5+).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["project", "manifest_path", "compose_path", "seeded", "services"],
+  "required": ["project", "manifest_path", "compose_path", "seeded", "services", "source", "with_content", "bytes_copied"],
   "properties": {
     "project": {
       "type": "object",
@@ -17,20 +17,34 @@
         "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
         "dir": { "type": "string", "minLength": 1 },
         "created": { "type": "string", "format": "date-time" },
-        "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project was created under (phase 18)." }
+        "root": { "type": "string", "minLength": 1, "description": "The configured root's name the clone was created under; the source's unless --root said otherwise." }
       }
     },
     "manifest_path": { "type": "string", "minLength": 1 },
     "compose_path": { "type": "string", "minLength": 1 },
     "seeded": {
       "type": "array",
-      "description": "File names written per §10, in write order.",
+      "description": "File names written per §10, in write order. Empty when --with-content brought them all.",
       "items": { "type": "string", "minLength": 1 }
     },
     "services": {
       "type": "array",
-      "description": "Services attached at creation by --services, sorted by key, each with the host port assigned to it (§5).",
+      "description": "Services carried over from the source, sorted by key, each with the host port freshly assigned to it (§5). No host port is ever copied.",
       "items": { "$ref": "#/$defs/attached_service" }
+    },
+    "source": {
+      "type": "string",
+      "description": "The project this one was shaped from. Never modified by the clone.",
+      "minLength": 1
+    },
+    "with_content": {
+      "type": "boolean",
+      "description": "True when work/, data/, local/ and home/ were copied byte-for-byte."
+    },
+    "bytes_copied": {
+      "type": "integer",
+      "description": "Bytes copied; 0 for a shape-only clone.",
+      "minimum": 0
     }
   },
   "$defs": {

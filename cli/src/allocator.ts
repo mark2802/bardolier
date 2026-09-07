@@ -131,8 +131,14 @@ export async function allocatePorts(
  * archetype's own port and count up, take the first that no manifest claims and
  * no socket holds — so a second web project lands on 3001 rather than failing.
  */
-export async function allocateAppPort(ctx: Context, project: string, base: number): Promise<number> {
+export async function allocateAppPort(
+  ctx: Context,
+  project: string,
+  base: number,
+  reserved: Iterable<number> = [],
+): Promise<number> {
   const taken = new Set(assignedPorts(ctx.config).keys())
+  for (const port of reserved) taken.add(port)
   return allocateOne(ctx, project, DEV_SERVER_KEY, base, taken)
 }
 
@@ -142,8 +148,16 @@ export async function allocateAppPort(ctx: Context, project: string, base: numbe
  * container port the caller declared and counts up — the number a second
  * `port add --container-port 8081` on this Mac would otherwise collide on.
  */
-export async function allocateExtraPort(ctx: Context, project: string, name: string, containerPort: number): Promise<number> {
+export async function allocateExtraPort(
+  ctx: Context,
+  project: string,
+  name: string,
+  containerPort: number,
+  /** Ports already promised in this same operation but not yet on disk — `clone`'s. */
+  reserved: Iterable<number> = [],
+): Promise<number> {
   const taken = new Set(assignedPorts(ctx.config).keys())
+  for (const port of reserved) taken.add(port)
   return allocateOne(ctx, project, name, containerPort, taken)
 }
 

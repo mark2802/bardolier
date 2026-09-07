@@ -119,6 +119,22 @@ else
   bad "status lost the service port"
 fi
 
+# The clone panel (§8.1) is a client of a contract that has not moved.
+CLONE="$($BARDOLIER clone alpha beta --json)" || bad "clone exited non-zero"
+if schema_assert clone "$CLONE"; then ok "clone --json matches clone.schema.json"; else bad "clone --json"; fi
+if json_assert "$CLONE" 'd.source === "alpha" && d.with_content === false && d.bytes_copied === 0 && d.services.length === 1'; then
+  ok "a shape clone reports its source and carries the service over"
+else
+  bad "clone did not report what the panel renders"
+fi
+ALPHA_PG="$(manifest_field alpha 'm.services.postgres.host_port')"
+BETA_PG="$(manifest_field beta 'm.services.postgres.host_port')"
+if [ -n "$BETA_PG" ] && [ "$ALPHA_PG" != "$BETA_PG" ]; then
+  ok "the clone got its own host port, which is what the notice names"
+else
+  bad "the clone shares a host port with its source"
+fi
+
 # ── 4. Sources (app-spec.md §5-§13) ───────────────────────────────────────────
 head "4. Sources"
 
@@ -134,6 +150,7 @@ for file in \
   "$APP/Views/MenuBarRootView.swift" \
   "$APP/Views/ServicesPanel.swift" \
   "$APP/Views/NewProjectPanel.swift" \
+  "$APP/Views/ClonePanel.swift" \
   "$APP/Views/ReclaimPanel.swift" \
   "$APP/Views/PreferencesPanel.swift" \
   "$APP/DebugStatusView.swift" \
@@ -152,6 +169,28 @@ if grep -q "MenuBarRootView()" "$APP/BardolierApp.swift"; then
   ok "the MenuBarExtra shows the menu, not the Phase 5 debug dump"
 else
   bad "BardolierApp.swift still hosts the debug view"
+fi
+
+# Clone in the menu (phase 25, §8.1).
+if grep -q 'case clone(source: String)' "$APP/Views/MenuBarRootView.swift"; then
+  ok "the panel carries the project it is for, like .services does"
+else
+  bad "MenuPanel has no .clone(source:) case"
+fi
+if grep -q 'title: "Clone…"' "$APP/Views/MenuBarRootView.swift"; then
+  ok "the project submenu offers Clone…"
+else
+  bad "ProjectRow has no Clone… row"
+fi
+if grep -q 'contentBlockedReason' "$APP/Views/ClonePanel.swift"; then
+  ok "a running source disables the copy checkbox with a reason, not silently (§11)"
+else
+  bad "ClonePanel disables --with-content without saying why"
+fi
+if grep -q 'store.clone(' "$APP/Views/ClonePanel.swift" && grep -q 'client.clone(' "$APP/BardolierStore.swift"; then
+  ok "the panel goes through the store and the store through the client (§4)"
+else
+  bad "ClonePanel does not route its call through the store and client"
 fi
 
 # ── 5. Build settings (the human's manual step) ───────────────────────────────
