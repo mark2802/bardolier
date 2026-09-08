@@ -370,7 +370,7 @@ describe('add → up → status → down → remove → delete', () => {
     })
     // The port went with the service, so the project had none left to release.
     assert.deepEqual(deleted.released_ports, [])
-    assert.deepEqual(assignedPorts(ctx.config), new Map())
+    assert.deepEqual(assignedPorts(ctx), new Map())
   })
 
   test('deleting a project with services attached releases their ports', async () => {

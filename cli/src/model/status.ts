@@ -71,6 +71,13 @@ export type StatusRoot = {
   name: string
   path: string
   mounted: boolean
+  /**
+   * ISO 8601 UTC of the last time this root's manifests were scanned, or null
+   * — either it is currently mounted (its index is reconciled on every status
+   * call, so this stays uninteresting), or it has never been indexed at all.
+   * Additive since phase 27.
+   */
+  last_indexed?: string | null
 }
 
 /** Both things `volumes orphaned` can offer to reclaim (phase 19). */

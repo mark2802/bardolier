@@ -44,7 +44,7 @@ describe('port allocation (cli-spec.md §5)', () => {
     box.writeProject('beta', manifest('beta', { services: { postgres: { host_port: 5433 }, redis: { host_port: 6379 } } }))
     const ctx = makeContext(box)
 
-    const held = assignedPorts(ctx.config)
+    const held = assignedPorts(ctx)
     assert.deepEqual(
       [...held.entries()].sort(([a], [b]) => a - b),
       [
@@ -472,18 +472,37 @@ describe('extra ports elsewhere in the system', () => {
   })
 })
 
-describe('a partial view refuses rather than under-reporting (§5, §6)', () => {
-  test('assignedPorts throws ROOT_UNREADABLE when any configured root is unreadable', () => {
+describe('an offline root degrades allocation rather than refusing it (§5; phase 27)', () => {
+  test('a never-indexed unreadable root contributes nothing — allocation proceeds', () => {
     const box = sandbox()
     const rootB = secondRoot()
     const ctx = twoRoots(box, rootB)
     box.writeProject('alpha', manifest('alpha', { services: { postgres: { host_port: 5433 } } }))
+    rmSync(rootB, { recursive: true, force: true }) // rootB never held a project, so it was never indexed
+
+    const held = assignedPorts(ctx)
+    assert.deepEqual([...held.keys()], [5433])
+  })
+
+  test('write-through: a port taken in root b is respected once b goes offline, with no status call in between', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+
+    // `new` writes root b's manifest, which write-through folds into root b's
+    // index (`workspace.ts:writeManifest`) — no `status`/`doctor` involved.
+    const beta = await runNew(ctx, { name: 'beta', archetype: 'web', services: 'postgres', root: 'b' })
+    const betaPort = beta.services[0]?.host_port
     rmSync(rootB, { recursive: true, force: true })
 
-    assert.throws(
-      () => assignedPorts(ctx.config),
-      (error: unknown) => error instanceof BardolierError && error.code === 'ROOT_UNREADABLE',
-    )
+    const held = assignedPorts(ctx)
+    assert.ok(betaPort !== undefined && held.has(betaPort), `expected ${betaPort} still held from root b's index`)
+
+    // A fresh allocation in root a must not collide with what root b holds,
+    // purely from the index — root b stays unreadable throughout.
+    const gamma = await runNew(ctx, { name: 'gamma', archetype: 'web', services: 'postgres', root: 'a' })
+    assert.notEqual(gamma.services[0]?.host_port, betaPort)
+    assert.equal(gamma.degraded_roots?.[0]?.root, 'b')
   })
 
   test('a port allocated in one root is never handed out in another', async () => {
@@ -496,7 +515,7 @@ describe('a partial view refuses rather than under-reporting (§5, §6)', () => 
     assert.notEqual(a.services[0]?.host_port, b.services[0]?.host_port)
   })
 
-  test('volumes: SSD_NOT_MOUNTED when every root is gone, ROOT_UNREADABLE when only some are', async () => {
+  test('volumes: SSD_NOT_MOUNTED when every root is gone', async () => {
     const box = sandbox()
     const rootB = secondRoot()
     const ctx = twoRoots(box, rootB)
@@ -508,5 +527,17 @@ describe('a partial view refuses rather than under-reporting (§5, §6)', () => 
       () => scanVolumes(ctx),
       (error: unknown) => error instanceof BardolierError && error.code === 'SSD_NOT_MOUNTED',
     )
+  })
+
+  test('volumes: a never-indexed unreadable root omits named-volume orphans, names itself in unverified_roots', async () => {
+    const box = sandbox()
+    const rootB = secondRoot()
+    const ctx = twoRoots(box, rootB)
+    box.writeProject('alpha', manifest('alpha'))
+    rmSync(rootB, { recursive: true, force: true }) // rootB never held a project, so it was never indexed
+
+    const scan = await scanVolumes(ctx)
+    assert.deepEqual(scan.unverifiedRoots, ['b'])
+    assert.equal([...scan.orphans].some((o) => o.kind !== 'directory'), false)
   })
 })

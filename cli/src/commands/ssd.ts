@@ -53,6 +53,7 @@ import { isActionableHolder, isRuntimeHolder } from '../device.ts'
 import { devContainerName, isBardolierContainer, serviceContainerName } from '../naming.ts'
 import { attachedKeys } from '../compose.ts'
 import { discoverProjects, probeRoot } from '../projects.ts'
+import { reconcileReadableRoots } from '../rootindex.ts'
 import { observeState, runningNames } from '../workspace.ts'
 import type { DownAllOutput, DownAllProject, EjectAllOutput, EjectAllResult, EjectHolder, EjectOutput } from '../model/ssd.ts'
 import { runDown } from './down.ts'
@@ -249,6 +250,11 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
     )
   }
 
+  // RECONCILE (phase 27): the last instant this root is guaranteed readable —
+  // rewrite its index now so bardolier answers name/port questions about it
+  // correctly for as long as it stays unplugged.
+  reconcileReadableRoots(ctx, discoverProjects(ctx.config))
+
   const down = await runDownAll(ctx)
   const { dockerStopped } = await ejectMountedVolume(ctx, ssd.volume, options)
 
@@ -271,6 +277,10 @@ export async function runEjectAll(ctx: Context, options: EjectOptions = {}): Pro
       'No configured root is a mounted, removable volume, so there is nothing to eject. Use `bardolier down-all` to stop every project instead.',
     )
   }
+
+  // RECONCILE (phase 27), for every candidate at once — same reasoning as
+  // the single-root `eject` above.
+  reconcileReadableRoots(ctx, discoverProjects(ctx.config))
 
   const down = await runDownAll(ctx)
 

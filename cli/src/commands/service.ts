@@ -32,7 +32,8 @@ import type { ProjectManifest } from '../model/project.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 import type { ServiceAddOutput, ServiceListOutput, ServiceRemoveOutput } from '../model/service.ts'
 import { composePath, observeProject, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
-import type { DiscoveredProject } from '../projects.ts'
+import { discoverProjects, type DiscoveredProject } from '../projects.ts'
+import { offlineRoots, renderDegradedRoots } from '../rootindex.ts'
 
 export type ServiceRequest = {
   readonly project: string | undefined
@@ -72,7 +73,7 @@ export async function requireStopped(ctx: Context, project: DiscoveredProject, a
  * with the project untouched, rather than leaving `project.yml` describing
  * something `docker-compose.yml` does not.
  */
-export function persist(dir: string, manifest: ProjectManifest, catalogue: ServiceCatalogue | null) {
+export function persist(ctx: Context, dir: string, manifest: ProjectManifest, catalogue: ServiceCatalogue | null) {
   renderCompose({ manifest, catalogue })
 
   const { valid, errors } = validate('project', manifest)
@@ -80,7 +81,7 @@ export function persist(dir: string, manifest: ProjectManifest, catalogue: Servi
     throw new BardolierError('INTERNAL_ERROR', `Updated manifest does not match the project schema: ${errors.join('; ')}`)
   }
 
-  writeManifest(dir, manifest)
+  writeManifest(ctx, dir, manifest)
   return regenerateCompose(dir, manifest, catalogue)
 }
 
@@ -120,7 +121,8 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
     ...manifest,
     services: { ...(manifest.services ?? {}), [key]: { host_port: hostPort } },
   }
-  const regenerated = persist(dir, next, catalogue)
+  const regenerated = persist(ctx, dir, next, catalogue)
+  const degraded = offlineRoots(ctx, discoverProjects(ctx.config))
 
   return {
     project: manifest.name,
@@ -128,6 +130,7 @@ export async function runServiceAdd(ctx: Context, request: ServiceRequest): Prom
     services: attachedServices(next, catalogue, dir),
     compose_path: composePath(dir),
     compose_regenerated: regenerated.changed,
+    ...(degraded.length > 0 ? { degraded_roots: degraded } : {}),
   }
 }
 
@@ -138,6 +141,7 @@ export function renderServiceAdd(output: ServiceAddOutput): string[] {
     `  host port: ${added.host_port} → :${added.container_port}   ${added.connection_hint}`,
     `  data dir:  ${added.data_dir}`,
     `  compose:   ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`,
+    ...renderDegradedRoots(output.degraded_roots ?? []),
     '',
     `The host port is a debugging tap. Inside the project, connect to \`${added.key}:${added.container_port}\`.`,
     `Next: bardolier up ${output.project}`,
@@ -178,7 +182,7 @@ export async function runServiceRemove(ctx: Context, request: ServiceRequest): P
     catalogue = null
   }
 
-  const regenerated = persist(dir, next, Object.keys(remaining).length > 0 ? catalogue : null)
+  const regenerated = persist(ctx, dir, next, Object.keys(remaining).length > 0 ? catalogue : null)
 
   return {
     project: manifest.name,

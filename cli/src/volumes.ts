@@ -13,17 +13,21 @@
  *     wrong.
  *   - A NAMED VOLUME. Only the shared toolchain caches are still made
  *     (`images.ts`), claimed while ANY manifest names their base image, so this
- *     scan still needs EVERY manifest and keeps its refusals. Volumes left by
- *     an older layout still carry our labels and are still listed — leaving
- *     them out would hide gigabytes from the one command whose job is to
- *     account for them.
+ *     scan still needs EVERY manifest. Volumes left by an older layout still
+ *     carry our labels and are still listed — leaving them out would hide
+ *     gigabytes from the one command whose job is to account for them.
  *
- * Three refusals guard the same edge, and they exist because being wrong here
- * destroys data:
+ * An unreadable root no longer refuses this outright (phase 27): its ROOT
+ * INDEX (`rootindex.ts`) supplies the cache claims a rescan would have found.
+ * A root that has never been indexed cannot be guessed at the way a port can
+ * — reporting its cache orphaned could destroy a project's build cache the
+ * moment it comes back — so the scan degrades instead: directory orphans
+ * (safe; per-root) are still reported, and NAMED VOLUMES are omitted
+ * entirely, with `unverified_roots` naming why.
+ *
+ * Two refusals remain, because being wrong here destroys data:
  *   - No root readable at all: every bardolier volume would look orphaned. That
  *     is SSD_NOT_MOUNTED, never an empty claim-set.
- *   - Some but not all roots readable: a PARTIAL view would call another
- *     root's cache orphaned. ROOT_UNREADABLE.
  *   - An unreadable manifest is a project whose attachments cannot be known,
  *     so the scan refuses (CONFIG_INVALID) rather than under-reporting what is
  *     claimed. `doctor` is where that gets diagnosed.
@@ -33,8 +37,10 @@ import { rmSync } from 'node:fs'
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
 import { attachedKeys, cacheFor, LABEL_PROJECT, LABEL_ROLE, ROLE_CACHE } from './compose.ts'
+import { IMAGE_CACHE } from './images.ts'
 import { dataDir, directorySize, serviceDataDir, subdirectories } from './layout.ts'
-import { discoverProjects, rootUnreadableError, unreadableRoots, type DiscoveredProject } from './projects.ts'
+import { discoverProjects, unreadableRoots, type DiscoveredProject } from './projects.ts'
+import { readRootIndex } from './rootindex.ts'
 import type { DockerVolume } from './docker.ts'
 import type { OrphanedVolume } from './model/status.ts'
 
@@ -71,10 +77,16 @@ export function dataOrphanName(project: string, key: string): string {
 export type VolumeScan = {
   /** Orphan name → the project that still claims it. Absent = nothing claims it. */
   readonly claimedBy: ReadonlyMap<string, string>
-  /** Every volume Docker reports, by name. */
+  /** Every volume Docker reports, by name. Empty when any root is unverified (see below). */
   readonly all: ReadonlyMap<string, DockerVolume>
   /** Everything ours that nothing claims, both kinds, sorted by name. */
   readonly orphans: readonly OrphanedVolume[]
+  /**
+   * Roots this scan could not read AND have never been indexed — named-volume
+   * orphans are omitted entirely while this is non-empty (phase 27; directory
+   * orphans are unaffected, they never needed more than the one root).
+   */
+  readonly unverifiedRoots: readonly string[]
 }
 
 /** The project a volume was made for, from the labels the compose file wrote (§9). */
@@ -98,6 +110,11 @@ type Claims = {
   readonly names: ReadonlyMap<string, string>
   /** Every project whose manifest could be read. */
   readonly projects: readonly DiscoveredProject[]
+  /**
+   * Unreadable roots with no index to fall back on — named-volume claims
+   * cannot be trusted while any of these is non-empty (see module header).
+   */
+  readonly unverifiedRoots: readonly string[]
 }
 
 /** Everything the manifests under every configured root claim. One walk. */
@@ -109,11 +126,6 @@ function claimsFromManifests(ctx: Context): Claims {
       `No configured root is readable, so bardolier cannot tell which volumes are still in use. Mount one before reclaiming disk.`,
     )
   }
-  // Some, but not all, roots readable: a PARTIAL view is the dangerous case —
-  // silently scanning only what's reachable would call the other root's
-  // volumes orphaned. Total absence above is the worse, already-handled case.
-  const unreadable = unreadableRoots(discovery)
-  if (unreadable.length > 0) throw rootUnreadableError(unreadable)
   if (discovery.invalid.length > 0) {
     const broken = discovery.invalid.map((p) => p.name).join(', ')
     throw new BardolierError(
@@ -131,7 +143,20 @@ function claimsFromManifests(ctx: Context): Claims {
     if (cache && !names.has(cache.volume)) names.set(cache.volume, project.name)
   }
 
-  return { names, projects: discovery.projects }
+  const unverifiedRoots: string[] = []
+  for (const root of unreadableRoots(discovery)) {
+    const index = readRootIndex(ctx.loaded.path, root)
+    if (!index) {
+      unverifiedRoots.push(root.name)
+      continue
+    }
+    for (const project of index.projects) {
+      const cache = IMAGE_CACHE[project.base_image]
+      if (cache && !names.has(cache.volume)) names.set(cache.volume, project.name)
+    }
+  }
+
+  return { names, projects: discovery.projects, unverifiedRoots }
 }
 
 /**
@@ -169,37 +194,43 @@ function dataOrphans(project: DiscoveredProject): OrphanedVolume[] {
  * stays a single cheap `volume ls`.
  */
 export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
-  const { names, projects } = claimsFromManifests(ctx)
-  const volumes = await ctx.docker.volumes()
+  const { names, projects, unverifiedRoots } = claimsFromManifests(ctx)
 
   const all = new Map<string, DockerVolume>()
   const claimedBy = new Map<string, string>()
-  const candidates: DockerVolume[] = []
+  let orphans: OrphanedVolume[] = []
 
-  for (const volume of volumes) {
-    all.set(volume.name, volume)
-    const claimant = names.get(volume.name)
-    if (claimant !== undefined) {
-      claimedBy.set(volume.name, claimant)
-      continue
+  // Named-volume claims cannot be trusted while a root is both unreadable and
+  // never indexed (see module header) — skip the Docker side of the scan
+  // entirely rather than risk calling an unverifiable claim orphaned.
+  if (unverifiedRoots.length === 0) {
+    const volumes = await ctx.docker.volumes()
+    const candidates: DockerVolume[] = []
+    for (const volume of volumes) {
+      all.set(volume.name, volume)
+      const claimant = names.get(volume.name)
+      if (claimant !== undefined) {
+        claimedBy.set(volume.name, claimant)
+        continue
+      }
+      // Only volumes this tool made are ours to offer for reclaiming. Somebody
+      // else's `docker volume create` is none of our business.
+      if (isBardolierVolume(volume)) candidates.push(volume)
     }
-    // Only volumes this tool made are ours to offer for reclaiming. Somebody
-    // else's `docker volume create` is none of our business.
-    if (isBardolierVolume(volume)) candidates.push(volume)
+
+    const sizes = candidates.length > 0 ? await ctx.docker.volumeSizes() : new Map<string, number>()
+    orphans = candidates.map((volume): OrphanedVolume => {
+      const bytes = sizes.get(volume.name)
+      return {
+        name: volume.name,
+        kind: 'volume',
+        path: null,
+        size_bytes: bytes ?? 0,
+        size_human: bytes === undefined ? UNKNOWN_SIZE : formatBytes(bytes),
+        last_project: volumeOwner(volume),
+      }
+    })
   }
-
-  const sizes = candidates.length > 0 ? await ctx.docker.volumeSizes() : new Map<string, number>()
-  const orphans: OrphanedVolume[] = candidates.map((volume): OrphanedVolume => {
-    const bytes = sizes.get(volume.name)
-    return {
-      name: volume.name,
-      kind: 'volume',
-      path: null,
-      size_bytes: bytes ?? 0,
-      size_human: bytes === undefined ? UNKNOWN_SIZE : formatBytes(bytes),
-      last_project: volumeOwner(volume),
-    }
-  })
 
   for (const project of projects) {
     for (const key of attachedKeys(project.manifest)) {
@@ -209,7 +240,7 @@ export async function scanVolumes(ctx: Context): Promise<VolumeScan> {
   }
 
   orphans.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  return { claimedBy, all, orphans }
+  return { claimedBy, all, orphans, unverifiedRoots }
 }
 
 /**

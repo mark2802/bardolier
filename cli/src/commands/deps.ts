@@ -62,7 +62,7 @@ export async function runDepsAdd(ctx: Context, request: DepsRequest): Promise<De
 
   const next: ProjectManifest = { ...manifest, extra_packages: [...existing, ...packages].sort() }
   const catalogue = catalogueIfNeeded(ctx, next)
-  persist(dir, next, catalogue)
+  persist(ctx, dir, next, catalogue)
 
   return { project: manifest.name, added: packages, extra_packages: attachedPackages(next), image: selectedImage(next) }
 }
@@ -101,7 +101,7 @@ export async function runDepsRemove(ctx: Context, request: DepsRequest): Promise
   for (const name of packages) remaining.delete(name)
   const next: ProjectManifest = { ...manifest, extra_packages: [...remaining].sort() }
   const catalogue = catalogueIfNeeded(ctx, next)
-  persist(dir, next, catalogue)
+  persist(ctx, dir, next, catalogue)
 
   return { project: manifest.name, removed: packages, extra_packages: attachedPackages(next), image: selectedImage(next) }
 }

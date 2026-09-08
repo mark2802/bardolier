@@ -69,7 +69,12 @@
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "path": { "type": "string", "minLength": 1 },
-        "mounted": { "type": "boolean" }
+        "mounted": { "type": "boolean" },
+        "last_indexed": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Additive since phase 27. Null while mounted (reconciled on every status call) or never indexed."
+        }
       }
     },
     "project": {

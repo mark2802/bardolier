@@ -23,6 +23,8 @@ import { attachedExtraPorts, describeExtraPort } from '../extraports.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { PortAddOutput, PortListOutput, PortRemoveOutput } from '../model/extraport.ts'
 import { composePath, requireProject } from '../workspace.ts'
+import { discoverProjects } from '../projects.ts'
+import { offlineRoots, renderDegradedRoots } from '../rootindex.ts'
 import { catalogueIfNeeded, persist, requireStopped } from './service.ts'
 
 /** Mirrors `project.schema.json`'s `extra_ports` key pattern — also a service key's. */
@@ -88,7 +90,8 @@ export async function runPortAdd(ctx: Context, request: PortAddRequest): Promise
     extra_ports: { ...(manifest.extra_ports ?? {}), [name]: { container_port: containerPort, host_port: hostPort } },
   }
   const catalogue = catalogueIfNeeded(ctx, next)
-  const regenerated = persist(dir, next, catalogue)
+  const regenerated = persist(ctx, dir, next, catalogue)
+  const degraded = offlineRoots(ctx, discoverProjects(ctx.config))
 
   return {
     project: manifest.name,
@@ -96,6 +99,7 @@ export async function runPortAdd(ctx: Context, request: PortAddRequest): Promise
     extra_ports: attachedExtraPorts(next),
     compose_path: composePath(dir),
     compose_regenerated: regenerated.changed,
+    ...(degraded.length > 0 ? { degraded_roots: degraded } : {}),
   }
 }
 
@@ -105,6 +109,7 @@ export function renderPortAdd(output: PortAddOutput): string[] {
     `Declared port \`${added.name}\` on ${output.project}.`,
     `  host port: ${added.host_port} → :${added.container_port}   ${added.url}`,
     `  compose:   ${output.compose_path}${output.compose_regenerated ? ' (regenerated)' : ' (unchanged)'}`,
+    ...renderDegradedRoots(output.degraded_roots ?? []),
     '',
     `Next: bardolier up ${output.project}`,
   ]
@@ -134,7 +139,7 @@ export async function runPortRemove(ctx: Context, request: PortRequest): Promise
   const next: ProjectManifest = { ...manifest, extra_ports: remaining }
 
   const catalogue = catalogueIfNeeded(ctx, next)
-  const regenerated = persist(dir, next, catalogue)
+  const regenerated = persist(ctx, dir, next, catalogue)
 
   return {
     project: manifest.name,

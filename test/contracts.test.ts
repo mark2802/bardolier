@@ -32,6 +32,7 @@ import type { AttachedExtraPort, PortAddOutput, PortListOutput, PortRemoveOutput
 import type { ShellOutput } from '../cli/src/model/shell.ts'
 import type { OrphanedVolume, VolumesOrphanedOutput, VolumesRemoveOutput } from '../cli/src/model/volumes.ts'
 import type { DownAllOutput, EjectHolder, EjectOutput } from '../cli/src/model/ssd.ts'
+import type { OfflineRoot, RootIndex } from '../cli/src/model/rootindex.ts'
 
 const repo = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url))
 const readText = (p: string) => readFileSync(repo(p), 'utf8')
@@ -406,6 +407,56 @@ describe('extra port contracts (cli-spec.md §6, Ports; §5.1)', () => {
       extra_ports: [attached],
     }
     assert.ok(validate('status', { ssd: { mounted: true, root: '/x' }, docker: { available: true }, projects: [withPorts], orphaned_volumes: [] }).valid)
+  })
+})
+
+describe('offline-root contracts (cli-spec.md §5, §8; phase 27)', () => {
+  /** The `degraded_roots` row shape shared by new/clone/service-add/port-add. */
+  const CARRIERS = ['new', 'clone', 'service-add', 'port-add'] as const
+
+  const offline: OfflineRoot = { root: 'ssd', path: '/Volumes/ssd/claude-projects', last_indexed: '2026-09-07T10:00:00.000Z' }
+
+  test('the offline-root block is identical in every schema that carries it', () => {
+    const blocks = CARRIERS.map((name) => {
+      const schema = loadSchema(name) as { $defs?: { offline_root?: unknown } }
+      assert.ok(schema.$defs?.offline_root, `${name}.schema.json has no $defs.offline_root`)
+      return JSON.stringify(schema.$defs.offline_root)
+    })
+    assert.equal(new Set(blocks).size, 1, 'the duplicated $defs blocks have drifted apart')
+  })
+
+  test('a never-indexed root reports last_indexed: null', () => {
+    const add = {
+      project: 'myapp',
+      added: { name: 'notebook', host_port: 8888, container_port: 8888, url: 'http://localhost:8888' },
+      extra_ports: [],
+      compose_path: '/Volumes/ssd/claude-projects/myapp/docker-compose.yml',
+      compose_regenerated: true,
+      degraded_roots: [{ ...offline, last_indexed: null }],
+    }
+    assert.ok(validate('port-add', add).valid, validate('port-add', add).errors.join('\n'))
+  })
+
+  test('the root index schema accepts a real projection', () => {
+    const index: RootIndex = {
+      root: { name: 'ssd', path: '/Volumes/ssd/claude-projects' },
+      scanned: '2026-09-07T10:00:00.000Z',
+      projects: [{ name: 'myapp', archetype: 'web', base_image: 'bardolier-web', ports: [{ service: 'postgres', host_port: 5433 }] }],
+    }
+    const { valid, errors } = validate('root-index', index)
+    assert.ok(valid, errors.join('\n'))
+  })
+
+  test('status.roots may report last_indexed, null or a timestamp', () => {
+    const roots = [
+      { name: 'a', path: '/a', mounted: true, last_indexed: null },
+      { name: 'b', path: '/b', mounted: false, last_indexed: '2026-09-07T10:00:00.000Z' },
+    ]
+    assert.ok(validate('status', { ssd: { mounted: true, root: '/a' }, docker: { available: true }, projects: [], orphaned_volumes: [], roots }).valid)
+  })
+
+  test('volumes orphaned may report unverified_roots', () => {
+    assert.ok(validate('volumes-orphaned', { orphaned: [], total_bytes: 0, total_human: '0 B', unverified_roots: ['ssd'] }).valid)
   })
 })
 

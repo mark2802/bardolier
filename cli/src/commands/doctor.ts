@@ -12,8 +12,10 @@
 import type { Context } from '../context.ts'
 import { toBardolierError } from '../errors.ts'
 import { BASE_IMAGES } from '../model/archetype.ts'
+import { DEV_SERVER_KEY } from '../portkeys.ts'
 import type { DoctorFinding, DoctorReport, DoctorRootState } from '../model/doctor.ts'
-import { discoverProjects, probeRoot } from '../projects.ts'
+import { discoverProjects, probeRoot, type Discovery } from '../projects.ts'
+import { reconcileReadableRoots } from '../rootindex.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 
 function configFinding(ctx: Context): DoctorFinding {
@@ -145,8 +147,7 @@ function catalogueFinding(ctx: Context): { finding: DoctorFinding; catalogue: Se
   }
 }
 
-function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): DoctorFinding {
-  const discovery = discoverProjects(ctx.config)
+function manifestsFinding(discovery: Discovery, catalogue: ServiceCatalogue | null): DoctorFinding {
   if (!discovery.mounted) {
     return {
       id: 'manifests',
@@ -188,6 +189,55 @@ function manifestsFinding(ctx: Context, catalogue: ServiceCatalogue | null): Doc
   }
 }
 
+/**
+ * §5's promised safety net: "a collision between two previously separate
+ * roots is a `doctor` finding, not a silent repair." Only answerable with
+ * EVERY root readable — a collision involving an offline root is exactly what
+ * the allocator already degrades on (`allocator.ts`), and reporting it here
+ * from a possibly-stale index would just be a second, worse guess.
+ */
+function portsFinding(discovery: Discovery): DoctorFinding {
+  if (!discovery.roots.every((root) => root.mounted)) {
+    return {
+      id: 'ports',
+      title: 'Cross-root ports & names',
+      ok: true,
+      detail: 'Skipped: not every configured root is currently readable.',
+    }
+  }
+
+  const holders = new Map<number, string[]>()
+  const rootsByName = new Map<string, string[]>()
+  const record = (port: number | undefined, project: string, label: string) => {
+    if (typeof port !== 'number') return
+    holders.set(port, [...(holders.get(port) ?? []), `${project}/${label}`])
+  }
+  for (const project of discovery.projects) {
+    rootsByName.set(project.name, [...(rootsByName.get(project.name) ?? []), project.root])
+    record(project.manifest.app_port, project.name, DEV_SERVER_KEY)
+    for (const [key, attachment] of Object.entries(project.manifest.services ?? {})) record(attachment?.host_port, project.name, key)
+    for (const [name, attachment] of Object.entries(project.manifest.extra_ports ?? {})) record(attachment?.host_port, project.name, name)
+  }
+
+  const portCollisions = [...holders.entries()].filter(([, held]) => held.length > 1)
+  const nameCollisions = [...rootsByName.entries()].filter(([, roots]) => roots.length > 1)
+  if (portCollisions.length === 0 && nameCollisions.length === 0) {
+    return { id: 'ports', title: 'Cross-root ports & names', ok: true, detail: 'No collisions across configured roots.' }
+  }
+
+  const problems = [
+    ...portCollisions.map(([port, held]) => `port ${port} is held by both ${held.join(' and ')}`),
+    ...nameCollisions.map(([name, roots]) => `\`${name}\` exists in both ${roots.join(' and ')}`),
+  ]
+  return {
+    id: 'ports',
+    title: 'Cross-root ports & names',
+    ok: false,
+    detail: problems.join('; '),
+    remedy: 'These roots were previously separate (§5) — rename or re-port one of the colliding projects by hand.',
+  }
+}
+
 export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
   const findings: DoctorFinding[] = [configFinding(ctx), await ssdFinding(ctx)]
 
@@ -197,7 +247,12 @@ export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
 
   const catalogue = catalogueFinding(ctx)
   findings.push(catalogue.finding)
-  findings.push(manifestsFinding(ctx, catalogue.catalogue))
+
+  const discovery = discoverProjects(ctx.config)
+  // RECONCILE (phase 27): `doctor` already walks every readable root.
+  reconcileReadableRoots(ctx, discovery)
+  findings.push(manifestsFinding(discovery, catalogue.catalogue))
+  findings.push(portsFinding(discovery))
 
   return { ok: findings.every((finding) => finding.ok), findings }
 }

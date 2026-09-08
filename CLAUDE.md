@@ -136,6 +136,7 @@ here is read by several files that must agree — change it in one place.
 | `model/archetype.ts` | `ARCHETYPE_APP_PORT` — fixed inside the container, allocated on the host | §9 |
 | `workspace.ts` | every write; skips one whose bytes already match | §9 |
 | `allocator.ts` | manifest scan + host probe; free means both | §5 |
+| `rootindex.ts` | the offline-root cache: write-through at every manifest write, reconciled wherever a scan already happens; never a second registry | §5, §8 |
 | `extraports.ts`, `deps.ts` | declared ports; declared apt packages and the content-addressed derived image | §5.1, §9 |
 | `services.ts` | manifest ⋈ catalogue, so `status` and `service list` cannot disagree | §4.1 |
 | `volumes.ts` | orphans, derived and never recorded; knows the shared cache by `bardolier.role: cache` | §6 |

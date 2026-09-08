@@ -197,13 +197,24 @@ Requirements, in priority order:
 At service-add:
 1. Read the service's base port from the catalogue.
 2. Scan every project's `project.yml` in **every** configured root for assigned
-   ports — the manifests are the only registry, so there is nothing to desync. A
-   root that cannot be read refuses the scan (`ROOT_UNREADABLE`) rather than
-   allocating from a partial view: an unreadable root's assignments are
-   unknowable, and handing one out is no different from never having scanned.
+   ports — the manifests are the only registry, so there is nothing to desync.
+   A root that cannot be read folds in its **root index** instead (§8) — the
+   last set of ports it held, kept fresh by write-through at every manifest
+   write and by a full rescan whenever `status`/`doctor`/`eject` already walks
+   it. A root that has never been indexed contributes nothing here (phase 27):
+   the cost of being wrong is a loud `PORT_UNAVAILABLE` at the next `up`, never
+   data loss, so allocation proceeds rather than refusing outright.
 3. From `host_port_base` upward, take the first port both unassigned in any
-   manifest and unbound on the host (probe the socket).
+   manifest (or index) and unbound on the host (probe the socket).
 4. Persist it in this project's manifest.
+
+**Name uniqueness is not this forgiving.** Two roots sharing a project name
+share a container name and a home volume — destructive, not merely
+mislabelled — so `new`/`clone` refuse `ROOT_UNREADABLE` when an unreadable
+root has no index to check the name against, even though a port allocation in
+the same call would proceed. A root indexed at least once, then unplugged,
+checks the name against that index instead and answers `PROJECT_EXISTS` same
+as a readable root would.
 
 Adding a root re-allocates nothing: uniqueness is enforced going forward, and a
 collision between two previously separate roots is a `doctor` finding, not a
@@ -248,9 +259,12 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   Creates dir, manifest, compose, the four folders of §3, and
   `work/CLAUDE.md`, under the named root (default: the first configured root
   — §8).
-  Assigns ports for any initial services. Errors: `ROOT_UNREADABLE` (the
-  target root, or another root the port allocation cannot see past),
-  `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
+  Assigns ports for any initial services. An unreadable root beyond the
+  target degrades rather than blocking this (§5, phase 27): the response
+  carries `degraded_roots` naming which one and how stale its index is.
+  Errors: `ROOT_UNREADABLE` (the target root itself, or another root that has
+  never been indexed and so cannot be checked for the name), `PROJECT_EXISTS`
+  (in any root, live or indexed), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
   (unknown `--root`, naming the configured roots).
 - `bardolier clone <source> <name> [--root <name>] [--with-content]`
   A second project shaped like one that already works. Copies the source
@@ -269,8 +283,10 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   staged under
   `<root>/.<name>.incoming` and renamed into place only once complete, and is
   refused up front with `INSUFFICIENT_SPACE` if it would not fit. Nothing about
-  the source is ever modified. Errors: `PROJECT_NOT_FOUND`, `PROJECT_EXISTS`
-  (in any root), `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`, `ROOT_UNREADABLE`,
+  the source is ever modified. Same offline-root handling as `new`:
+  `degraded_roots` on success, `ROOT_UNREADABLE` only for the target or a
+  never-indexed root. Errors: `PROJECT_NOT_FOUND`, `PROJECT_EXISTS` (in any
+  root), `PROJECT_AMBIGUOUS`, `PROJECT_RUNNING`, `ROOT_UNREADABLE`,
   `PORT_UNAVAILABLE`, `INSUFFICIENT_SPACE`, `INVALID_ARGUMENT`.
 - `bardolier move <name> --root <target>` — relocate a project to another
   configured root. `--root` is required; naming the root the project already
@@ -307,7 +323,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Services
 - `bardolier service add <project> <svc>` — attach; assign host port; regenerate
-  compose. Errors `PROJECT_RUNNING`, `SERVICE_ATTACHED`, `SERVICE_UNKNOWN`.
+  compose. An unreadable root degrades allocation rather than blocking it (§5,
+  phase 27) and names it in `degraded_roots`. Errors `PROJECT_RUNNING`,
+  `SERVICE_ATTACHED`, `SERVICE_UNKNOWN`.
 - `bardolier service remove <project> <svc>` — detach; regenerate compose; **keep
   `data/<svc>`** (it becomes an orphan of this project). Release the host port.
   Errors `PROJECT_RUNNING`, `SERVICE_NOT_ATTACHED`.
@@ -315,7 +333,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Ports
 - `bardolier port add <project> <name> --container-port <n>` — declare an extra
-  port (§5.1); assign its host port; regenerate compose. Errors
+  port (§5.1); assign its host port; regenerate compose. Same offline-root
+  degrading as `service add` (§5, phase 27). Errors
   `PROJECT_RUNNING`, `EXTRA_PORT_ATTACHED`.
 - `bardolier port remove <project> <name>` — remove it; regenerate compose;
   release the host port. Errors `PROJECT_RUNNING`, `EXTRA_PORT_NOT_ATTACHED`.
@@ -344,14 +363,16 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Volumes / disk
 - `bardolier volumes orphaned` — array of `{ name, kind, path, size_bytes,
-  size_human, last_project }` for everything ours nothing claims. Two `kind`s
-  a `directory` under some project's `data/` whose key its manifest
-  no longer attaches — named `<project>/<key>`, needing only that one root
-  readable, with no labels and no cross-root reasoning — and a named `volume`,
-  now only the shared toolchain caches plus whatever an older layout left
-  behind. Errors `SSD_NOT_MOUNTED` (no root readable at all) and
-  `ROOT_UNREADABLE` (some, but not all, roots readable — a partial view is
-  refused rather than calling another root's cache orphaned).
+  size_human, last_project }` for everything ours nothing claims. Two `kind`s:
+  a `directory` under some project's `data/` whose key its manifest no longer
+  attaches — named `<project>/<key>`, needing only that one root readable,
+  with no labels and no cross-root reasoning — and a named `volume`, now only
+  the shared toolchain caches plus whatever an older layout left behind, which
+  needs every root's claims. An unreadable root folds in its root index for
+  the volume half (§5, §8, phase 27); one that has never been indexed cannot
+  be guessed at safely, so its cache claims are omitted rather than risked —
+  `directory` orphans are unaffected, and `unverified_roots` names which root
+  was skipped and why. Errors `SSD_NOT_MOUNTED` (no root readable at all).
 - `bardolier volumes rm <name>` — reclaim one orphan of either kind, by its name
   or (for a directory) its path; confirm unless `--force`. Errors
   `VOLUME_IN_USE` if still claimed.
@@ -380,6 +401,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
     stopped, naming `bardolier down-all` as the command to run instead. A root on
     the internal disk is a first-class mode (§8), and `diskutil eject`-ing `/`
     is not a smaller version of ejecting — it is the wrong command.
+  - **The root's index is reconciled first** (§8, phase 27) — the last instant
+    it is guaranteed readable, and precisely the moment a user takes this path
+    before a drive goes away.
   - Otherwise: `down-all` → host holders (`lsof`) → `diskutil eject`. Held
     means `EJECT_BLOCKED` with `{ holders: [...] }`. **Never forced.**
   - **A holder is something the user can act on.** The container runtime and the
@@ -413,7 +437,11 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   useful first call for the app on launch. The `ssd` finding carries a `roots`
   array with per-root `mounted`/`removable` (null when unmounted — nothing to
   ask `diskutil`), so the app can tell an actual SSD from an internal-disk root
-  instead of calling both "SSD".
+  instead of calling both "SSD". `doctor` also reconciles every readable
+  root's index (§8, phase 27) — free, since it already walks them — and a
+  `ports` finding reports a port or name held in two roots at once (the
+  collision §5 promises is a finding, not a repair), skipped `ok: true` unless
+  every configured root answered live.
 
 ### Roots
 
@@ -470,7 +498,10 @@ changed to accommodate them.
 {
   "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" }, // default root's path (roots[0])
   "roots": [                          // every configured root; additive
-    { "name": "ssd", "path": "/Volumes/ssd/claude-projects", "mounted": true }
+    // last_indexed (phase 27, additive): null while mounted (reconciled by
+    // this very call) or never indexed; an ISO timestamp for an unreadable
+    // root that has been seen before.
+    { "name": "ssd", "path": "/Volumes/ssd/claude-projects", "mounted": true, "last_indexed": null }
   ],
   "docker": { "available": true },
   "projects": [
@@ -529,6 +560,15 @@ Schema stability is the contract. Additive changes only once the app ships.
   `~/bardolier-projects`, since a published tool must not assume `/Volumes/ssd`
   exists. Only `eject` assumes a removable volume, and it is simply unavailable
   (`EJECT_NOT_APPLICABLE`) otherwise; `down-all` is the equivalent in that mode.
+- **The root index** (phase 27): `<dirname(config.yml)>/root-index/<sha256(root.path)[:12]>.json`
+  — one file per root, keyed by path so a rename keeps its history. Holds each
+  project's name, archetype, base image and every host port it holds, the
+  last time that root was readable — never the manifest itself, and never
+  read for anything but §5's uniqueness questions. Disposable: deleting the
+  directory only costs bardolier its memory of an offline root, exactly the
+  state a root that has never been indexed is already in. Written
+  write-through at every manifest write and by a full rescan wherever
+  `status`/`doctor`/`eject` already walks the root; never polled.
 
 ## 9. Compose generation rules
 

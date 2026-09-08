@@ -77,7 +77,11 @@ struct PreferencesPanel: View {
                     Text(root.name).font(.caption).fontWeight(.medium)
                     Text(root.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     if !root.mounted {
-                        Text("not readable").font(.caption2).foregroundStyle(.orange)
+                        // `lastIndexed` (phase 27) is nil for a root that has
+                        // never been scanned — everything else has last seen
+                        // its own manifests, so the difference is worth saying.
+                        let seen = root.lastIndexed.map { " — last seen \($0)" } ?? ""
+                        Text("not readable\(seen)").font(.caption2).foregroundStyle(.orange)
                     }
                     Spacer()
                     Button("Forget") { Task { await store.removeRoot(name: root.name) } }

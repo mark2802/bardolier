@@ -19,6 +19,12 @@ export type VolumesOrphanedOutput = {
   /** Sum of `size_bytes` — what reclaiming all of them would free. */
   total_bytes: number
   total_human: string
+  /**
+   * Roots this scan skipped named-volume claims for, because they are both
+   * unreadable and never indexed (phase 27) — present only when non-empty.
+   * Directory orphans above are unaffected and still complete.
+   */
+  unverified_roots?: string[]
 }
 
 export type VolumesRemoveOutput = {

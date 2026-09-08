@@ -12,6 +12,12 @@ export type RootRow = {
   name: string
   path: string
   mounted: boolean
+  /**
+   * Additive since phase 27, for parity with `status.roots[]` — `root
+   * add|remove|list` never populate this themselves; it is here only so the
+   * app's `ConfiguredRoot` model can be shared across both.
+   */
+  last_indexed?: string | null
 }
 
 export type RootAddOutput = {

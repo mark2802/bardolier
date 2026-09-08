@@ -285,7 +285,9 @@ export const COMMANDS: readonly CommandNode[] = [
     usage: 'up <name> [--no-shell]',
     summary: 'Bring the dev container and attached services up. Validates ports. Idempotent.',
     flags: [{ name: '--no-shell', description: "Suppress the app's shell-open after start. The CLI never spawns a terminal." }],
-    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE', 'DOCKER_UNAVAILABLE'],
+    // An unreadable root degrades the app_port retrofit rather than raising
+    // ROOT_UNREADABLE (phase 27) — see `allocator.ts`.
+    errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('up'), 1)
       return output(await runUp(createContext(), { name, noShell: boolFlag(inv, '--no-shell') }), renderUp)
@@ -355,7 +357,9 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'service add <project> <svc>',
         summary: 'Attach a service, assign its host port, regenerate compose.',
         flags: [],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE'],
+        // An unreadable root degrades allocation rather than raising
+        // ROOT_UNREADABLE (phase 27) — see `degraded_roots` on the payload.
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
         run: async (inv) => {
           const [project, service] = exactArgs(inv, byPath('service add'), 2)
           return output(await runServiceAdd(createContext(), { project, service }), renderServiceAdd)
@@ -417,7 +421,8 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'port add <project> <name> --container-port <n>',
         summary: 'Declare an extra port, assign its host port, regenerate compose.',
         flags: [{ name: '--container-port', arg: '<n>', description: 'Fixed port inside the container. Required.' }],
-        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'ROOT_UNREADABLE', 'INVALID_ARGUMENT'],
+        // Same offline-root degrading as `service add` (phase 27) — no ROOT_UNREADABLE here either.
+        errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'INVALID_ARGUMENT'],
         run: async (inv) => {
           const [project, name] = exactArgs(inv, byPath('port add'), 2)
           return output(
@@ -539,9 +544,10 @@ export const COMMANDS: readonly CommandNode[] = [
         summary: 'Named volumes and leftover data directories no manifest claims, with sizes.',
         flags: [],
         // SSD_NOT_MOUNTED is not in §6's list but is a safety requirement:
-        // with no manifests to read, every volume would look reclaimable.
-        // ROOT_UNREADABLE is the same safety net for a PARTIAL view (phase 18).
-        errors: ['SSD_NOT_MOUNTED', 'ROOT_UNREADABLE', 'DOCKER_UNAVAILABLE'],
+        // with no manifests to read, every volume would look reclaimable. A
+        // PARTIAL view no longer refuses (phase 27) — an unreadable root
+        // folds in its index instead, or is named in `unverified_roots`.
+        errors: ['SSD_NOT_MOUNTED', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {
           noArgs(inv, 'volumes orphaned')
           return output(await collectOrphanedVolumes(createContext()), renderOrphanedVolumes)
@@ -553,7 +559,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'volumes rm <name> [--force]',
         summary: 'Remove one orphan — a volume or a data directory. Confirms unless --force. Destroys data.',
         flags: [{ name: '--force', description: 'Skip the confirmation prompt.' }],
-        errors: ['SSD_NOT_MOUNTED', 'ROOT_UNREADABLE', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
+        errors: ['SSD_NOT_MOUNTED', 'VOLUME_IN_USE', 'VOLUME_NOT_FOUND', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {
           const [name] = exactArgs(inv, byPath('volumes rm'), 1)
           return output(

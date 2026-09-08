@@ -51,3 +51,4 @@ depends on them — never inside a plan bullet.
 | Where project data lives | bind mounts under the root, not named volumes | 2026-09-06 |
 | Number of roots | many, each with a derived mount point | 2026-09-05 |
 | Per-project truth | one `project.yml`; no second registry | 2026-08-20 |
+| Cross-root knowledge while a root is offline | a derived index on the internal disk, rebuilt from the manifests, never authoritative | 2026-09-07 |

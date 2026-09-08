@@ -171,8 +171,21 @@ nonisolated struct ConfiguredRoot: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let path: String
     let mounted: Bool
+    /// When this root was last scanned (phase 27) — nil while mounted (its
+    /// index is reconciled on every `status` call, so this stays
+    /// uninteresting) or never indexed. `root add|remove|list` never set it.
+    let lastIndexed: String?
 
     var id: String { name }
+}
+
+/// One root a command could not read while it ran (cli-spec.md §5, §8;
+/// phase 27) — allocation used its last known state instead of refusing.
+/// Mirrors `$defs/offline_root`, duplicated across new/clone/service-add/port-add.
+nonisolated struct OfflineRoot: Codable, Hashable, Sendable {
+    let root: String
+    let path: String
+    let lastIndexed: String?
 }
 
 nonisolated struct DockerStatus: Codable, Hashable, Sendable {
@@ -313,6 +326,9 @@ nonisolated struct NewOutput: Codable, Hashable, Sendable {
     /// Seeded file names in write order (§10).
     let seeded: [String]
     let services: [AttachedService]
+    /// Present only when a configured root could not be read while this ran
+    /// (phase 27) — ports were allocated against its last known state.
+    let degradedRoots: [OfflineRoot]?
 }
 
 nonisolated struct CreatedProject: Codable, Hashable, Sendable {
@@ -344,6 +360,9 @@ nonisolated struct CloneOutput: Codable, Hashable, Sendable {
     let withContent: Bool
     /// Bytes copied; 0 for a shape-only clone.
     let bytesCopied: Int
+    /// Present only when a configured root could not be read while this ran
+    /// (phase 27) — ports were allocated against its last known state.
+    let degradedRoots: [OfflineRoot]?
 }
 
 /// What `move` did (phase 21, §8.2) — a project's ports never change, so this
@@ -447,6 +466,8 @@ nonisolated struct ServiceAddOutput: Codable, Hashable, Sendable {
     let services: [AttachedService]
     let composePath: String
     let composeRegenerated: Bool
+    /// Present only when a configured root could not be read while this ran (phase 27).
+    let degradedRoots: [OfflineRoot]?
 }
 
 nonisolated struct ServiceRemoveOutput: Codable, Hashable, Sendable {
@@ -482,6 +503,8 @@ nonisolated struct PortAddOutput: Codable, Hashable, Sendable {
     let extraPorts: [AttachedExtraPort]
     let composePath: String
     let composeRegenerated: Bool
+    /// Present only when a configured root could not be read while this ran (phase 27).
+    let degradedRoots: [OfflineRoot]?
 }
 
 nonisolated struct PortRemoveOutput: Codable, Hashable, Sendable {
@@ -537,6 +560,10 @@ nonisolated struct OrphanedVolumesOutput: Codable, Hashable, Sendable {
     /// What reclaiming all of them would free.
     let totalBytes: Int
     let totalHuman: String
+    /// Roots this scan skipped named-volume claims for — unreadable and never
+    /// indexed (phase 27). Present only when non-empty; directory orphans
+    /// above are unaffected.
+    let unverifiedRoots: [String]?
 }
 
 nonisolated struct VolumeRemoveOutput: Codable, Hashable, Sendable {

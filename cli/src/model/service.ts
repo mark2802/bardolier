@@ -12,6 +12,8 @@
  * daemon just to fill a field the caller did not ask for.
  */
 
+import type { OfflineRoot } from './rootindex.ts'
+
 export type AttachedService = {
   /** Catalogue key, e.g. `postgres`. */
   key: string
@@ -36,6 +38,8 @@ export type ServiceAddOutput = {
   compose_path: string
   /** False when the regenerated compose file was byte-identical to the old one. */
   compose_regenerated: boolean
+  /** Present only when a configured root could not be read while this ran (phase 27). */
+  degraded_roots?: OfflineRoot[]
 }
 
 /**

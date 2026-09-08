@@ -119,6 +119,8 @@ nonisolated struct BardolierErrorDetails: Codable, Hashable, Sendable {
     let container: String?
     /// PROJECT_RUNNING: the state that blocked the change.
     let state: ProjectState?
+    /// ROOT_UNREADABLE, PROJECT_AMBIGUOUS: the configured root name(s) concerned.
+    let roots: [String]?
 
     /// Every field defaults to absent, because every field IS usually absent:
     /// a code carries the one or two details it has and nothing else. Spelled
@@ -133,7 +135,8 @@ nonisolated struct BardolierErrorDetails: Codable, Hashable, Sendable {
         hostPort: Int? = nil,
         volume: String? = nil,
         container: String? = nil,
-        state: ProjectState? = nil
+        state: ProjectState? = nil,
+        roots: [String]? = nil
     ) {
         self.holders = holders
         self.reason = reason
@@ -144,6 +147,7 @@ nonisolated struct BardolierErrorDetails: Codable, Hashable, Sendable {
         self.volume = volume
         self.container = container
         self.state = state
+        self.roots = roots
     }
 }
 
@@ -235,6 +239,10 @@ nonisolated extension BardolierFailure: LocalizedError {
             return "Start Docker Desktop and try again."
         case .cli(let body) where body.code == .ssdNotMounted:
             return "Plug the SSD in, or set its path in Preferences."
+        case .cli(let body) where body.code == .rootUnreadable:
+            let named = body.details?.roots?.joined(separator: ", ")
+            return named.map { "Plug in \($0) once — after that, this works with it offline too." }
+                ?? "Plug in the missing root and try again."
         case .executableNotFound:
             return "Install it with `npm link` in the repo’s cli/ directory, or set its path with:\n"
                 + "defaults write \(BardolierExecutable.defaultsSuite) \(BardolierExecutable.pathDefaultsKey) /path/to/bardolier"

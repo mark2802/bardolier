@@ -34,9 +34,25 @@
     "compose_regenerated": {
       "type": "boolean",
       "description": "False when the regenerated compose file was byte-identical to the old one (§9)."
+    },
+    "degraded_roots": {
+      "type": "array",
+      "description": "Present only when a configured root could not be read while this ran (phase 27) — allocation used its last known state instead of refusing.",
+      "items": { "$ref": "#/$defs/offline_root" }
     }
   },
   "$defs": {
+    "offline_root": {
+      "type": "object",
+      "description": "One unreadable root and how stale bardolier's last look at it is. This block is duplicated verbatim in new/clone/service-add/port-add; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["root", "path", "last_indexed"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "last_indexed": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
     "attached_extra_port": {
       "type": "object",
       "description": "A declared extra port: the manifest's host port plus the caller's own name. cli-spec.md §5.1, §6 (Ports). Duplicated verbatim across status/port-add/port-remove/port-list; test/contracts.test.ts asserts the copies stay identical.",

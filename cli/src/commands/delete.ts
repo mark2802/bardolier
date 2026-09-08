@@ -28,6 +28,8 @@ import { dataDir, holdsData, homeDir, irreplaceableBytes } from '../layout.ts'
 import { formatBytes } from '../volumes.ts'
 import type { DeleteOutput } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
+import { findRoot } from '../projects.ts'
+import { removeFromRootIndex } from '../rootindex.ts'
 import { requireProject } from '../workspace.ts'
 import { runDown } from './down.ts'
 
@@ -93,6 +95,11 @@ export async function runDelete(ctx: Context, request: DeleteRequest): Promise<D
   await runDown(ctx, manifest.name, { noHandoff: true })
 
   rmSync(dir, { recursive: true, force: true })
+
+  // Write-through (§5, phase 27): a deleted project must stop being reported
+  // as a name or port held anywhere, including by an offline root's index.
+  const root = findRoot(ctx.config, project.root)
+  if (root) removeFromRootIndex(ctx, root, manifest.name)
 
   return {
     project: manifest.name,

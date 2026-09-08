@@ -50,6 +50,10 @@ export const SCHEMA_NAMES = [
   'root-add',
   'root-remove',
   'root-list',
+  // Phase 27: the disposable cache that lets bardolier answer name/port
+  // uniqueness while a root is unreadable — not a command payload, but bound
+  // to its model the same way (test/contracts.test.ts).
+  'root-index',
 ] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]
 

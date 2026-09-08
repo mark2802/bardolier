@@ -218,30 +218,61 @@ json_assert "$LAST" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
 # Re-register b for the final section, which needs two roots again.
 $BARDOLIER root add "$ROOT_B" --name b --json >/dev/null || bad "re-adding root b exited non-zero"
 
-# ── 13. A partial view refuses rather than under-reporting (§5, §6) ───────────
-head "13. \`ROOT_UNREADABLE\`: allocation and the orphan scan refuse; \`status\` does not (phase 18's central guarantee)"
+# ── 13. An offline root degrades rather than refusing, once indexed (phase 27) ─
+head "13. An indexed-but-unreadable root: allocation and the orphan scan degrade; \`status\` still doesn't refuse"
 
 $BARDOLIER new delta --archetype web --root a --json >/dev/null || bad "new delta exited non-zero"
+# root b still carries gamma's index from section 9 (write-through at `new`,
+# confirmed there by section 9's own `status` call) — the remove/re-add in
+# section 12 never touched it, and nothing has rescanned it since.
 rm -rf "$ROOT_B"
 
 SERVICE_ADD="$($BARDOLIER service add delta redis --json 2>/dev/null || true)"
-json_assert "$SERVICE_ADD" 'd.error && d.error.code === "ROOT_UNREADABLE"' \
-  && ok "\`service add\` in root a fails ROOT_UNREADABLE rather than allocating while root b is unreadable" \
-  || bad "service add allocated a port despite an unreadable root: $SERVICE_ADD"
+json_assert "$SERVICE_ADD" 'd.error === undefined && d.degraded_roots?.[0]?.root === "b"' \
+  && ok "\`service add\` in root a allocates against root b's index, and names it as degraded" \
+  || bad "service add did not degrade with an indexed offline root: $SERVICE_ADD"
 
 ORPHANED="$($BARDOLIER volumes orphaned --json 2>/dev/null || true)"
-json_assert "$ORPHANED" 'd.error && d.error.code === "ROOT_UNREADABLE"' \
-  && ok "\`volumes orphaned\` fails ROOT_UNREADABLE rather than reporting root b's volumes as orphans" \
-  || bad "volumes orphaned did not refuse: $ORPHANED"
+json_assert "$ORPHANED" 'd.error === undefined && d.unverified_roots === undefined' \
+  && ok "\`volumes orphaned\` succeeds — root b's cache claims came from its index" \
+  || bad "volumes orphaned did not degrade with an indexed offline root: $ORPHANED"
 
 STATUS_PARTIAL="$($BARDOLIER status --json)" || bad "status exited non-zero with a root gone"
 json_assert "$STATUS_PARTIAL" "
   d.projects.every((p) => p.root === 'a') &&
   d.projects.some((p) => p.name === 'alpha') &&
   d.projects.some((p) => p.name === 'delta') &&
-  d.orphaned_volumes.length === 0
-" && ok "status still succeeds, lists only root a's projects, and reports no orphans" \
+  d.orphaned_volumes.length === 0 &&
+  d.roots.find((r) => r.name === 'b')?.last_indexed !== null
+" && ok "status still succeeds, lists only root a's projects, reports no orphans, and dates root b's index" \
   || bad "status did not degrade the way §7 promises: $STATUS_PARTIAL"
+
+# ── 14. Write-through needs no scan; a never-indexed root stays strict on names
+head "14. Write-through (§3a) needs no \`status\`; a never-indexed root still refuses a NAME (phase 27)"
+
+ROOT_C="$TMP/root-c"
+mkdir -p "$ROOT_C"
+$BARDOLIER root add "$ROOT_C" --name c --json >/dev/null || bad "root add c exited non-zero"
+$BARDOLIER new epsilon --archetype web --root c --json >/dev/null || bad "new epsilon exited non-zero"
+rm -rf "$ROOT_C"
+
+# No status/doctor/eject has run since epsilon was created — its index entry
+# can only have come from write-through at `new` time.
+DUP="$($BARDOLIER new epsilon --archetype web --root a --json 2>/dev/null || true)"
+json_assert "$DUP" 'd.error && d.error.code === "PROJECT_EXISTS"' \
+  && ok "a name taken only in root c's index is still PROJECT_EXISTS, sourced purely from write-through" \
+  || bad "new did not see root c's write-through index: $DUP"
+
+$BARDOLIER root remove c --json >/dev/null || bad "root remove c exited non-zero"
+ROOT_D="$TMP/root-d" # never created, so never mounted and never indexed
+$BARDOLIER root add "$ROOT_D" --name d --json >/dev/null || bad "root add d exited non-zero"
+
+NEVER_INDEXED="$($BARDOLIER new zzz --archetype web --root a --json 2>/dev/null || true)"
+json_assert "$NEVER_INDEXED" 'd.error && d.error.code === "ROOT_UNREADABLE"' \
+  && ok "a root that is unreadable AND never indexed still refuses a name outright — the one strict case phase 27 keeps" \
+  || bad "new did not refuse with a never-indexed root: $NEVER_INDEXED"
+
+$BARDOLIER root remove d --json >/dev/null || bad "root remove d exited non-zero"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 summary "Roots"

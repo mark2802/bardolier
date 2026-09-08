@@ -290,10 +290,10 @@ describe('clone (cli-spec.md §6)', () => {
     const box = sandbox()
     const other = secondRoot()
     box.writeProject('source', richSource())
-    mkdirSync(join(other, 'twin'), { recursive: true })
-    writeManifest(join(other, 'twin'), manifest('twin'))
-
     const ctx = twoRoots(box, other)
+    mkdirSync(join(other, 'twin'), { recursive: true })
+    writeManifest(ctx, join(other, 'twin'), manifest('twin'))
+
     await assert.rejects(
       () => runClone(ctx, { source: 'source', name: 'twin', withContent: false }),
       (error: unknown) => error instanceof BardolierError && error.code === 'PROJECT_EXISTS',
@@ -470,11 +470,12 @@ describe('move (cli-spec.md §6)', () => {
 describe('staged copies (transfer.ts)', () => {
   test('a copy in progress is not a project `status` can see', () => {
     const box = sandbox()
+    const ctx = makeContext(box)
     const staging = stagingPath(box.root, 'halfway')
     mkdirSync(staging, { recursive: true })
-    writeManifest(staging, manifest('halfway'))
+    writeManifest(ctx, staging, manifest('halfway'))
 
-    assert.deepEqual(discoverProjects(makeContext(box).config).projects, [])
+    assert.deepEqual(discoverProjects(ctx.config).projects, [])
   })
 
   test('a copy that throws leaves neither a project nor a staging directory', () => {

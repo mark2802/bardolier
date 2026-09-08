@@ -21,12 +21,20 @@
  * host. Checking only the manifests would hand out a port some other Mac app
  * already holds; checking only the socket would hand out a port belonging to a
  * project that happens to be stopped.
+ *
+ * A root `discoverProjects` cannot reach no longer stops this (phase 27): its
+ * last known ports, from `rootindex.ts`, are folded into the taken set instead
+ * of refusing outright. Without even that — a root that has never been
+ * indexed — allocation proceeds anyway; the cost of being wrong is a loud
+ * `PORT_UNAVAILABLE` at the next `up`, never data loss, unlike a name
+ * collision (see `commands/new.ts:requireFreeName`, which stays strict).
  */
 
-import type { Config } from './config.ts'
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
-import { discoverProjects, rootUnreadableError, unreadableRoots } from './projects.ts'
+import { discoverProjects, unreadableRoots } from './projects.ts'
+import { readRootIndex } from './rootindex.ts'
+import { DEV_SERVER_KEY } from './portkeys.ts'
 import type { CatalogueService } from './model/catalogue.ts'
 
 /**
@@ -52,14 +60,13 @@ export type PortHolder = {
  * that is reported. The host probe is the backstop — if such a project is
  * running, its port is bound and will not be handed out anyway.
  *
- * With more than one root (phase 18), this refuses a PARTIAL view: a root that
- * cannot be read is a root whose assignments are unknowable, and silently
- * scanning only the rest would risk handing out a port already taken there.
+ * With more than one root (phase 18), a root that cannot be read folds in its
+ * ROOT INDEX instead — the last set of ports it held, per `rootindex.ts`. A
+ * root never yet indexed contributes nothing here rather than refusing: see
+ * the module header for why that is the right side to be wrong on.
  */
-export function assignedPorts(config: Config): Map<number, PortHolder> {
-  const discovery = discoverProjects(config)
-  const unreadable = unreadableRoots(discovery)
-  if (unreadable.length > 0) throw rootUnreadableError(unreadable)
+export function assignedPorts(ctx: Context): Map<number, PortHolder> {
+  const discovery = discoverProjects(ctx.config)
 
   const holders = new Map<number, PortHolder>()
   for (const project of discovery.projects) {
@@ -82,6 +89,16 @@ export function assignedPorts(config: Config): Map<number, PortHolder> {
       if (!holders.has(attachment.host_port)) holders.set(attachment.host_port, { project: project.name, service: name })
     }
   }
+
+  for (const root of unreadableRoots(discovery)) {
+    const index = readRootIndex(ctx.loaded.path, root)
+    if (!index) continue // never indexed — allocate as if it holds nothing (see module header)
+    for (const project of index.projects) {
+      for (const port of project.ports) {
+        if (!holders.has(port.host_port)) holders.set(port.host_port, { project: project.name, service: port.service })
+      }
+    }
+  }
   return holders
 }
 
@@ -90,13 +107,6 @@ export type PortRequest = {
   readonly key: string
   readonly definition: CatalogueService
 }
-
-/**
- * The name the dev-server allocation answers to in a holder list and in a
- * PORT_UNAVAILABLE refusal. Not a catalogue key — nothing in `services.yml` may
- * be called this — so a message naming it cannot be mistaken for a service.
- */
-export const DEV_SERVER_KEY = 'dev server'
 
 /**
  * Assign a host port to each request, in one pass over the manifests.
@@ -113,7 +123,7 @@ export async function allocatePorts(
   /** Ports already promised in this same operation but not yet on disk (§9). */
   reserved: Iterable<number> = [],
 ): Promise<Map<string, number>> {
-  const taken = new Set(assignedPorts(ctx.config).keys())
+  const taken = new Set(assignedPorts(ctx).keys())
   for (const port of reserved) taken.add(port)
   const assigned = new Map<string, number>()
 
@@ -137,7 +147,7 @@ export async function allocateAppPort(
   base: number,
   reserved: Iterable<number> = [],
 ): Promise<number> {
-  const taken = new Set(assignedPorts(ctx.config).keys())
+  const taken = new Set(assignedPorts(ctx).keys())
   for (const port of reserved) taken.add(port)
   return allocateOne(ctx, project, DEV_SERVER_KEY, base, taken)
 }
@@ -156,7 +166,7 @@ export async function allocateExtraPort(
   /** Ports already promised in this same operation but not yet on disk — `clone`'s. */
   reserved: Iterable<number> = [],
 ): Promise<number> {
-  const taken = new Set(assignedPorts(ctx.config).keys())
+  const taken = new Set(assignedPorts(ctx).keys())
   for (const port of reserved) taken.add(port)
   return allocateOne(ctx, project, name, containerPort, taken)
 }

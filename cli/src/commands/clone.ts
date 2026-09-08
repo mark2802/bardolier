@@ -44,7 +44,8 @@ import { composePath, manifestPath, regenerateCompose, requireProject, writeMani
 import { validate } from '../schema.ts'
 import { copyInto, requireSpace, sourceBytes, stageProject, type CopySource } from '../transfer.ts'
 import { formatBytes } from '../volumes.ts'
-import { requireFreeName, requireProjectName, requireRoot } from './new.ts'
+import { requireFreeName, requireProjectName, requireRoot, requestedOfflineRoots } from './new.ts'
+import { renderDegradedRoots } from '../rootindex.ts'
 import { requireStopped, resolveServices } from './service.ts'
 
 export type CloneRequest = {
@@ -150,7 +151,7 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
   const staged = stageProject(target.path, name, (staging) => {
     ensureProjectDirs(staging, keys)
     copyInto(staging, sources)
-    writeManifest(staging, manifest)
+    writeManifest(ctx, staging, manifest)
 
     // Re-seeded unless the copy brought one: a seed you would overwrite is the
     // user's file by then (§10).
@@ -165,6 +166,8 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     regenerateCompose(staging, manifest, catalogue)
     return bytes
   })
+
+  const degraded = requestedOfflineRoots(ctx)
 
   return {
     project: {
@@ -182,6 +185,7 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     source: source.name,
     with_content: request.withContent,
     bytes_copied: staged.bytes,
+    ...(degraded.length > 0 ? { degraded_roots: degraded } : {}),
   }
 }
 
@@ -202,6 +206,7 @@ export function renderClone(output: CloneOutput): string[] {
       lines.push(`    ${service.display} (${service.key})  host :${service.host_port} → :${service.container_port}   ${service.connection_hint}`)
     }
   }
+  lines.push(...renderDegradedRoots(output.degraded_roots ?? []))
   lines.push('')
   lines.push(`Next: bardolier up ${project.name}`)
   return lines

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/root-index.schema.json",
+  "title": "bardolier root index (internal-disk cache)",
+  "description": "One configured root's last known projects and ports, written beside config.yml (cli-spec.md §5, §8; INTENT.md's 'Cross-root knowledge while a root is offline' decision). Derived, disposable, never authoritative — project.yml under the root always wins when the root is readable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["root", "scanned", "projects"],
+  "properties": {
+    "root": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "scanned": { "type": "string", "format": "date-time" },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "archetype", "base_image", "ports"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
+          "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["service", "host_port"],
+              "properties": {
+                "service": { "type": "string", "minLength": 1 },
+                "host_port": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

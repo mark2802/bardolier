@@ -17,7 +17,12 @@
       "description": "Sum of size_bytes — what reclaiming all of them would free.",
       "minimum": 0
     },
-    "total_human": { "type": "string", "minLength": 1 }
+    "total_human": { "type": "string", "minLength": 1 },
+    "unverified_roots": {
+      "type": "array",
+      "description": "Roots this scan skipped named-volume claims for — unreadable and never indexed (phase 27). Present only when non-empty; directory orphans above are unaffected.",
+      "items": { "type": "string", "minLength": 1 }
+    }
   },
   "$defs": {
     "orphanedVolume": {

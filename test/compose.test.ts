@@ -311,7 +311,7 @@ describe('the dev-server port', () => {
     await runNew(ctx, { name: 'one', archetype: 'web', services: undefined })
     await runNew(ctx, { name: 'two', archetype: 'web', services: undefined })
 
-    const ports = assignedPorts(ctx.config)
+    const ports = assignedPorts(ctx)
     assert.equal([...ports.keys()].filter((port) => port >= 3000 && port < 3100).length, 2)
     assert.notEqual(
       parseYaml(box.read('one', 'project.yml') ?? '').app_port,

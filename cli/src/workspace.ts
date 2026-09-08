@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { stringify as stringifyYaml } from 'yaml'
 import type { Context } from './context.ts'
 import { BardolierError } from './errors.ts'
@@ -23,6 +23,7 @@ import type { DockerContainer } from './docker.ts'
 import { COMPOSE_FILENAME, renderCompose } from './compose.ts'
 import { devContainerName, serviceContainerName } from './naming.ts'
 import { findProject, MANIFEST_FILENAME, discoverProjects, type DiscoveredProject } from './projects.ts'
+import { upsertRootIndex } from './rootindex.ts'
 import type { ProjectManifest } from './model/project.ts'
 import type { ServiceCatalogue } from './model/catalogue.ts'
 import type { ProjectState } from './model/status.ts'
@@ -82,9 +83,20 @@ export function composePath(dir: string): string {
   return join(dir, COMPOSE_FILENAME)
 }
 
-export function writeManifest(dir: string, manifest: ProjectManifest): string {
+/**
+ * Write the manifest, then fold it into its root's index (§5, phase 27) —
+ * write-through, so the index needs no separate scan to stay correct for
+ * everything bardolier itself does. `dir`'s parent IS the root's path (a
+ * project directory, or `clone`'s `.<name>.incoming` staging directory,
+ * which is always a sibling of it), so no caller has to pass the root in.
+ * A directory outside every configured root — should that ever happen —
+ * simply isn't indexed; the manifest write above still succeeds.
+ */
+export function writeManifest(ctx: Context, dir: string, manifest: ProjectManifest): string {
   const path = manifestPath(dir)
   writeFileSync(path, renderManifest(manifest))
+  const root = ctx.config.roots.find((r) => r.path === dirname(dir))
+  if (root) upsertRootIndex(ctx, root, manifest)
   return path
 }
 

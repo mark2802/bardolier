@@ -12,6 +12,7 @@ import type { Archetype, BaseImage } from './archetype.ts'
 import type { AttachedExtraPort } from './extraport.ts'
 import type { AttachedService } from './service.ts'
 import type { ProjectState } from './status.ts'
+import type { OfflineRoot } from './rootindex.ts'
 
 export type NewProject = {
   name: string
@@ -36,6 +37,12 @@ export type NewOutput = {
    * host port the allocator assigned it (§5). Empty without the flag.
    */
   services: AttachedService[]
+  /**
+   * Present only when a configured root could not be read while this ran
+   * (phase 27) — ports were allocated against its last known state (`allocator.ts`),
+   * from an index that may since be stale. Absent means every root answered live.
+   */
+  degraded_roots?: OfflineRoot[]
 }
 
 /**

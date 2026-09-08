@@ -25,7 +25,7 @@
         "id": {
           "type": "string",
           "description": "Stable check id the app may key UI off.",
-          "enum": ["config", "ssd", "docker", "base_images", "catalogue", "manifests"]
+          "enum": ["config", "ssd", "docker", "base_images", "catalogue", "manifests", "ports"]
         },
         "title": { "type": "string", "minLength": 1 },
         "ok": { "type": "boolean" },

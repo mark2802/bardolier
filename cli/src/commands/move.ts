@@ -23,6 +23,7 @@ import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import type { MoveOutput } from '../model/lifecycle.ts'
 import { findRoot } from '../projects.ts'
+import { removeFromRootIndex, upsertRootIndex } from '../rootindex.ts'
 import { requireProject } from '../workspace.ts'
 import { relocate } from '../transfer.ts'
 import { formatBytes } from '../volumes.ts'
@@ -65,6 +66,12 @@ export async function runMove(ctx: Context, request: MoveRequest): Promise<MoveO
   await requireStopped(ctx, project, 'moving it')
 
   const result = relocate(project.dir, target.path, project.name)
+
+  // Write-through (§5, phase 27): the project's ports and name are unchanged,
+  // but which root holds them is — an offline source or target must not go on
+  // reporting (or fail to report) this project under the wrong one.
+  if (sourceRoot) removeFromRootIndex(ctx, sourceRoot, project.name)
+  upsertRootIndex(ctx, target, project.manifest)
 
   return {
     project: project.name,

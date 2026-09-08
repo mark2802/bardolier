@@ -16,6 +16,7 @@ import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { devContainerName, serviceContainerName } from '../naming.ts'
 import { defaultRoot, discoverProjects, findProject, type DiscoveredProject } from '../projects.ts'
+import { readRootIndex, reconcileReadableRoots } from '../rootindex.ts'
 import { observeState, runningNames } from '../workspace.ts'
 import { scanVolumes } from '../volumes.ts'
 import { connectionHint } from '../catalogue.ts'
@@ -72,6 +73,11 @@ function buildProject(
 
 export async function collectStatus(ctx: Context, projectName?: string | null): Promise<Status> {
   const discovery = discoverProjects(ctx.config)
+  // RECONCILE (§5, phase 27): `status` already walks every readable root, so
+  // rewriting each one's index here costs nothing beyond the scan it was
+  // doing anyway — and it is what catches drift bardolier did not cause (a
+  // hand-edited project.yml, a project copied in by hand).
+  reconcileReadableRoots(ctx, discovery)
 
   let selected = discovery.projects
   if (projectName) {
@@ -100,7 +106,14 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
     // `ssd.root` keeps reporting the default root's path so the field the app
     // already reads stays meaningful; `roots` (phase 18) is the complete view.
     ssd: { mounted: discovery.mounted, root: defaultRoot(ctx.config).path },
-    roots: discovery.roots.map((root) => ({ name: root.name, path: root.path, mounted: root.mounted })),
+    roots: discovery.roots.map((root) => ({
+      name: root.name,
+      path: root.path,
+      mounted: root.mounted,
+      // Only meaningful for an unmounted root — a mounted one was just
+      // reconciled above, so its index is current by definition.
+      last_indexed: root.mounted ? null : (readRootIndex(ctx.loaded.path, root)?.scanned ?? null),
+    })),
     docker: { available: dockerAvailable },
     projects: selected.map((project) => buildProject(project, running, catalogue)),
     orphaned_volumes: await orphanedVolumes(ctx, discovery.mounted, dockerAvailable),

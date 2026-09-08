@@ -9,6 +9,8 @@
  * one hint that always applies, unlike a service's protocol-specific string.
  */
 
+import type { OfflineRoot } from './rootindex.ts'
+
 export type AttachedExtraPort = {
   /** The caller's own name, e.g. `metro`, `notebook`. Not a catalogue key. */
   name: string
@@ -29,6 +31,8 @@ export type PortAddOutput = {
   compose_path: string
   /** False when the regenerated compose file was byte-identical to the old one. */
   compose_regenerated: boolean
+  /** Present only when a configured root could not be read while this ran (phase 27). */
+  degraded_roots?: OfflineRoot[]
 }
 
 export type RemovedExtraPort = {

@@ -31,19 +31,27 @@ export async function collectOrphanedVolumes(ctx: Context): Promise<VolumesOrpha
     orphaned: [...scan.orphans],
     total_bytes: total,
     total_human: formatBytes(total),
+    ...(scan.unverifiedRoots.length > 0 ? { unverified_roots: [...scan.unverifiedRoots] } : {}),
   }
 }
 
 export function renderOrphanedVolumes(output: VolumesOrphanedOutput): string[] {
-  if (output.orphaned.length === 0) return ['No orphans. Nothing to reclaim.']
-
-  const lines = [`${output.orphaned.length} orphan(s), ${output.total_human} reclaimable:`]
-  for (const orphan of output.orphaned) {
-    const where = orphan.kind === 'directory' ? `  ${orphan.path}` : ''
-    lines.push(`  ${orphan.name}  ${orphan.size_human}  (was ${orphan.last_project ?? 'unattributed'})${where}`)
+  const lines: string[] = []
+  if (output.orphaned.length === 0) {
+    lines.push('No orphans. Nothing to reclaim.')
+  } else {
+    lines.push(`${output.orphaned.length} orphan(s), ${output.total_human} reclaimable:`)
+    for (const orphan of output.orphaned) {
+      const where = orphan.kind === 'directory' ? `  ${orphan.path}` : ''
+      lines.push(`  ${orphan.name}  ${orphan.size_human}  (was ${orphan.last_project ?? 'unattributed'})${where}`)
+    }
+    lines.push('')
+    lines.push('Reclaim one with: bardolier volumes rm <name>   — this destroys its data.')
   }
-  lines.push('')
-  lines.push('Reclaim one with: bardolier volumes rm <name>   — this destroys its data.')
+  if (output.unverified_roots && output.unverified_roots.length > 0) {
+    lines.push('')
+    lines.push(`Named volumes on ${output.unverified_roots.join(', ')} were skipped — unreadable and never indexed. Plug in, then re-run.`)
+  }
   return lines
 }
 

@@ -29,7 +29,8 @@ import { describeService } from '../services.ts'
 import { parseServiceList, resolveServices } from './service.ts'
 import { seededFiles } from '../scaffold.ts'
 import { ensureProjectDirs, PROJECT_DIRS } from '../layout.ts'
-import { defaultRoot, discoverProjects, findProject, probeRoot } from '../projects.ts'
+import { defaultRoot, discoverProjects, findProject, probeRoot, unreadableRoots } from '../projects.ts'
+import { offlineRoots, readRootIndex, renderDegradedRoots } from '../rootindex.ts'
 import { composePath, manifestPath, regenerateCompose, writeManifest } from '../workspace.ts'
 import { validate } from '../schema.ts'
 
@@ -100,12 +101,42 @@ export function requireRoot(
  * Refuse a name anything already answers to. PROJECT_EXISTS means "in any
  * root": two projects sharing a name would share a container name and a home
  * volume (§9), which is destructive.
+ *
+ * Unlike a port (`allocator.ts`), this cannot be allowed to guess: a name
+ * collision is invariant 3, not invariant 4. So an unreadable root without an
+ * index is still ROOT_UNREADABLE here — the one case phase 27 leaves strict —
+ * and one with an index is checked against it exactly like a readable root.
  */
 export function requireFreeName(ctx: Context, name: string, dir: string): void {
-  const elsewhere = findProject(discoverProjects(ctx.config), name) ?? null
+  const discovery = discoverProjects(ctx.config)
+  const elsewhere = findProject(discovery, name) ?? null
   if (elsewhere || existsSync(dir)) {
     throw new BardolierError('PROJECT_EXISTS', `\`${name}\` already exists at ${elsewhere?.dir ?? dir}.`)
   }
+
+  for (const root of unreadableRoots(discovery)) {
+    const index = readRootIndex(ctx.loaded.path, root)
+    if (!index) {
+      throw new BardolierError(
+        'ROOT_UNREADABLE',
+        `Cannot confirm \`${name}\` is unique while \`${root.name}\` (${root.path}) is unreadable and has never been indexed. Plug it in once — after that, this works with it offline too.`,
+        { roots: [root.name] },
+      )
+    }
+    const there = index.projects.find((p) => p.name === name)
+    if (there) {
+      throw new BardolierError(
+        'PROJECT_EXISTS',
+        `\`${name}\` already exists on \`${root.name}\` (offline; last seen ${index.scanned}).`,
+        { root: root.name },
+      )
+    }
+  }
+}
+
+/** Every root this call could not read, for a `degraded_roots` receipt on the output. */
+export function requestedOfflineRoots(ctx: Context): ReturnType<typeof offlineRoots> {
+  return offlineRoots(ctx, discoverProjects(ctx.config))
 }
 
 export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutput> {
@@ -163,7 +194,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   // create itself comes back root-owned, or — on Docker Desktop — inside the
   // VM rather than on the disk the project is on.
   ensureProjectDirs(dir, definitions.map(({ key }) => key))
-  writeManifest(dir, manifest)
+  writeManifest(ctx, dir, manifest)
 
   const seeded: string[] = []
   for (const file of seededFiles(name, archetype)) {
@@ -175,12 +206,15 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   // with a broken one — `doctor` is the right place to complain about that.
   regenerateCompose(dir, manifest, catalogue)
 
+  const degraded = requestedOfflineRoots(ctx)
+
   return {
     project: { name, archetype, base_image: manifest.base_image, dir, created: manifest.created, root: target.name },
     manifest_path: manifestPath(dir),
     compose_path: composePath(dir),
     seeded,
     services: attached,
+    ...(degraded.length > 0 ? { degraded_roots: degraded } : {}),
   }
 }
 
@@ -199,6 +233,7 @@ export function renderNew(output: NewOutput): string[] {
       lines.push(`    ${service.display} (${service.key})  host :${service.host_port} → :${service.container_port}   ${service.connection_hint}`)
     }
   }
+  lines.push(...renderDegradedRoots(output.degraded_roots ?? []))
   lines.push('')
   if (output.services.length === 0) {
     lines.push(`Next: bardolier service add ${project.name} postgres   # attach a service`)

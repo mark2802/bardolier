@@ -169,7 +169,7 @@ async function ensureAppPort(ctx: Context, manifest: ProjectManifest, dir: strin
   const base = ARCHETYPE_APP_PORT[manifest.archetype]
   if (base === undefined || typeof manifest.app_port === 'number') return
   manifest.app_port = await allocateAppPort(ctx, manifest.name, base)
-  writeManifest(dir, manifest)
+  writeManifest(ctx, dir, manifest)
 }
 
 export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput> {

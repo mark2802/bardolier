@@ -45,9 +45,25 @@
       "type": "integer",
       "description": "Bytes copied; 0 for a shape-only clone.",
       "minimum": 0
+    },
+    "degraded_roots": {
+      "type": "array",
+      "description": "Present only when a configured root could not be read while this ran (phase 27) — allocation used its last known state instead of refusing.",
+      "items": { "$ref": "#/$defs/offline_root" }
     }
   },
   "$defs": {
+    "offline_root": {
+      "type": "object",
+      "description": "One unreadable root and how stale bardolier's last look at it is. This block is duplicated verbatim in new/clone/service-add/port-add; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["root", "path", "last_indexed"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "last_indexed": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
     "attached_service": {
       "type": "object",
       "description": "An attached service: the manifest's host port joined with the catalogue's identity. cli-spec.md §4.1, §4.2, §5. This block is duplicated verbatim in new/clone/service-add/service-remove/service-list; test/contracts.test.ts asserts the copies stay identical.",
