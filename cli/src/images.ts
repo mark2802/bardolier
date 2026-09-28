@@ -73,7 +73,7 @@ export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
  * coupling is asserted in `test/phase8.test.ts` rather than trusted.
  *
  * `bardolier-web` carries the same shape of cache for `uv`'s downloaded wheels
- * (docs/phases/11-python-web-toolchain.md) — Python projects migrated onto this
+ * (docs/development/phases/11-python-web-toolchain.md) — Python projects migrated onto this
  * archetype pay the same "rebuildable, identical across projects" cost Gradle
  * does, just smaller. `library` shares the image and so shares the cache.
  */

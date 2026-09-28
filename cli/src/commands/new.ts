@@ -58,7 +58,8 @@ export function requireProjectName(name: string | undefined, usage: string): str
   return name
 }
 
-function requireArchetype(value: string | undefined): Archetype {
+/** Shared with `adopt`, which validates the same flag the same way (phase 30). */
+export function requireArchetype(value: string | undefined): Archetype {
   if (!value) {
     throw new BardolierError('INVALID_ARGUMENT', `--archetype is required (one of: ${ARCHETYPES.join(', ')}).`)
   }

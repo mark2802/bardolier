@@ -1,20 +1,22 @@
 # `app/` — the macOS menu-bar client
 
-The Xcode project is `Bardolier/Bardolier.xcodeproj`, created by the human
+The Xcode project is `app/bardolier/bardolier.xcodeproj`, created by the human
 on the Mac in Phase 5. Claude writes `.swift` sources into
-`Bardolier/Bardolier/` and never touches `.xcodeproj`/`.pbxproj`, never runs
-`xcodebuild`, the Simulator, or a signing step (`CLAUDE.md` § Environment
-boundary).
+`app/bardolier/bardolier/` and never touches `.xcodeproj`/`.pbxproj`, never
+runs `xcodebuild`, the Simulator, or a signing step (`CLAUDE.md` §
+Environment boundary) — with one exception: `npm run setup:app`
+(`scripts/build-app.sh`) DOES run `xcodebuild`, but from the **host**, never
+from inside the dev container Claude runs in.
 
 The target uses an Xcode 16+ **file-system-synchronized group**, so a `.swift`
-file written into `Bardolier/Bardolier/` is in the build already — the
+file written into `app/bardolier/bardolier/` is in the build already — the
 "Add Files to target…" step is a no-op here. Confirm
 with ⌘B; that is all it takes.
 
 ## Layout
 
 ```
-Bardolier/Bardolier/
+app/bardolier/bardolier/
   BardolierApp.swift       MenuBarExtra scene — the whole app
   BardolierStore.swift     the last answer the CLI gave, and the one place an
                            action runs (one at a time, refresh after each)
@@ -62,47 +64,49 @@ whether they have been done:
 A Finder-launched app inherits almost no `PATH`, so the client searches the
 conventional install directories itself and hands the child a `PATH` good enough
 to find `node`, `docker`, `lsof` and `diskutil` (see `BardolierExecutable.swift`).
-Point it at a working copy with either:
+`npm run setup` (`bardolier install`, phase 28) puts a symlink into the first
+of those directories that exists and is writable — a working copy is reachable
+without editing a shell profile or a `defaults write`.
+
+For a working copy in an unusual place, or to point the app at one without
+touching the search order at all: `--bin-dir` picks the directory explicitly
+(`npm run setup -- --bin-dir /some/dir`, if it is already on your shell's own
+PATH), or `BDLR_BIN` in an Xcode scheme's environment overrides the search
+entirely — that is how the app is run from Xcode against a working copy — or
+set the preference by hand:
 
 ```sh
 defaults write com.mw.bardolier BardolierPath "$PWD/cli/bin/bardolier.js"
-ln -s "$PWD/cli/bin/bardolier.js" /usr/local/bin/bardolier   # or install it properly
 ```
-
-`BDLR_BIN` in an Xcode scheme's environment overrides both.
 
 ## Running it without Xcode
 
-There is no installer yet, and the two halves come apart differently.
-
-**The CLI** needs one symlink onto a directory `BardolierExecutable` already
-searches. `/opt/homebrew/bin` is first in that list on Apple silicon, and it is
+`npm run setup` puts `bardolier` (and `bdlr`) on a bin directory the app
+already searches — `/opt/homebrew/bin` is first on Apple silicon, and it is
 also npm's global prefix, so this is both what a shell finds and what the app
-finds:
-
-```sh
-ln -sf "$PWD/cli/bin/bardolier.js" /opt/homebrew/bin/bardolier
-```
-
-A symlink rather than a copy on purpose: `bardolier` runs straight from
-`cli/src/*.ts` with no build step, so the link stays correct after every edit.
-Node resolves the symlink before resolving `../src/main.ts` and `node_modules`,
-so nothing about the working copy has to move. Check it the way the app will,
+finds. It links rather than copies, on purpose: `bardolier` runs straight from
+`cli/src/*.ts` with no build step, so the link stays correct after every edit,
+including one made after `setup` already ran. Check it the way the app will,
 with almost no environment:
 
 ```sh
+npm run setup
 env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME="$HOME" bardolier doctor
 ```
 
-**The app** still has to be built once — Xcode is host-only (`CLAUDE.md`). After
-a ⌘B, drag `Bardolier.app` out of DerivedData into `/Applications`; the copy
-is self-contained and finds `bardolier` on its own through the search above, with no
-`BDLR_BIN` and no `BardolierPath` preference. Rebuild and re-copy when the Swift
-changes. Nothing in the app needs the working copy at runtime.
+**The app** still has to be built once — Xcode is host-only (`CLAUDE.md`).
+`npm run setup:app` (`scripts/build-app.sh`) runs `xcodebuild` and drops
+`Bardolier.app` straight into `/Applications`, unsigned (a locally built app
+carries no quarantine flag, so this launches fine) — no Xcode window opened.
+The equivalent by hand is a ⌘B followed by dragging `bardolier.app` out of
+DerivedData into `/Applications`. Either way the copy is self-contained and
+finds `bardolier` on its own through the search above, with no `BDLR_BIN` and
+no `BardolierPath` preference. Rebuild and re-copy when the Swift changes —
+nothing in the app needs the working copy at runtime.
 
-The gap this leaves is real and deliberate: a proper `.app` bundle with a signed,
-notarised installer, and a `bardolier` installed independently of a git checkout, is
-its own piece of work.
+The gap this leaves is real and deliberate: a Developer-ID-signed, notarised
+`.dmg` release is its own piece of work, tracked separately from a clone
+being able to build and run the app itself.
 
 ## The rule this directory exists under
 

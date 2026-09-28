@@ -245,7 +245,8 @@ that explains itself.
 - Every CLI error code maps to a short, human message; unknown codes fall back to
   the `error.message` string. Never surface a raw stack trace.
 - If `bardolier` itself is missing/not on PATH, show a clear first-run message with
-  the expected install location.
+  the expected install location and the `npm run setup` (`bardolier install`,
+  phase 28) command that fixes it.
 - A success notice (an assigned host port, a reclaimed size — §6, §9) self-
   dismisses a few seconds after it appears; it also carries a dismiss control
   for closing it sooner, never the only way it goes away. A failure or a
@@ -260,7 +261,7 @@ written against that contract, not in parallel with it.
 
 ## 15. Implementation map (Swift)
 
-Sources live in `app/Bardolier/Bardolier/Bardolier/`. The app reads
+Sources live in `app/bardolier/bardolier/Bardolier/`. The app reads
 the contract; it never re-derives it.
 
 - `BardolierClient` — builds argv, appends `--json` itself (no caller may), and

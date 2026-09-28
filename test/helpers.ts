@@ -447,6 +447,11 @@ export function makeContext(
     confirm: async (question) => {
       throw new Error(`unexpected confirmation prompt: ${question}`)
     },
+    // A real answer would depend on what happens to be installed on the
+    // machine running the tests — exactly the non-determinism Context exists
+    // to keep out. Default to "found": most tests are not about this finding
+    // at all, and a test of doctor's `cli` finding overrides it explicitly.
+    cli: { installed: () => ({ dir: '/opt/homebrew/bin', path: '/opt/homebrew/bin/bardolier' }) },
     host: { uid: 501, gid: 20 },
     now: () => FIXED_NOW,
     // Nothing in a test may actually sleep; a test that wants to see the waits

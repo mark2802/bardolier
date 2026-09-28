@@ -41,7 +41,7 @@ struct FirstRunPanel: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Install it").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Text("Run `npm link` in the repo’s cli/ directory. That puts bardolier in your npm prefix — usually \(Self.expectedLocation).")
+                Text("Run `npm run setup` in the repo. That links bardolier onto \(Self.expectedLocation) (or another directory this app already searches).")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

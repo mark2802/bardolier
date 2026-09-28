@@ -27,6 +27,7 @@ import { collectDoctor, renderDoctor } from './doctor.ts'
 import { collectCatalogue, renderCatalogue } from './catalogue.ts'
 import { collectConfigGet, renderConfigGet, renderConfigSet, runConfigSet } from './config.ts'
 import { renderNew, runNew } from './new.ts'
+import { renderAdopt, runAdopt } from './adopt.ts'
 import { renderClone, runClone } from './clone.ts'
 import { renderMove, runMove } from './move.ts'
 import { renderUp, runUp } from './up.ts'
@@ -52,6 +53,7 @@ import {
 import { collectPortList, renderPortAdd, renderPortList, renderPortRemove, runPortAdd, runPortRemove } from './port.ts'
 import { collectDepsList, renderDepsAdd, renderDepsList, renderDepsRemove, runDepsAdd, runDepsRemove } from './deps.ts'
 import { collectRootList, renderRootAdd, renderRootList, renderRootRemove, runRootAdd, runRootRemove } from './root.ts'
+import { renderInstall, runInstall } from './install.ts'
 
 export const COMMAND_GROUPS = ['Projects', 'Services', 'Ports', 'Deps', 'Shell', 'Volumes / disk', 'Lifecycle / SSD', 'Roots', 'Images'] as const
 export type CommandGroup = (typeof COMMAND_GROUPS)[number]
@@ -230,6 +232,36 @@ export const COMMANDS: readonly CommandNode[] = [
           ...(root !== undefined ? { root } : {}),
         }),
         renderClone,
+      )
+    },
+  },
+  {
+    path: ['adopt'],
+    group: 'Projects',
+    usage: 'adopt <source-path> <name> --archetype <a> [--services a,b] [--root <name>] [--move] [--dry-run]',
+    summary: 'Create a project and move an existing, external directory into work/<repo>/, in one step (docs/migration-guide.md).',
+    flags: [
+      { name: '--archetype', arg: '<a>', description: 'web | ios | android | library. Required.' },
+      { name: '--services', arg: '<a,b>', description: 'Catalogue keys to attach immediately; ports assigned now.' },
+      { name: '--root', arg: '<name>', description: 'Which configured root to create it under. Defaults to the first.' },
+      { name: '--move', description: 'Delete the source once the copy lands. Default leaves it untouched.' },
+      { name: '--dry-run', description: 'Report the plan; write nothing. Never reports a port — see cli-spec.md §6.' },
+    ],
+    errors: ['ROOT_UNREADABLE', 'PROJECT_EXISTS', 'PROJECT_AMBIGUOUS', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE', 'INSUFFICIENT_SPACE', 'INVALID_ARGUMENT'],
+    run: async (inv) => {
+      const [source, name] = exactArgs(inv, byPath('adopt'), 2)
+      const root = stringFlag(inv, '--root')
+      return output(
+        await runAdopt(createContext(), {
+          source,
+          name,
+          archetype: stringFlag(inv, '--archetype'),
+          services: stringFlag(inv, '--services'),
+          move: boolFlag(inv, '--move'),
+          dryRun: boolFlag(inv, '--dry-run'),
+          ...(root !== undefined ? { root } : {}),
+        }),
+        renderAdopt,
       )
     },
   },
@@ -615,6 +647,22 @@ export const COMMANDS: readonly CommandNode[] = [
         await runEject(createContext(), { ...(root !== null ? { root } : {}), stopDocker }),
         renderEject,
       )
+    },
+  },
+  {
+    path: ['install'],
+    group: 'Lifecycle / SSD',
+    usage: 'install [--bin-dir <dir>] [--force]',
+    summary: 'Link `bardolier`/`bdlr` onto a bin directory a Finder-launched app can also find (phase 28).',
+    flags: [
+      { name: '--bin-dir', arg: '<dir>', description: 'Install here instead of searching the conventional directories.' },
+      { name: '--force', description: 'Replace an occupied path that is not a link this repo made.' },
+    ],
+    errors: ['INSTALL_NO_WRITABLE_DIR', 'INSTALL_PATH_OCCUPIED'],
+    run: (inv) => {
+      noArgs(inv, 'install')
+      const binDir = stringFlag(inv, '--bin-dir')
+      return output(runInstall({ ...(binDir !== undefined ? { binDir } : {}), force: boolFlag(inv, '--force') }), renderInstall)
     },
   },
   {

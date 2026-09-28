@@ -34,8 +34,8 @@ listed under Migration below.
 - `cli/bin/cproj.js`; `cli/package.json` (`name`, `bin`, `scripts`); root
   `package.json` (`name`, `description`, `scripts.cproj`).
 - Docs: `cli-spec.md`, `app-spec.md`, `migration-guide.md`,
-  `migration-guide-gaps.md`, `CLAUDE.md`, `docs/archive/*`, **and every spec
-  under `docs/phases/`, including 14 and 17–21 which have not been implemented
+  `migration-guide-gaps.md`, `CLAUDE.md`, `docs/development/archive/*`, **and every spec
+  under `docs/development/phases/`, including 14 and 17–21 which have not been implemented
   yet** — they are written in the old name and must not carry it forward.
 - Tests: `test/*.test.ts`, `test/*-done-check.sh`, `test/regression.sh`,
   `test/helpers.ts`.

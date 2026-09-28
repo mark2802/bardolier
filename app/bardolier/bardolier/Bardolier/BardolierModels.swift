@@ -127,6 +127,8 @@ nonisolated struct DoctorFindingID: BardolierToken {
     static let baseImages = DoctorFindingID(rawValue: "base_images")
     static let catalogue = DoctorFindingID(rawValue: "catalogue")
     static let manifests = DoctorFindingID(rawValue: "manifests")
+    static let ports = DoctorFindingID(rawValue: "ports")
+    static let cli = DoctorFindingID(rawValue: "cli")
 }
 
 /// `volume | directory` — what one row of `volumes orphaned` would reclaim

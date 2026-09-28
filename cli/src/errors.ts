@@ -54,6 +54,10 @@ const EXTENDED_ERROR_CODES = [
   'ROOT_UNREADABLE',
   /** A copy would not fit on the target root, refused before any byte moved (phase 20). */
   'INSUFFICIENT_SPACE',
+  /** `install` found no writable bin directory (an explicit --bin-dir, or any conventional one) — phase 28. */
+  'INSTALL_NO_WRITABLE_DIR',
+  /** `install`'s target path already exists and is not a link this repo made; --force names it (phase 28). */
+  'INSTALL_PATH_OCCUPIED',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
 ] as const

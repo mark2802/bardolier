@@ -51,6 +51,8 @@ nonisolated struct BardolierErrorCode: BardolierToken {
     static let projectAmbiguous = BardolierErrorCode(rawValue: "PROJECT_AMBIGUOUS")
     static let rootUnreadable = BardolierErrorCode(rawValue: "ROOT_UNREADABLE")
     static let insufficientSpace = BardolierErrorCode(rawValue: "INSUFFICIENT_SPACE")
+    static let installNoWritableDir = BardolierErrorCode(rawValue: "INSTALL_NO_WRITABLE_DIR")
+    static let installPathOccupied = BardolierErrorCode(rawValue: "INSTALL_PATH_OCCUPIED")
     static let internalError = BardolierErrorCode(rawValue: "INTERNAL_ERROR")
 
     /// A short line for the UI, or nil when only the CLI's own message will do.
@@ -244,7 +246,7 @@ nonisolated extension BardolierFailure: LocalizedError {
             return named.map { "Plug in \($0) once — after that, this works with it offline too." }
                 ?? "Plug in the missing root and try again."
         case .executableNotFound:
-            return "Install it with `npm link` in the repo’s cli/ directory, or set its path with:\n"
+            return "Run `npm run setup` in the repo, or set its path with:\n"
                 + "defaults write \(BardolierExecutable.defaultsSuite) \(BardolierExecutable.pathDefaultsKey) /path/to/bardolier"
         case .terminalFailed:
             return "Pick a different terminal in Preferences. Terminal and iTerm are driven directly; "

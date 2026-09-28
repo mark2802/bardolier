@@ -1,7 +1,7 @@
 /**
  * `bardolier port add | remove | list` — `cli-spec.md` §6 (Ports), §5.1.
  *
- * The gap this closes (`docs/migration-guide-gaps.md`, now resolved): a
+ * The gap this closes (`docs/development/migration-guide-gaps.md`, now resolved): a
  * project whose backend a mobile client must reach directly, a second
  * frontend/UI app, or a browser-reachable dev tool on an archetype that
  * otherwise publishes nothing (`library` and friends). All three are the same

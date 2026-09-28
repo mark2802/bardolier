@@ -1,6 +1,6 @@
 /**
  * Payloads for `deps add | remove | list` — `cli-spec.md` §6 (Deps), §4.2
- * (`extra_packages`); docs/phases/13-extra-packages.md.
+ * (`extra_packages`); docs/development/phases/13-extra-packages.md.
  *
  * The shape a service/extra-port attachment would have if there were no host
  * port behind it at all: no catalogue, no volume, no port — just the

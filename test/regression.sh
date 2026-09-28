@@ -16,7 +16,7 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-CHECKS=(contract status roots naming app lifecycle layout services ports deps shell disk agent images)
+CHECKS=(contract status roots naming publishing app lifecycle layout services ports deps shell disk agent images)
 
 if [ $# -gt 0 ]; then
   CHECKS=("$@")

@@ -1,6 +1,6 @@
 # Phase 12 — extra ports
 
-**Goal:** Close both open entries in `docs/migration-guide-gaps.md` with one
+**Goal:** Close both open entries in `docs/development/migration-guide-gaps.md` with one
 mechanism: a named, per-project, archetype-independent port published from
 the dev container, beyond the archetype's own `app_port`. Covers a mobile
 client or second UI app that needs a project's own process directly (not just
@@ -40,7 +40,7 @@ publish nothing at all.
   (optional, matching `appPort`/`appUrl`); two `BardolierErrorCode` constants.
 - `cli-spec.md` §4.2, new §5.1, §6 (Ports), §7, §9; `CLAUDE.md`'s dev-container
   paragraph; `docs/migration-guide.md` Part 2 rewritten now that option B
-  exists; both gaps in `docs/migration-guide-gaps.md` moved to Resolved.
+  exists; both gaps in `docs/development/migration-guide-gaps.md` moved to Resolved.
 
 **Non-goals:** no change to `app_port`'s own allocation or retrofit path; no
 catalogue entry, image, or volume for an extra port — it is the project's own

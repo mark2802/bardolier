@@ -11,7 +11,7 @@
  */
 
 /** Check ids are stable strings — the app may key UI off them. */
-export const DOCTOR_CHECKS = ['config', 'ssd', 'docker', 'base_images', 'catalogue', 'manifests', 'ports'] as const
+export const DOCTOR_CHECKS = ['config', 'ssd', 'docker', 'base_images', 'catalogue', 'manifests', 'ports', 'cli'] as const
 export type DoctorCheck = (typeof DOCTOR_CHECKS)[number]
 
 /** One configured root's state, as reported on the `ssd` finding. Additive since phase 18. */

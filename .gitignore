@@ -1,5 +1,6 @@
 node_modules/
 .DS_Store
+.claude/settings.local.json
 
 # Xcode (app/ — the human's build artefacts, not the .swift sources)
 DerivedData/

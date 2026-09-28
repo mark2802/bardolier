@@ -389,7 +389,7 @@ describe('removable() (cli-spec.md §6)', () => {
       stdout: '<key>Ejectable</key><false/><key>Internal</key><true/>',
       stderr: '',
     }))
-    assert.equal(await device.removable('/Users/mark/projects'), false)
+    assert.equal(await device.removable('/Users/someone/projects'), false)
   })
 
   test('a probe failure is not removable, never a throw', async () => {

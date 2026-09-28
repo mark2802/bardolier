@@ -3,7 +3,7 @@
 **Historical. Not a spec, and not a place to add work.** Phases 0-9 shipped;
 what they built is described by `../cli-spec.md` (authoritative for behaviour)
 and `../app-spec.md`, and each phase's done-check lives on in `test/`. Later
-work gets its own small scoped file under `docs/phases/` instead of an entry
+work gets its own small scoped file under `docs/development/phases/` instead of an entry
 here.
 
 This plan is phased so each phase is a single `/goal` you hand to Claude Code.

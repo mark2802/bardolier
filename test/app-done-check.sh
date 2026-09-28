@@ -372,7 +372,7 @@ else
 fi
 
 # ── 9. The MANUAL prerequisite (the human, in Xcode) ────────────────────────────
-head "9. MANUAL prerequisite (docs/phases/16-rename-app.md)"
+head "9. MANUAL prerequisite (docs/development/phases/16-rename-app.md)"
 
 PBXPROJ="app/bardolier/bardolier.xcodeproj/project.pbxproj"
 SCHEME="app/bardolier/bardolier.xcodeproj/xcshareddata/xcschemes/bardolier.xcscheme"

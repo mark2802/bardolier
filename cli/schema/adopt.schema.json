@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/adopt.schema.json",
+  "title": "bardolier adopt output",
+  "description": "What `bardolier adopt` created — the mechanical half of docs/migration-guide.md steps 3-4. cli-spec.md §6 (Projects), phase 30. Additive changes only once the app ships (Phase 5+).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "requested_services", "services", "source", "mode", "bytes", "dry_run"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "archetype", "base_image", "dir", "root"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
+        "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
+        "dir": { "type": "string", "minLength": 1 },
+        "root": { "type": "string", "minLength": 1 },
+        "created": { "type": "string", "format": "date-time", "description": "Absent under --dry-run." }
+      }
+    },
+    "manifest_path": { "type": "string", "minLength": 1, "description": "Absent under --dry-run: nothing was written." },
+    "compose_path": { "type": "string", "minLength": 1 },
+    "seeded": {
+      "type": "array",
+      "description": "File names written per §10, in write order. Absent under --dry-run.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "requested_services": {
+      "type": "array",
+      "description": "Catalogue keys requested by --services, whether or not yet attached.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "services": {
+      "type": "array",
+      "description": "Attached services with the host port freshly assigned to each (§5). Empty under --dry-run — a port is not allocated until this runs for real.",
+      "items": { "$ref": "#/$defs/attached_service" }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "dir", "basename"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "description": "The path given on the command line, resolved to absolute." },
+        "dir": { "type": "string", "minLength": 1, "description": "Where it lands (or, under --dry-run, would land): <project>/work/<basename>." },
+        "basename": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["copy", "move"],
+      "description": "`move` deletes the source once the copy lands; `copy` (the default) leaves it untouched."
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Bytes under the source directory — a read-only stat walk, so this is real even under --dry-run."
+    },
+    "dry_run": { "type": "boolean" },
+    "degraded_roots": {
+      "type": "array",
+      "description": "Present only when a configured root could not be read while this ran (phase 27). Absent under --dry-run, which allocates nothing.",
+      "items": { "$ref": "#/$defs/offline_root" }
+    }
+  },
+  "$defs": {
+    "offline_root": {
+      "type": "object",
+      "description": "One unreadable root and how stale bardolier's last look at it is. This block is duplicated verbatim in new/clone/service-add/port-add; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["root", "path", "last_indexed"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "last_indexed": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "attached_service": {
+      "type": "object",
+      "description": "An attached service: the manifest's host port joined with the catalogue's identity. cli-spec.md §4.1, §4.2, §5. This block is duplicated verbatim in new/clone/service-add/service-remove/service-list; test/contracts.test.ts asserts the copies stay identical.",
+      "additionalProperties": false,
+      "required": ["key", "display", "host_port", "container_port", "connection_hint", "data_dir"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "display": { "type": "string", "minLength": 1 },
+        "host_port": {
+          "type": "integer",
+          "description": "The debugging tap on the Mac (§5). NOT what the dev app connects to.",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "container_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "connection_hint": { "type": "string", "minLength": 1 },
+        "data_dir": {
+          "type": "string",
+          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

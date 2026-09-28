@@ -40,6 +40,8 @@
             "PROJECT_AMBIGUOUS",
             "ROOT_UNREADABLE",
             "INSUFFICIENT_SPACE",
+            "INSTALL_NO_WRITABLE_DIR",
+            "INSTALL_PATH_OCCUPIED",
             "INTERNAL_ERROR"
           ]
         },

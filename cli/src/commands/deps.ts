@@ -1,6 +1,6 @@
 /**
  * `bardolier deps add | remove | list` — `cli-spec.md` §6 (Deps), §4.2
- * (`extra_packages`); docs/phases/13-extra-packages.md.
+ * (`extra_packages`); docs/development/phases/13-extra-packages.md.
  *
  * OS-level packages a project's toolchain needs beyond its base image
  * (Playwright's `libnss3`/`libatk`/… for `install-deps`), without baking them

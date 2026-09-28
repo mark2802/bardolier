@@ -376,6 +376,22 @@ describe('doctor (cli-spec.md §6)', () => {
     assert.equal(config.ok, true)
     assert.match(config.detail, /using defaults/)
   })
+
+  test('the `cli` finding asks Context, not the real machine — installed and not (phase 28)', async () => {
+    const box = sandbox()
+
+    const installed = await collectDoctor(makeContext(box))
+    const found = finding(installed, 'cli')
+    assert.equal(found.ok, true)
+    assert.match(found.detail, /bardolier/)
+
+    const missing = await collectDoctor(makeContext(box, stubDocker(), { cli: { installed: () => null } }))
+    const notFound = finding(missing, 'cli')
+    assert.equal(notFound.ok, false)
+    assert.equal(missing.ok, false)
+    assert.ok(notFound.remedy)
+    assert.match(notFound.remedy ?? '', /install/)
+  })
 })
 
 // ── doctor ───────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ track bardolier-alpha
 track_volume bardolier-alpha-home
 
 # ── 1. The old name is gone from everything but app/ and the rename's own docs ─
-head "1. old name absent outside app/ and docs/phases/{15,16}"
+head "1. old name absent outside app/ and docs/development/phases/{15,16}"
 
 # Built from parts so this assertion doesn't trip on itself.
 OLD_NAME="cp""roj"
@@ -34,9 +34,9 @@ HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_WEB}|${OLD_IOS}|${O
   | grep -v '^\./\.git/' \
   | grep -v '^\./app/' \
   | grep -v '^\./\.claude/' \
-  | grep -v '^\./docs/phases/15-rename-cli\.md$' \
-  | grep -v '^\./docs/phases/16-rename-app\.md$' \
-  | grep -v '^\./docs/retrospective\.md$' \
+  | grep -v '^\./docs/development/phases/15-rename-cli\.md$' \
+  | grep -v '^\./docs/development/phases/16-rename-app\.md$' \
+  | grep -v '^\./docs/development/retrospective\.md$' \
   | grep -v '^\./test/naming-done-check\.sh$' \
   | grep -v '^\./test/app-done-check\.sh$' \
   | grep -v '^\./test/app\.test\.ts$' \
@@ -143,9 +143,9 @@ HITS="$(grep -rlEi "${OLD_NAME}|${OLD_YARD}|${OLD_ENV}|${OLD_UNDERSCORE}" . \
   | grep -v '^\./node_modules/' \
   | grep -v '^\./\.git/' \
   | grep -v '^\./\.claude/' \
-  | grep -v '^\./docs/phases/15-rename-cli\.md$' \
-  | grep -v '^\./docs/phases/16-rename-app\.md$' \
-  | grep -v '^\./docs/retrospective\.md$' \
+  | grep -v '^\./docs/development/phases/15-rename-cli\.md$' \
+  | grep -v '^\./docs/development/phases/16-rename-app\.md$' \
+  | grep -v '^\./docs/development/retrospective\.md$' \
   | grep -v '^\./test/naming-done-check\.sh$' \
   | grep -v '^\./test/app-done-check\.sh$' \
   || true)"

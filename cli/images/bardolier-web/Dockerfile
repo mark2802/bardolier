@@ -76,7 +76,7 @@ RUN set -eux; \
     rm -rf /tmp/claude-build
 
 # uv — the Python toolchain this archetype's projects need for a Python API
-# alongside their React frontend (docs/phases/11-python-web-toolchain.md). It
+# alongside their React frontend (docs/development/phases/11-python-web-toolchain.md). It
 # manages Python installs itself, so there is no separate `apt-get install
 # python3`. Pinned and checksum-verified against the release's own `.sha256`
 # sidecar, like the Claude Code binary above.

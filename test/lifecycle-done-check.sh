@@ -418,5 +418,47 @@ fi
 
 $BARDOLIER delete mover --force --purge --json >/dev/null || bad "could not clean up mover"
 
+# ── 9. adopt (phase 30) ─────────────────────────────────────────────────────
+head "9. \`adopt\` brings an existing directory onto bardolier"
+
+SOURCE="$TMP/old-project"
+mkdir -p "$SOURCE/src"
+echo '{"name":"old-project"}' > "$SOURCE/package.json"
+echo 'console.log(1)' > "$SOURCE/src/index.js"
+
+DRY="$($BARDOLIER adopt "$SOURCE" adopted --archetype web --services postgres --dry-run --json)" \
+  || bad "adopt --dry-run exited non-zero"
+schema_assert adopt "$DRY" && ok "adopt --dry-run --json validates against adopt.schema.json" || bad "adopt --dry-run output does not match its schema"
+json_assert "$DRY" 'd.dry_run === true && d.services.length === 0 && d.bytes > 0' \
+  && ok "a dry run reports no ports and no writes, but the real source size" || bad "a dry run reported something it should not have"
+[ ! -e "$MOUNTED/adopted" ] && ok "a dry run left no project directory" || bad "adopt --dry-run wrote to disk"
+
+ADOPT="$($BARDOLIER adopt "$SOURCE" adopted --archetype web --services postgres --json)" \
+  || bad "adopt exited non-zero"
+schema_assert adopt "$ADOPT" && ok "adopt --json validates against adopt.schema.json" || bad "adopt output does not match its schema"
+json_assert "$ADOPT" 'd.mode === "copy" && d.services.length === 1 && d.services[0].key === "postgres"' \
+  && ok "adopt attached the requested service and reported its port" || bad "adopt did not attach postgres"
+
+[ -f "$MOUNTED/adopted/work/old-project/package.json" ] && ok "the source landed under work/old-project/" || bad "the source did not land under work/"
+[ -f "$SOURCE/package.json" ] && ok "the default (copy) mode left the source in place" || bad "adopt deleted the source without --move"
+
+MOVE_SOURCE="$TMP/old-project-2"
+mkdir -p "$MOVE_SOURCE"
+echo 'x' > "$MOVE_SOURCE/README.md"
+$BARDOLIER adopt "$MOVE_SOURCE" moved-in --archetype library --move --json >/dev/null || bad "adopt --move exited non-zero"
+[ -f "$MOUNTED/moved-in/work/old-project-2/README.md" ] && ok "--move copied the source in" || bad "--move did not copy the source"
+[ ! -e "$MOVE_SOURCE" ] && ok "--move removed the source once the copy landed" || bad "--move left the source behind"
+
+DUPE="$($BARDOLIER adopt "$SOURCE" adopted --archetype web --json 2>/dev/null || true)"
+json_assert "$DUPE" 'd.error && d.error.code === "PROJECT_EXISTS"' \
+  && ok "adopting onto an existing name is PROJECT_EXISTS" || bad "a second adopt did not fail PROJECT_EXISTS"
+
+NOTADIR="$($BARDOLIER adopt "$SOURCE/package.json" nope --archetype web --json 2>/dev/null || true)"
+json_assert "$NOTADIR" 'd.error && d.error.code === "INVALID_ARGUMENT"' \
+  && ok "a source that is not a directory is INVALID_ARGUMENT" || bad "a file source did not fail correctly"
+
+$BARDOLIER delete adopted --force --purge --json >/dev/null || bad "could not clean up adopted"
+$BARDOLIER delete moved-in --force --purge --json >/dev/null || bad "could not clean up moved-in"
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 summary "Lifecycle"

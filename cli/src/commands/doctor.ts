@@ -17,6 +17,7 @@ import type { DoctorFinding, DoctorReport, DoctorRootState } from '../model/doct
 import { discoverProjects, probeRoot, type Discovery } from '../projects.ts'
 import { reconcileReadableRoots } from '../rootindex.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
+import { conventionalBinDirectories } from '../install.ts'
 
 function configFinding(ctx: Context): DoctorFinding {
   const { path, exists, overrides } = ctx.loaded
@@ -238,6 +239,26 @@ function portsFinding(discovery: Discovery): DoctorFinding {
   }
 }
 
+/**
+ * Whether a Finder-launched app — not this terminal, which may have a PATH
+ * the app does not — would find `bardolier` (phase 28). Independent of every
+ * other finding: a shell that resolves `bardolier` fine is exactly the state
+ * that hid the gap this check exists to catch.
+ */
+function cliFinding(ctx: Context): DoctorFinding {
+  const dirs = conventionalBinDirectories()
+  const found = ctx.cli.installed()
+  return found
+    ? { id: 'cli', title: 'bardolier on PATH', ok: true, detail: `Found at ${found.path} — a Finder-launched app will find it too.` }
+    : {
+        id: 'cli',
+        title: 'bardolier on PATH',
+        ok: false,
+        detail: `Not found in any of: ${dirs.join(', ')}. A shell with its own PATH may still find it; the app will not.`,
+        remedy: 'Run `npm run setup` from the repo (or `bardolier install --bin-dir <dir>`).',
+      }
+}
+
 export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
   const findings: DoctorFinding[] = [configFinding(ctx), await ssdFinding(ctx)]
 
@@ -253,6 +274,7 @@ export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
   reconcileReadableRoots(ctx, discovery)
   findings.push(manifestsFinding(discovery, catalogue.catalogue))
   findings.push(portsFinding(discovery))
+  findings.push(cliFinding(ctx))
 
   return { ok: findings.every((finding) => finding.ok), findings }
 }

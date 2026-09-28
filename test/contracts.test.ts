@@ -273,8 +273,8 @@ describe('list contract (cli-spec.md §6)', () => {
 })
 
 describe('service contracts (cli-spec.md §6, Services)', () => {
-  /** The one row shape shared by new/clone/service-add/service-remove/service-list. */
-  const CARRIERS = ['new', 'clone', 'service-add', 'service-remove', 'service-list'] as const
+  /** The one row shape shared by new/clone/adopt/service-add/service-remove/service-list. */
+  const CARRIERS = ['new', 'clone', 'adopt', 'service-add', 'service-remove', 'service-list'] as const
 
   const attached: AttachedService = {
     key: 'postgres',
@@ -411,8 +411,8 @@ describe('extra port contracts (cli-spec.md §6, Ports; §5.1)', () => {
 })
 
 describe('offline-root contracts (cli-spec.md §5, §8; phase 27)', () => {
-  /** The `degraded_roots` row shape shared by new/clone/service-add/port-add. */
-  const CARRIERS = ['new', 'clone', 'service-add', 'port-add'] as const
+  /** The `degraded_roots` row shape shared by new/clone/adopt/service-add/port-add. */
+  const CARRIERS = ['new', 'clone', 'adopt', 'service-add', 'port-add'] as const
 
   const offline: OfflineRoot = { root: 'ssd', path: '/Volumes/ssd/claude-projects', last_indexed: '2026-09-07T10:00:00.000Z' }
 
@@ -580,6 +580,7 @@ describe('command surface (cli-spec.md §6)', () => {
    * because §6 itself grew.
    */
   const SPEC_COMMANDS = [
+    'adopt',
     'build',
     'clone',
     'delete',
@@ -590,6 +591,7 @@ describe('command surface (cli-spec.md §6)', () => {
     'down',
     'down-all',
     'eject',
+    'install',
     'list',
     'move',
     'new',

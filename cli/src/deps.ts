@@ -1,6 +1,6 @@
 /**
  * Extra OS packages a project's toolchain needs beyond its base image —
- * `cli-spec.md` §6 (Deps), §4.2 (`extra_packages`); docs/phases/13-extra-packages.md.
+ * `cli-spec.md` §6 (Deps), §4.2 (`extra_packages`); docs/development/phases/13-extra-packages.md.
  * The read model plus the derived-image mechanics shared by `deps
  * add/remove/list` (`commands/deps.ts`), `compose.ts` and `up.ts`.
  *

@@ -3,7 +3,7 @@
 //  Bardolier
 //
 //  Publishes whether Option is currently held, for the root-shell alternate
-//  item (phase 14, docs/phases/14-root-shell.md). SwiftUI's `MenuBarExtra`
+//  item (phase 14, docs/development/phases/14-root-shell.md). SwiftUI's `MenuBarExtra`
 //  doesn't expose AppKit's native alternate-item mechanism
 //  (`NSMenuItem.isAlternate`), so this reimplements the effect with a local
 //  event monitor and a state swap in the view instead.

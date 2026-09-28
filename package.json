@@ -3,12 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "description": "Container Project Manager — bardolier CLI + macOS menu-bar app",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mark2802/bardolier.git"
+  },
   "type": "module",
   "workspaces": [
     "cli"
   ],
   "scripts": {
     "bardolier": "node cli/bin/bardolier.js",
+    "setup": "node cli/bin/bardolier.js install",
+    "setup:app": "bash scripts/build-app.sh",
     "test": "node --test 'test/**/*.test.ts'",
     "test:quiet": "node --test --test-reporter=dot 'test/**/*.test.ts'",
     "typecheck": "npm run typecheck --workspace cli",

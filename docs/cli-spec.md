@@ -266,6 +266,23 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   never been indexed and so cannot be checked for the name), `PROJECT_EXISTS`
   (in any root, live or indexed), `PROJECT_AMBIGUOUS`, `INVALID_ARGUMENT`
   (unknown `--root`, naming the configured roots).
+- `bardolier adopt <source-path> <name> --archetype <a> [--services a,b] [--root <name>] [--move] [--dry-run]`
+  Bringing an existing, non-bardolier project on (`migration-guide.md` steps
+  3-4): creates the project exactly as `new` does, and copies `<source-path>`
+  into `work/<basename(source-path)>/` as part of the same staged write —
+  nothing about the source is otherwise read or touched. `--move` deletes the
+  source once the copy is confirmed landed; the default leaves it in place.
+  `--dry-run` runs every check (name free, root readable, archetype and
+  services valid, source readable, space available) and reports the plan
+  without writing anything — but **never a port**: a port is chosen at write
+  time from whatever is free right then (§5), and one reported here could be
+  stale by the time this runs for real, which is exactly the guessed,
+  hand-composed port the migration guide warns against trusting. Read the real
+  ports from `bardolier status <name> --json` after running for real. Errors:
+  `ROOT_UNREADABLE`, `PROJECT_EXISTS` (in any root), `PROJECT_AMBIGUOUS`,
+  `SERVICE_UNKNOWN`, `PORT_UNAVAILABLE`, `INSUFFICIENT_SPACE`,
+  `INVALID_ARGUMENT` (unknown archetype/root, or `<source-path>` is not a
+  directory).
 - `bardolier clone <source> <name> [--root <name>] [--with-content]`
   A second project shaped like one that already works. Copies the source
   manifest's `archetype`, `base_image`, `extra_packages`, attached service keys
@@ -441,7 +458,26 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   root's index (§8, phase 27) — free, since it already walks them — and a
   `ports` finding reports a port or name held in two roots at once (the
   collision §5 promises is a finding, not a repair), skipped `ok: true` unless
-  every configured root answered live.
+  every configured root answered live. A `cli` finding (phase 28) reports
+  whether `bardolier` resolves in the conventional bin directories `bardolier
+  install` uses — the question a Finder-launched app is actually asking,
+  independent of whatever PATH the terminal running `doctor` happens to have.
+- `bardolier install [--bin-dir <dir>] [--force]` (phase 28) — link `bardolier`
+  and `bdlr` onto a bin directory a Finder-launched menu-bar app can also find
+  (`BardolierExecutable.swift`'s search, §15): `--bin-dir` if given, else the
+  first of the conventional directories (`/opt/homebrew/bin`,
+  `/usr/local/bin`, `~/.local/bin`, `~/.npm-global/bin`, `~/bin`) that exists
+  and is writable, falling back to creating `~/.local/bin` if none does. Links
+  to `cli/bin/bardolier.js`'s real path, not a copy, so they stay correct
+  after every edit. A dangling link from an earlier install is replaced
+  without asking; anything else occupying the path needs `--force`; a
+  directory in the way is refused either way. Reports the node version
+  running the install against `cli/package.json`'s `engines.node`, and
+  whether `bardolier` now resolves under `<bin-dir>` with no shell PATH — the
+  same check `doctor`'s `cli` finding makes. Errors: `INSTALL_NO_WRITABLE_DIR`
+  (no usable directory, explicit or conventional), `INSTALL_PATH_OCCUPIED`
+  (something else is at the path and `--force` was not given, or it is a
+  directory).
 
 ### Roots
 

@@ -146,7 +146,7 @@ describe('a missing bardolier is a first-run state (app-spec.md §13)', () => {
   })
 
   test('it names an expected install location and the places actually searched', () => {
-    assert.match(panel, /npm link/)
+    assert.match(panel, /npm run setup/)
     assert.match(panel, /bin\/bardolier/)
     assert.match(panel, /store\.bardolierSearchedLocations/)
   })

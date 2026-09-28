@@ -10,11 +10,13 @@ whose data lives under one or more configured roots — typically an external SS
   compose §9, seeds §10, handoff §12.
 - `docs/app-spec.md` — the menu-bar app; a thin client over the CLI. §15 maps
   the Swift sources.
-- `docs/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
-  Phases 0-9 are done; their plan is history in `docs/archive/`.
+- `docs/development/phases/<n>-<slug>.md` — one small scoped spec per unit of new work.
+  Phases 0-9 are done; their plan is history in `docs/development/archive/`.
 - `docs/migration-guide.md` — bringing an existing (non-bardolier) project onto
-  bardolier; `docs/migration-guide-gaps.md` tracks capabilities it needs that
-  don't exist yet.
+  bardolier; `docs/development/migration-guide-gaps.md` tracks capabilities it needs that
+  don't exist yet. The `migrate-project` skill drives it.
+- `CONTRIBUTING.md` — the toolchain, the test ladder, the code map, the
+  environment boundary in full. `README.md` is the user-facing front door.
 
 This file holds only what the specs cannot: how to work here, the environment
 boundary, and where the code is. **A rule about behaviour belongs in the spec.**
@@ -52,18 +54,13 @@ Read only the spec **section** a task needs (`sed -n` a range), not the whole fi
 
 ## Environment boundary (critical)
 
-This project is developed in the split environment it manages. Claude runs in a
-Linux dev container (source, CLI, tests, Docker CLI, Node/Bun, git). The human
-works on the macOS host for anything macOS-native.
-
-- **Never run `xcodebuild`, the iOS Simulator, or code signing.** You write
-  `.swift` sources into `app/`; the human builds in Xcode.
-- **You never create or edit `.xcodeproj`/`.pbxproj`.** Note new Swift files in
-  your summary (MANUAL markers in the plan).
-- Android Gradle builds/tests run in-container; the emulator is host-side.
-- The same boundary is built into the images: the ios base has no `xcodebuild`,
-  `xcrun` or simulator; the android base has no `adb` (`cli-spec.md` §4.3).
-- These rules **override any agent tooling or workflow skill.**
+**Never run `xcodebuild`, the iOS Simulator, or a code-signing step, and never
+create or edit `app/*.xcodeproj`/`.pbxproj`.** Write `.swift` sources into
+`app/`; note new ones in your summary (MANUAL markers in the plan) for a human
+— or `npm run setup:app` (`scripts/build-app.sh`) — to build. This rule
+**overrides any agent tooling or workflow skill**, regardless of what
+container or sandbox you're running in. `CONTRIBUTING.md` has the fuller
+picture, including the Android/Gradle half of the same boundary.
 
 ## Engineering principles
 
@@ -81,75 +78,20 @@ works on the macOS host for anything macOS-native.
   how each is enforced. Do not re-decide one inside a phase.
 - **Drive the contract from the terminal**, via `--json`, before app work.
 
-## Toolchain
+## Toolchain, code map, definition of done
 
 **TypeScript on Node ≥ 22.18, no build step** — `bardolier` runs from
-`cli/src/*.ts`; no bundler, no `dist/`.
+`cli/src/*.ts`; no bundler, no `dist/`. Full install/test/check commands, the
+per-file code map, and what "done" requires of new work are all in
+`CONTRIBUTING.md` now — read it once per session rather than this file
+carrying a second copy. The two rules worth restating here because they are
+easy to violate by habit:
 
 - **Type syntax must be erasable**: no `enum`, `namespace` or constructor
   parameter properties; use `as const` + `(typeof X)[number]` (`cli/src/errors.ts`).
   `npm run typecheck` (`erasableSyntaxOnly`) catches violations.
-- Import `.ts` extensions explicitly. npm workspace, so root-level `test/`
-  resolves deps: `yaml`, `ajv` + `ajv-formats`, `node:test`.
-- **A command never writes to stdout** — that keeps `--json` one JSON value.
-  Declared in `commands/registry.ts`, returns a payload plus a human formatter;
-  `main.ts` picks the renderer.
-- **One definition, one schema, checked both ways**: `cli/src/model/<x>.ts` (or
-  `errors.ts`, `config.ts`) ↔ `cli/schema/<x>.schema.json` via
-  `test/contracts.test.ts`; `test/app-models.test.ts` binds the Swift structs to
-  the same schemas. Not one file per command: `new`/`up`/`down`/`delete` →
-  `model/lifecycle.ts`, `service *` → `model/service.ts`, `volumes *` →
-  `model/volumes.ts`, `down-all`/`eject` → `model/ssd.ts`.
-- **Side effects reach a command only through `Context`** (`cli/src/context.ts`):
-  config, `Docker`, catalogue loader, host-port probe, `SsdDevice` (`lsof` +
-  `diskutil`), confirm prompt, `Git`, host UID/GID, clock, `wait`. Never
-  `process.env`, a spawn, a socket, a prompt, or a hard-coded root path. Anything
-  observable — time included — goes on the Context; that is what lets mutations
-  run against a temp dir and stubs (`test/helpers.ts`).
-- `BARDOLIER_CONFIG` relocates the config file: how done-checks stay hermetic (§8).
-
-```
-npm install                             # once, from the repo root
-npm run bardolier -- --help
-node cli/bin/bardolier.js status --json
-npm run test:quiet                      # contract tests — use this, not npm test
-npm run typecheck
-bash test/<name>-done-check.sh          # one function: services, eject, roots…
-bash test/regression.sh [name...]       # every check, cheapest first, or just these
-```
-
-**A check is named for what it covers and stands alone.** Each builds its own
-temp root and config (`test/lib.sh`), assumes nothing another check left, and
-can run by itself — there is no ladder to walk. `contract` is the one that runs
-`npm test` and the typecheck; `images` builds base images and runs Gradle under
-emulation, so it goes last and is minutes rather than seconds.
-
-## Code map
-
-Behaviour is in `cli-spec.md`; this is only where to find it. A constant named
-here is read by several files that must agree — change it in one place.
-
-| File | Owns | Spec |
-| --- | --- | --- |
-| `layout.ts` | the four folders — `work`/`data`/`local`/`home` — created by `new`, re-ensured by every `up` | §3 |
-| `compose.ts` | rendering; `PASSTHROUGH_ENV` — Compose **list** form, bare `NAME`, never `${NAME:-}`, which would inject an empty credential | §9 |
-| `model/archetype.ts` | `ARCHETYPE_APP_PORT` — fixed inside the container, allocated on the host | §9 |
-| `workspace.ts` | every write; skips one whose bytes already match | §9 |
-| `allocator.ts` | manifest scan + host probe; free means both | §5 |
-| `rootindex.ts` | the offline-root cache: write-through at every manifest write, reconciled wherever a scan already happens; never a second registry | §5, §8 |
-| `extraports.ts`, `deps.ts` | declared ports; declared apt packages and the content-addressed derived image | §5.1, §9 |
-| `services.ts` | manifest ⋈ catalogue, so `status` and `service list` cannot disagree | §4.1 |
-| `volumes.ts` | orphans, derived and never recorded; knows the shared cache by `bardolier.role: cache` | §6 |
-| `device.ts` (`SsdDevice`) | `isActionableHolder`, `parseDissenter`; `commands/ssd.ts` drives down-all → holders → eject | §6 |
-| `images.ts` | `IMAGE_PLATFORM` (`bardolier-and` is amd64), `IMAGE_CACHE` (shared gradle/uv caches), `CONTAINER_HOME` | §4.3, §9 |
-| `transfer.ts` | staged copies: `.<name>.incoming`, renamed only once complete; space checked first | §6 |
-| `handoff.ts` | the stop note; every part best-effort, none may fail the `down` | §12 |
-| `cli/images/<image>/Dockerfile` | the three base images, built with `HOST_UID`/`HOST_GID`; Claude Code is the one unpinned component | §4.3, §6 |
-
-## Definition of done
-
-New work gets a scoped spec in `docs/phases/` and a terminal check; it is not
-done until that check passes. The check joins the done-check for the function
-it belongs to — a new one only for a function that has none — and stays. The
-spec names any decision that must be answered first, and the check covers every
-`INTENT.md` invariant the work could break.
+- **Side effects reach a command only through `Context`** (`cli/src/context.ts`).
+  Never `process.env`, a spawn, a socket, a prompt, or a hard-coded root path
+  reached for directly — anything observable, time included, goes on the
+  Context, which is what lets mutations run against a temp dir and stubs
+  (`test/helpers.ts`).

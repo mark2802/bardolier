@@ -18,7 +18,7 @@ against any container regardless of the image's own `USER`; this phase is
 - `cli/src/commands/registry.ts`: `shell <name> [--print] [--root]`.
 - `cli-spec.md` §6 (Shell): document `--root` and that it is ephemeral —
   nothing installed while root survives a `down` any more than any other
-  runtime change, per `docs/phases/13-extra-packages.md`'s reasoning. Anything
+  runtime change, per `docs/development/phases/13-extra-packages.md`'s reasoning. Anything
   meant to persist belongs in `extra_packages`, not this shell.
 - App — `BardolierClient.shell(project:root:)` appends `--root` when asked, same
   pattern as every other flag it appends itself (`CLAUDE.md`: no caller may

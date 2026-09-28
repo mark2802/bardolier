@@ -8,7 +8,7 @@ guess past them.
 **Not a phase spec.** This changes no CLI behaviour, so it carries no schema
 and no done-check. When a step below turns out to need one — the project
 needs something bardolier cannot do yet — write that down in
-`docs/migration-guide-gaps.md` (last section) and route around it for now.
+`docs/development/migration-guide-gaps.md` (last section) and route around it for now.
 Don't hand-invent the capability per project; a generated file a hand-edit
 "fixes" today is overwritten the next `up` (`docker-compose.yml` is generated,
 never patched — `cli-spec.md` §9).
@@ -102,6 +102,14 @@ the four folders above, and one seeded file: `work/CLAUDE.md`. Do this
 **before** moving the real source in — `new` refuses (`PROJECT_EXISTS`) if a
 project of that name already exists in any root, and it's the only thing that
 assigns ports.
+
+`app_port` is **not guaranteed to be the archetype's base port** (3000 for
+`web`) — the allocator scans every project's manifest across every configured
+root, so a busy Internal root can easily push a new project's port up a band.
+Don't write a single connection-string env file (step 6) until after this
+step, and read the real number from `bardolier status <name> --json` — the
+same "never guess or hand-compose the host port" rule Part 2 states for
+`extra_ports` applies here too.
 
 ### 4. Get the source in — move, clone, or copy, depending what it is
 
@@ -212,7 +220,11 @@ bardolier up <name>
 Shell in (or let the app) — you land in `/work`, so `cd <repo>` first — and
 install dependencies for whatever runs in the container (`uv sync` /
 `npm install`, per repo, per process), then start each process by hand — this
-container is a devbox to exec into, nothing supervises processes for you.
+container is a devbox to exec into, nothing supervises processes for you. If
+you want its output visible from a second window rather than tied to the
+shell that started it, redirect it: `nohup <cmd> > /tmp/<name>.log 2>&1 &`,
+then `bardolier shell <name>` again and `tail -f /tmp/<name>.log` — the log
+lives in the container, so it's gone on the next `down`.
 Then verify from the **Mac**, not from inside the container:
 `bardolier status <name>` for the URL, load it in a browser, confirm a page that
 hits the backend actually gets data, confirm the backend can reach its
@@ -230,7 +242,7 @@ bardolier file to ignore.
 
 If step 8, or anything else, needed a capability bardolier doesn't have — don't
 build a per-project workaround for it. Add it to
-`docs/migration-guide-gaps.md` and route around it in this migration (Part 2
+`docs/development/migration-guide-gaps.md` and route around it in this migration (Part 2
 covers the port-policy decision itself, including a second published port,
 which `bardolier port add` now handles).
 
@@ -271,6 +283,16 @@ all. See `cli-spec.md` §5.1.
   status`/`port list` afterwards — never guess or hand-compose the host
   port). Still wire the web frontend through A too, where it applies — the
   two are not exclusive, and A costs nothing extra.
+
+  Once B is in place, **check every affected env var individually for which
+  side reads it** — the two are easy to mix up. A var read by the **browser**
+  (anything `NEXT_PUBLIC_*`-shaped, a frontend's OAuth redirect URI, an API's
+  own `CORS_ORIGINS`, since the browser is the request's origin) takes the
+  **host** port. A var read by a **process inside the container** calling
+  another process inside the same container (server-side SSR fetching its own
+  API, one backend process's URL for another) takes the **container** port,
+  or the service name for a catalogue service — never the host port, and
+  never `localhost` for a sibling container.
 - An interactive dev tool on a `library`/`ios`/`android` project needs a
   browser to reach it → **use B** the same way; there is no `app_port` to
   proxy through on those archetypes.
@@ -313,7 +335,14 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
 - **The project has real migration tooling** (alembic, Prisma, knex, ...)
   that actually runs against the database (many projects declare one but
   don't wire it up — check before assuming). Run it once against the fresh
-  database after the first `up`, the same as you would locally.
+  database after the first `up`, the same as you would locally. This can be
+  the **first time those migrations have ever replayed from a genuinely
+  empty database** — a project whose local dev database evolved
+  incrementally over months can carry a migration bug (a step that assumes
+  something an earlier, since-abandoned step created, a type or table
+  created twice) that never had a reason to surface before now. That's not a
+  bardolier gap; it's a real bug in the project's own migration history, and
+  the fix belongs there regardless of what environment found it.
 
 - **Existing dev/test scripts assume services are reachable at
   `localhost:<port>`.** That's true only from the **Mac** (the published
@@ -373,25 +402,30 @@ every `up`/service change and a hand-added `ports:` entry is silently lost.
   is still missing is reproducibility: the install is a sequence of commands
   typed once, and nothing records how to redo it on another machine — leave a
   short script in `local/` saying what you ran. See "Persisting user-space
-  tooling installed inside the container" in `docs/migration-guide-gaps.md`.
+  tooling installed inside the container" in `docs/development/migration-guide-gaps.md`.
 
 - **The project needs a language/toolchain the base image doesn't have at
   all** (something other than Node or Python today). This is bigger than a
   situational fix — it's the same shape of change that put Python in the web
   base image.
   Don't improvise a per-project Dockerfile addition; file it in
-  `docs/migration-guide-gaps.md` instead.
+  `docs/development/migration-guide-gaps.md` instead.
 
 ---
 
 ## Appendix — prompt to review a new project against this guide
+
+To actually **perform** a migration rather than review one against this
+guide, use the `migrate-project` skill (`.claude/skills/migrate-project/`) —
+it drives the steps above, turns every STOP into a real question, and runs
+`bardolier adopt` for steps 3–4 instead of a hand-composed `new` + `mv`.
 
 Copy-paste this (with a real path filled in) into a fresh session to have an
 agent check a specific project against this guide **before** migrating it,
 and propose updates to the guide from what it finds — without ever naming
 the project in those updates.
 
-> Read `docs/migration-guide.md` and `docs/migration-guide-gaps.md` in full.
+> Read `docs/migration-guide.md` and `docs/development/migration-guide-gaps.md` in full.
 > Then survey the project at `<PATH>` the same way Part 1, step 1 of the
 > guide describes (compose files, Dockerfiles, env files, package manifests,
 > dev scripts, instructions in the repo's own `CLAUDE.md` that assume the old
@@ -410,7 +444,7 @@ the project in those updates.
 >   describing the *situation and the instruction*, never this project by
 >   name or anything identifying about it.
 > - If it needs a bardolier/app capability that doesn't exist (check
->   `docs/migration-guide-gaps.md`'s Open section first — it may already be
+>   `docs/development/migration-guide-gaps.md`'s Open section first — it may already be
 >   tracked), propose a new entry instead of a workaround — also phrased
 >   generically.
 >

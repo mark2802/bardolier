@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/install.schema.json",
+  "title": "bardolier install output",
+  "description": "What `bardolier install` linked onto the host's PATH. cli-spec.md §6 (Lifecycle / SSD), phase 28.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bin_dir", "links", "created_bin_dir", "node_version", "node_ok", "resolves"],
+  "properties": {
+    "bin_dir": { "type": "string", "minLength": 1 },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "target", "action"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "action": { "type": "string", "enum": ["created", "already_linked", "replaced"] }
+        }
+      }
+    },
+    "created_bin_dir": {
+      "type": "boolean",
+      "description": "True when no conventional directory existed and bin_dir (~/.local/bin) was created."
+    },
+    "node_version": { "type": "string", "minLength": 1 },
+    "node_ok": { "type": "boolean" },
+    "resolves": {
+      "type": "boolean",
+      "description": "Whether `bardolier` resolves under bin_dir plus the system directories alone, mirroring the app's own search."
+    }
+  }
+}

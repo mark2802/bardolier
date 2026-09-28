@@ -1,7 +1,7 @@
 # bardolier gaps found while migrating projects
 
 Capabilities `docs/migration-guide.md` needed but bardolier/the app don't have
-yet. Each entry is a candidate for a future `docs/phases/N-slug.md`, not a
+yet. Each entry is a candidate for a future `docs/development/phases/N-slug.md`, not a
 scoped plan itself — write one when there's enough real evidence (from
 actual migrations) to know its shape. Entries are phrased generically; no
 project is named here, matching the guide's own rule.
@@ -79,6 +79,37 @@ part that hurt, which was reconstructing the install from memory.
 
 ---
 
+### Pinning a per-project Node version
+
+**Need:** a `web`-archetype project whose repo pins an exact Node version
+(`.nvmrc` or equivalent) that differs from the base image's.
+
+**Why it doesn't work today:** `bardolier-web` sets Node from a
+`NODE_VERSION` build arg on an image shared by every `web` project, and ships
+no version manager — unlike Python, where `uv` reads `.python-version`
+itself and installs whatever it names into the shared cache. There is no
+per-project hook to change it.
+
+**Shape a future phase would need to decide:** `deps.ts` already builds a
+content-addressed derived image per declared package set (§6 Deps), which is
+the likely mechanism for a `node_version` field to reuse. Open within that:
+whether a second Node in a derived layer is worth the image size, or whether
+a version manager (`fnm`, `n`) belongs in the base image instead, with the
+pin read from the project the same way `uv` reads `.python-version`.
+
+**Routed around today by:** running on the base image's Node and updating
+the repo's own pin to match, when the gap between the two is minor enough
+not to matter (checked against the project's actual dependencies first). In
+the one migration that hit this, a two-major-version gap (20 → 22) ran the
+project's existing dependency set with no observed issue — the gap here is
+about reproducibility and the pin silently going stale, not a version that
+has actually broken anything yet.
+
+**First seen:** migrating a Next.js project pinning Node 20 against a base
+image shipping Node 22.
+
+---
+
 ## Resolved
 
 ### A second, host-published port per project
@@ -105,7 +136,7 @@ by the next regeneration, which is deterministic by design.
 **First seen:** while writing the migration guide, considering a project
 that pairs a web frontend with native mobile clients.
 
-**Resolved by:** Phase 12 (`docs/phases/12-extra-ports.md`) — `extra_ports`
+**Resolved by:** Phase 12 (`docs/development/phases/12-extra-ports.md`) — `extra_ports`
 in `project.yml`, a named, per-project port independent of archetype,
 published in compose alongside `app_port`. `bardolier port add <project> <name>
 --container-port <n>` declares one; the allocator starts at the given

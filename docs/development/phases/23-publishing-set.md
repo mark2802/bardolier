@@ -34,7 +34,7 @@ one contributor, and three files carrying personal paths.
   permission prompts; `shell --root` (phase 14, if landed) is root inside one
   container and nothing more.
 - Docs triage. `cli-spec.md`, `app-spec.md` and `migration-guide.md` are for
-  users and stay at `docs/`. `docs/phases/`, `docs/archive/` and
+  users and stay at `docs/`. `docs/development/phases/`, `docs/development/archive/` and
   `migration-guide-gaps.md` are development scaffolding and move to
   `docs/development/` — kept, because the reasoning in them is most of what
   makes the repo worth reading, but not presented as user documentation.
@@ -44,15 +44,24 @@ one contributor, and three files carrying personal paths.
   not a contributor's: that moves to `CONTRIBUTING.md` alongside the toolchain
   and test-ladder instructions, phrased as how to work on the project rather
   than as instructions to one agent.
-- Personal scrub: the hard-coded path in the Xcode scheme (already handled in
-  phase 16), `/Users/mark/projects` in `test/eject.test.ts`, and
-  `.claude/settings.local.json` — which should be `.gitignore`d rather than
+- Personal scrub: the hard-coded path in the Xcode scheme (phase 16 claimed
+  this but only updated the filename after the rename — the absolute path
+  itself is still there; it is MANUAL, Xcode-only, and unresolved as of this
+  phase), the owner's home directory in a fixture path in
+  `test/eject.test.ts`, and `.claude/settings.local.json` — which should be
+  `.gitignore`d rather than
   edited.
 
-**Non-goals:** no CI configuration, no release automation, no Homebrew formula,
-no code of conduct or issue templates — none of them is needed to publish, and
-each is a commitment to maintain something. No screenshots of the app until
-someone asks for them.
+**Non-goals:** no CI configuration, no Homebrew formula, no code of conduct or
+issue templates — none of them is needed to publish, and each is a commitment
+to maintain something. No screenshots of the app until someone asks for them.
+
+**Amended after this phase shipped (owner's decision):** "no release
+automation" is narrowed, not dropped. A local install (`bardolier install`,
+`scripts/build-app.sh`) is now part of getting a clone running at all — phase
+28 — and is not automation in the sense this non-goal meant. A
+Developer-ID-signed, notarised `.dmg` release IS still out of scope here,
+deliberately deferred as its own later piece of work.
 
 **Done-check:** `test/publishing-done-check.sh` asserts `LICENSE` exists and is
 Apache 2.0; `NOTICE` and `README.md` exist and the README has the required
