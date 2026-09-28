@@ -5,7 +5,7 @@
 //  Reclaim disk (app-spec.md §9).
 //
 //  The list is `status`'s `orphaned_volumes` — named volumes and leftover
-//  service data directories (phase 19) no manifest claims any more, which the
+//  service data directories no manifest claims any more, which the
 //  CLI DERIVES rather than records (CLAUDE.md). Nothing here
 //  decides what is reclaimable; it renders what was reported and asks the CLI
 //  to remove what the user picks.

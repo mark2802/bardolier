@@ -9,7 +9,7 @@
 //  state, a port, or whether a volume is reclaimable — those are answers, and
 //  answers come from `bardolier` (CLAUDE.md, app-spec.md §4).
 //
-//  Phase 6 turns it from a reader into the app's action surface, under three
+//  It is a reader plus the app's action surface, under three
 //  rules that keep a thin client thin:
 //
 //  1. ONE OPERATION AT A TIME. `activity` names what is running; while it is
@@ -26,7 +26,7 @@
 //  `BardolierClient` passes `--force`, because the CLI cannot prompt with no
 //  terminal (app-spec.md §6, §9).
 //
-//  Phase 7 adds the two states that outlive a command: `ejectPhase`, because a
+//  Two states outlive a command: `ejectPhase`, because a
 //  blocked eject is something the user goes away and fixes before retrying
 //  (§10), and `bardolierMissing`, because an app that cannot find its CLI has
 //  nothing to say about anything else and should say THAT once (§13).
@@ -69,12 +69,12 @@ nonisolated enum EjectPhase: Equatable, Sendable {
     case blockedByDocker(holders: [SsdHolder], message: String, engineStopped: Bool)
     /// Unmounted. The "safe to unplug" state (§10, §11).
     case ejected(volume: String, stopped: [String])
-    /// `eject --all` returned (phase 22) — never a thrown failure for a
+    /// `eject --all` returned — never a thrown failure for a
     /// blocked disk, so this is what BOTH a clean sweep and a mixed one land
     /// in: `results` names each root, `ejected` per-root telling the two
     /// apart in one panel rather than picking one to show.
     case ejectedAll(results: [EjectAllResult], stopped: [String])
-    /// EJECT_NOT_APPLICABLE (phase 10): the root's path is a plain directory on the
+    /// EJECT_NOT_APPLICABLE: the root's path is a plain directory on the
     /// internal disk, not a removable volume. Kept apart from `failed` because
     /// it isn't one — nothing is wrong, there is simply nothing to eject, so the
     /// row goes quiet with a reason instead of a Retry that would fail the same
@@ -426,7 +426,7 @@ final class BardolierStore: ObservableObject {
     }
 
     /// CONFIRM FIRST — the client passes `--force` (§9). The project's data
-    /// lives inside its directory (phase 19), so a plain delete refuses
+    /// lives inside its directory, so a plain delete refuses
     /// PROJECT_HAS_DATA once there is any; `purge` is what destroys it.
     func delete(project name: String, purge: Bool) async {
         let result = await perform("Deleting \(name)") { client in
@@ -462,7 +462,7 @@ final class BardolierStore: ObservableObject {
     /// Create a project (§8). Returns the payload so the window can close only
     /// on success, and reports the ports any initial services were assigned.
     @discardableResult
-    /// `root` picks which configured root to create it under (phase 18);
+    /// `root` picks which configured root to create it under;
     /// `nil` defers to the CLI's own default (the first configured root).
     func create(name: String, archetype: Archetype, services: [String], root: String? = nil) async -> NewOutput? {
         let result = await perform("Creating \(name)") { client in
@@ -474,7 +474,7 @@ final class BardolierStore: ObservableObject {
         return result
     }
 
-    /// Clone a project (phase 20, §8.1). Returns the payload so the panel closes
+    /// Clone a project (§8.1). Returns the payload so the panel closes
     /// only on success, like `create`.
     ///
     /// The notice names the two things the user cannot predict: the host ports
@@ -494,7 +494,7 @@ final class BardolierStore: ObservableObject {
         return result
     }
 
-    /// Move a project to another root (phase 21, §8.2). Returns the payload so
+    /// Move a project to another root (§8.2). Returns the payload so
     /// the panel closes only on success, like `clone`.
     ///
     /// The notice names the destination and, when `mode == .copy`, the bytes
@@ -598,9 +598,9 @@ final class BardolierStore: ObservableObject {
     /// still be refused, and no Retry ever clears it. It stops the ENGINE, not
     /// a holder — nothing is killed and nothing is forced.
     ///
-    /// `root` names which configured root to eject (phase 18) — `nil` defers
+    /// `root` names which configured root to eject — `nil` defers
     /// to the CLI, which requires a name only when more than one configured
-    /// root is a mounted, removable volume. `all` (phase 22) ejects every
+    /// root is a mounted, removable volume. `all` ejects every
     /// removable root instead, best-effort — mutually exclusive with `root`,
     /// and Retry after a mixed result is this method again unchanged: a root
     /// this call already ejected has unmounted itself out of the next call's
@@ -722,7 +722,7 @@ final class BardolierStore: ObservableObject {
         }
         // The catalogue may move with catalogue_path (§4.1). Roots have their
         // own surface (`addRoot`/`removeRoot` below) since they are
-        // list-valued and not settable through `config set` (phase 18).
+        // list-valued and not settable through `config set`.
         if key == .cataloguePath {
             await loadCatalogue(force: true)
             await loadDoctor()
@@ -730,13 +730,13 @@ final class BardolierStore: ObservableObject {
         await refresh(force: true)
     }
 
-    /// Every configured root (phase 18) — `roots[0]` is the default `new`
+    /// Every configured root — `roots[0]` is the default `new`
     /// targets. Derived from `status`, which already carries it and is kept
     /// fresh by `refresh()`: a separate fetch would just be a second copy of
     /// the same answer, one refresh cycle staler.
     var roots: [ConfiguredRoot] { status?.roots ?? [] }
 
-    /// The `ssd` doctor finding's per-root state (phase 18) — `nil` before
+    /// The `ssd` doctor finding's per-root state — `nil` before
     /// `doctor` has answered.
     private var doctorRoots: [DoctorRootState]? {
         doctor?.findings.first { $0.id == .ssd }?.roots
@@ -765,7 +765,7 @@ final class BardolierStore: ObservableObject {
 
     /// Configured roots that are actually eject candidates: mounted, and an
     /// actually-removable volume — never a plain directory on the internal
-    /// disk (phase 22). What `EjectPanel`'s root picker offers, so it cannot
+    /// disk. What `EjectPanel`'s root picker offers, so it cannot
     /// hand the user a choice that would only ever answer
     /// EJECT_NOT_APPLICABLE. `doctor` not having answered yet reads as "none
     /// known" rather than "all of them" here — the opposite default from

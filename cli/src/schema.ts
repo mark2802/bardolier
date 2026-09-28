@@ -42,19 +42,19 @@ export const SCHEMA_NAMES = [
   'down-all',
   'eject',
   'eject-all',
-  // Phase 6: the two commands the app needed that §6 did not name (§1 — "if
-  // the app needs something, a CLI command grows to provide it").
+  // The two commands the app needed that §6 did not name (§1 — "if the app
+  // needs something, a CLI command grows to provide it").
   'catalogue',
   'config-get',
   'config-set',
-  // Phase 18: roots are list-valued, so they get their own commands rather
-  // than a `config set` key.
+  // Roots are list-valued, so they get their own commands rather than a
+  // `config set` key.
   'root-add',
   'root-remove',
   'root-list',
-  // Phase 27: the disposable cache that lets bardolier answer name/port
-  // uniqueness while a root is unreadable — not a command payload, but bound
-  // to its model the same way (test/contracts.test.ts).
+  // The disposable cache that lets bardolier answer name/port uniqueness
+  // while a root is unreadable — not a command payload, but bound to its
+  // model the same way (test/contracts.test.ts).
   'root-index',
 ] as const
 export type SchemaName = (typeof SCHEMA_NAMES)[number]

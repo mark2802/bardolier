@@ -1,5 +1,5 @@
 /**
- * The shape of a project directory — `cli-spec.md` §3, §4.2 (phase 19).
+ * The shape of a project directory — `cli-spec.md` §3, §4.2.
  *
  * A project directory is NOT a repository. bardolier's own files sit at the top
  * (`project.yml`, `docker-compose.yml`, `.bardolier/`) and everything else lives

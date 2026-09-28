@@ -8,7 +8,7 @@
   "properties": {
     "roots": {
       "type": "array",
-      "description": "Ordered; roots[0] is the default `new` targets. Names and paths must each be unique. Overridden wholesale by $BARDOLIER_ROOT, which replaces this list with a single root named after the path's basename (phase 18). Not editable through `config set` — see `bardolier root add | remove | list`.",
+      "description": "Ordered; roots[0] is the default `new` targets. Names and paths must each be unique. Overridden wholesale by $BARDOLIER_ROOT, which replaces this list with a single root named after the path's basename. Not editable through `config set` — see `bardolier root add | remove | list`.",
       "minItems": 1,
       "items": {
         "type": "object",

@@ -1,6 +1,6 @@
 /**
  * `bardolier install [--bin-dir <dir>] [--force]` — `cli-spec.md` §6
- * (Lifecycle / SSD), phase 28.
+ * (Lifecycle / SSD).
  *
  * The thin command wrapper; the actual search-and-link logic lives in
  * `../install.ts`, which is also what `doctor`'s `cli` finding calls to ask

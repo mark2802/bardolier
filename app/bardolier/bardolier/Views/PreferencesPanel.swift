@@ -6,7 +6,7 @@
 //
 //  Three kinds of setting, and only two are the app's own. Roots and the
 //  terminal are written to the CLI CONFIG — roots through `bardolier root
-//  add|remove` (list-valued, so `config set` cannot touch them, phase 18),
+//  add|remove` (list-valued, so `config set` cannot touch them),
 //  the terminal through `bardolier config set` — so that the CLI and the menu
 //  can never disagree about where projects live or what a shell opens in
 //  (§12: "written to the CLI config so there is one source"). The auto-shell
@@ -66,7 +66,7 @@ struct PreferencesPanel: View {
         }
     }
 
-    // MARK: - Roots (§8, §12 — written through `root add|remove`, phase 18)
+    // MARK: - Roots (§8, §12 — written through `root add|remove`)
 
     private var rootsSection: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -77,7 +77,7 @@ struct PreferencesPanel: View {
                     Text(root.name).font(.caption).fontWeight(.medium)
                     Text(root.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     if !root.mounted {
-                        // `lastIndexed` (phase 27) is nil for a root that has
+                        // `lastIndexed` is nil for a root that has
                         // never been scanned — everything else has last seen
                         // its own manifests, so the difference is worth saying.
                         let seen = root.lastIndexed.map { " — last seen \($0)" } ?? ""
@@ -128,7 +128,7 @@ struct PreferencesPanel: View {
     /// often on a disk the user just plugged in, and `root add` can point at
     /// a folder that doesn't exist yet — `diskutil` mounts the volume,
     /// `root add` never creates the directory itself, so the panel is what
-    /// offers "New Folder" (phase 18).
+    /// offers "New Folder".
     private func choosePath() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false

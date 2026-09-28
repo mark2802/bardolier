@@ -8,17 +8,18 @@
  * ROOT_UNREADABLE or SSD_NOT_MOUNTED.
  *
  * Precedence, lowest to highest: built-in defaults → config file → environment.
- * Phase 18 replaces the single `ssd_root` key with `roots`, an ordered array
- * of `{ name, path }` — projects now live in more than one place at once, and
+ * The single `ssd_root` key is replaced by `roots`, an ordered array of
+ * `{ name, path }` — projects now live in more than one place at once, and
  * the first entry is the default `new` targets. `$BDLR_SSD_ROOT` becomes
  * `$BARDOLIER_ROOT`, which REPLACES the whole list with one root named after
  * the path's basename — one variable, so every done-check stays hermetic with
- * a temp dir. This is the second and last spend of §5's additive-only rule
- * (see phase 17 for the first).
+ * a temp dir.
  *
- * There is no `ssd_volume` key (phase 17): a root's mount point is derived
- * from its `path` by `containingVolume` in `projects.ts`, so the two can never
- * disagree.
+ * There is no `ssd_volume` key: a root's mount point is derived from its
+ * `path` by `containingVolume` in `projects.ts`, so the two can never
+ * disagree. Together, dropping that key and replacing `ssd_root` spend §5's
+ * additive-only rule twice — both deliberate, both before publication, the
+ * one window in which breaking a frozen contract costs nothing.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -204,8 +205,8 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
 /**
  * The keys a caller may set through `config set`. `roots` is list-valued and
  * gets its own command surface (`root add | remove | list`, `commands/root.ts`)
- * — the same reasoning phase 6 gave `catalogue` and `config get|set` their
- * own commands rather than a text field the app would have to compose.
+ * — the same reasoning that gave `catalogue` and `config get|set` their own
+ * commands rather than a text field the app would have to compose.
  */
 export const CONFIG_KEYS = ['catalogue_path', 'terminal'] as const
 export type ConfigKey = (typeof CONFIG_KEYS)[number]

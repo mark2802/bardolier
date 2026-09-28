@@ -2,7 +2,7 @@
  * Container and compose naming — the one place these strings are formed.
  *
  * `status` reads state by matching running containers against these names, and
- * Phase 2's compose generation must emit exactly the same ones. Keeping both
+ * compose generation must emit exactly the same ones. Keeping both
  * sides on this module is what stops a rename in the generator from silently
  * making every project look stopped.
  *
@@ -26,7 +26,7 @@ export function serviceContainerName(project: string, service: string): string {
   return `${PREFIX}-${project}-${service}`
 }
 
-/** True for any container this tool owns; used by `down-all` in Phase 4. */
+/** True for any container this tool owns; used by `down-all`. */
 export function isBardolierContainer(name: string): boolean {
   return name.startsWith(`${PREFIX}-`)
 }

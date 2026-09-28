@@ -73,7 +73,7 @@ function buildProject(
 
 export async function collectStatus(ctx: Context, projectName?: string | null): Promise<Status> {
   const discovery = discoverProjects(ctx.config)
-  // RECONCILE (§5, phase 27): `status` already walks every readable root, so
+  // RECONCILE (§5): `status` already walks every readable root, so
   // rewriting each one's index here costs nothing beyond the scan it was
   // doing anyway — and it is what catches drift bardolier did not cause (a
   // hand-edited project.yml, a project copied in by hand).
@@ -104,7 +104,7 @@ export async function collectStatus(ctx: Context, projectName?: string | null): 
 
   return {
     // `ssd.root` keeps reporting the default root's path so the field the app
-    // already reads stays meaningful; `roots` (phase 18) is the complete view.
+    // already reads stays meaningful; `roots` is the complete view.
     ssd: { mounted: discovery.mounted, root: defaultRoot(ctx.config).path },
     roots: discovery.roots.map((root) => ({
       name: root.name,

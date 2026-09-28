@@ -31,7 +31,7 @@ export type PortAddOutput = {
   compose_path: string
   /** False when the regenerated compose file was byte-identical to the old one. */
   compose_regenerated: boolean
-  /** Present only when a configured root could not be read while this ran (phase 27). */
+  /** Present only when a configured root could not be read while this ran. */
   degraded_roots?: OfflineRoot[]
 }
 

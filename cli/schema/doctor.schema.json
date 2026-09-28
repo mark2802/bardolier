@@ -37,7 +37,7 @@
         },
         "roots": {
           "type": "array",
-          "description": "Per-root state. Present only on the `ssd` finding. Additive since phase 18.",
+          "description": "Per-root state. Present only on the `ssd` finding. Additive.",
           "items": { "$ref": "#/$defs/doctor_root" }
         }
       }

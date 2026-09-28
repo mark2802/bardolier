@@ -65,6 +65,6 @@ and its directory.
 `claude-yard`, `CPROJ_` and `claude-{web,ios,and}` appear nowhere in the tree
 outside `node_modules`/`.git`, and that `<name> --help`, `<name> status --json`
 and a full `new` → `up` → `service add` → `status` → `down` → `delete`
-lifecycle behave exactly as before. The real proof is
-`bash test/regression.sh --through 7` green under the new name; add the grep
-assertion as a section in `regression.sh` (`LAST=15`).
+lifecycle behave exactly as before. The real proof is the full suite
+(`bash test/regression.sh`) green under the new name; add the grep assertion as
+a section in `regression.sh`.

@@ -6,7 +6,7 @@
  * That asymmetry is deliberate — a seed you cannot edit is a nuisance, and a
  * derived file you can edit is a lie.
  *
- * Since phase 19 there is exactly one seed, and it goes into `work/`. There is
+ * There is exactly one seed, and it goes into `work/`. There is
  * no repo root to seed: bardolier's files live above `work/`, outside every
  * working tree, so there is nothing for a `.gitignore` to hide and nothing a
  * build context has ever been taken from (`deps.ts` builds from a generated

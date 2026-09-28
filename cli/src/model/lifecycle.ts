@@ -2,8 +2,8 @@
  * Payloads for the project lifecycle commands — `new`, `up`, `down`, `delete`
  * (`cli-spec.md` §6, Projects).
  *
- * These are app-facing contracts like §7's `status`: once the app ships
- * (Phase 5+) they change ADDITIVELY ONLY. Each one answers "what did this
+ * These are app-facing contracts like §7's `status`: once the app depends on
+ * a shape it changes ADDITIVELY ONLY. Each one answers "what did this
  * command actually do?", because the app has to distinguish a real start from
  * an idempotent no-op to render its activity states honestly (app-spec.md §5).
  */
@@ -22,7 +22,7 @@ export type NewProject = {
   dir: string
   /** RFC 3339 UTC timestamp recorded in the manifest. */
   created: string
-  /** The configured root's name this project was created under (phase 18). */
+  /** The configured root's name this project was created under. */
   root: string
 }
 
@@ -38,15 +38,15 @@ export type NewOutput = {
    */
   services: AttachedService[]
   /**
-   * Present only when a configured root could not be read while this ran
-   * (phase 27) — ports were allocated against its last known state (`allocator.ts`),
+   * Present only when a configured root could not be read while this ran —
+   * ports were allocated against its last known state (`allocator.ts`),
    * from an index that may since be stale. Absent means every root answered live.
    */
   degraded_roots?: OfflineRoot[]
 }
 
 /**
- * What `clone` created (phase 20) — `new`'s fields, plus what makes it a copy.
+ * What `clone` created — `new`'s fields, plus what makes it a copy.
  *
  * The same shape as `NewOutput` on purpose: a clone IS a new project, and the
  * caller that renders one renders the other.
@@ -84,11 +84,11 @@ export type UpOutput = {
   open_shell: boolean
   /**
    * The dev server's host port and the URL that opens it (§9), or null for an
-   * archetype that serves nothing. Additive since Phase 9.
+   * archetype that serves nothing. Additive.
    */
   app_port?: number | null
   app_url?: string | null
-  /** Extra ports published alongside it (§5.1), sorted by name. Additive since Phase 12. */
+  /** Extra ports published alongside it (§5.1), sorted by name. Additive. */
   extra_ports?: AttachedExtraPort[]
 }
 
@@ -100,7 +100,7 @@ export type MoveLocation = {
 }
 
 /**
- * What `move` did (phase 21). A project's ports never change — moving it is
+ * What `move` did. A project's ports never change — moving it is
  * reported by the manifest's new location, never by rewriting anything inside
  * the directory.
  */
@@ -120,8 +120,7 @@ export type DownOutput = {
   project: string
   /**
    * Where the handoff note was written (§12), or null when none was — no
-   * repository and no agent session to describe, or `--no-handoff`. Additive
-   * since Phase 9.
+   * repository and no agent session to describe, or `--no-handoff`. Additive.
    */
   handoff_path?: string | null
   /** True when the agent's own summary made it into that note. */
@@ -145,7 +144,7 @@ export type DeleteOutput = {
   /**
    * Named volumes removed under `--purge`, and left behind without it.
    *
-   * Both are empty since phase 19: a project's data lives inside its directory
+   * Both are always empty: a project's data lives inside its directory
    * and goes with it, and the only named volume left is the toolchain cache,
    * which belongs to every project on the base image and to none of them. The
    * fields stay because the app decodes them (§7's additive-only rule).

@@ -3,7 +3,7 @@
  *
  * `roots` is list-valued (cli-spec.md §8), which is exactly what `config set`
  * cannot edit (CLAUDE.md: "a list-valued key cannot be edited through
- * `config set`") — the same reasoning phase 6 gave `catalogue` and
+ * `config set`") — the same reasoning that gave `catalogue` and
  * `config get|set` their own command surfaces rather than a text field.
  */
 
@@ -13,7 +13,7 @@ export type RootRow = {
   path: string
   mounted: boolean
   /**
-   * Additive since phase 27, for parity with `status.roots[]` — `root
+   * Additive, for parity with `status.roots[]` — `root
    * add|remove|list` never populate this themselves; it is here only so the
    * app's `ConfiguredRoot` model can be shared across both.
    */

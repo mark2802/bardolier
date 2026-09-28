@@ -12,7 +12,7 @@
  *
  *   - THE REPOSITORIES, from `ctx.git`. Free, instant, and true whether or not
  *     anyone ever ran an agent here: branch, recent commits, what is still
- *     uncommitted. `work/` may hold several (phase 19), so each is walked and
+ *     uncommitted. `work/` may hold several, so each is walked and
  *     reported; a project with none says so.
  *   - THE AGENT'S OWN ACCOUNT, from `claude -p --continue` run inside the dev
  *     container. This is the half that knows what was being ATTEMPTED, which no

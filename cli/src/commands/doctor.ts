@@ -35,7 +35,7 @@ function configFinding(ctx: Context): DoctorFinding {
   }
 }
 
-/** `ssd` keeps its frozen id (§6) even though it now speaks for every configured root (phase 18). */
+/** `ssd` keeps its frozen id (§6) even though it now speaks for every configured root. */
 async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
   const lines: string[] = []
   const roots: DoctorRootState[] = []
@@ -53,7 +53,7 @@ async function ssdFinding(ctx: Context): Promise<DoctorFinding> {
     if (removable) {
       lines.push(`${root.name}: ${root.path} is readable (volume ${probe.volume})`)
     } else {
-      // A local root (phase 10) is a supported, first-class mode, not a
+      // A local root is a supported, first-class mode, not a
       // fault — no "plug in" remedy, because there is nothing to plug in.
       lines.push(
         `${root.name}: ${root.path} is readable, on the internal disk rather than a removable volume — \`bardolier eject\` does not apply to it; use \`bardolier down-all\` to stop everything instead`,
@@ -241,7 +241,7 @@ function portsFinding(discovery: Discovery): DoctorFinding {
 
 /**
  * Whether a Finder-launched app — not this terminal, which may have a PATH
- * the app does not — would find `bardolier` (phase 28). Independent of every
+ * the app does not — would find `bardolier`. Independent of every
  * other finding: a shell that resolves `bardolier` fine is exactly the state
  * that hid the gap this check exists to catch.
  */
@@ -270,7 +270,7 @@ export async function collectDoctor(ctx: Context): Promise<DoctorReport> {
   findings.push(catalogue.finding)
 
   const discovery = discoverProjects(ctx.config)
-  // RECONCILE (phase 27): `doctor` already walks every readable root.
+  // RECONCILE: `doctor` already walks every readable root.
   reconcileReadableRoots(ctx, discovery)
   findings.push(manifestsFinding(discovery, catalogue.catalogue))
   findings.push(portsFinding(discovery))

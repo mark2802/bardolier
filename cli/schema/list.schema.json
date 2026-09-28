@@ -18,7 +18,7 @@
           "name": { "type": "string", "minLength": 1 },
           "archetype": { "type": "string", "enum": ["web", "ios", "android", "library"] },
           "state": { "type": "string", "enum": ["running", "stopped", "partial"] },
-          "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project lives under. Additive since phase 18." }
+          "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project lives under. Additive." }
         }
       }
     }

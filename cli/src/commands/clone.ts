@@ -1,6 +1,6 @@
 /**
  * `bardolier clone <source> <name> [--root <name>] [--with-content]` —
- * `cli-spec.md` §6 (Projects), phase 20.
+ * `cli-spec.md` §6 (Projects).
  *
  * A clone is the source's manifest with a new name, fresh ports and a fresh
  * `created`. Reproducing that by hand is `new` plus a `service add` per service,

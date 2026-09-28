@@ -17,12 +17,12 @@
     },
     "removed_volumes": {
       "type": "array",
-      "description": "Named volumes removed under --purge. Always empty since phase 19: a project's data lives inside its directory and goes with it.",
+      "description": "Named volumes removed under --purge. Always empty: a project's data lives inside its directory and goes with it.",
       "items": { "type": "string", "minLength": 1 }
     },
     "kept_volumes": {
       "type": "array",
-      "description": "Named volumes left behind. Always empty since phase 19, for the same reason as removed_volumes.",
+      "description": "Named volumes left behind. Always empty, for the same reason as removed_volumes.",
       "items": { "type": "string", "minLength": 1 }
     }
   }

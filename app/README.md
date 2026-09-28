@@ -64,7 +64,7 @@ whether they have been done:
 A Finder-launched app inherits almost no `PATH`, so the client searches the
 conventional install directories itself and hands the child a `PATH` good enough
 to find `node`, `docker`, `lsof` and `diskutil` (see `BardolierExecutable.swift`).
-`npm run setup` (`bardolier install`, phase 28) puts a symlink into the first
+`npm run setup` (`bardolier install`) puts a symlink into the first
 of those directories that exists and is writable — a working copy is reachable
 without editing a shell profile or a `defaults write`.
 

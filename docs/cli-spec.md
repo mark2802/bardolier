@@ -201,7 +201,7 @@ At service-add:
    A root that cannot be read folds in its **root index** instead (§8) — the
    last set of ports it held, kept fresh by write-through at every manifest
    write and by a full rescan whenever `status`/`doctor`/`eject` already walks
-   it. A root that has never been indexed contributes nothing here (phase 27):
+   it. A root that has never been indexed contributes nothing here:
    the cost of being wrong is a loud `PORT_UNAVAILABLE` at the next `up`, never
    data loss, so allocation proceeds rather than refusing outright.
 3. From `host_port_base` upward, take the first port both unassigned in any
@@ -260,7 +260,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `work/CLAUDE.md`, under the named root (default: the first configured root
   — §8).
   Assigns ports for any initial services. An unreadable root beyond the
-  target degrades rather than blocking this (§5, phase 27): the response
+  target degrades rather than blocking this (§5): the response
   carries `degraded_roots` naming which one and how stale its index is.
   Errors: `ROOT_UNREADABLE` (the target root itself, or another root that has
   never been indexed and so cannot be checked for the name), `PROJECT_EXISTS`
@@ -340,8 +340,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 
 ### Services
 - `bardolier service add <project> <svc>` — attach; assign host port; regenerate
-  compose. An unreadable root degrades allocation rather than blocking it (§5,
-  phase 27) and names it in `degraded_roots`. Errors `PROJECT_RUNNING`,
+  compose. An unreadable root degrades allocation rather than blocking it (§5)
+  and names it in `degraded_roots`. Errors `PROJECT_RUNNING`,
   `SERVICE_ATTACHED`, `SERVICE_UNKNOWN`.
 - `bardolier service remove <project> <svc>` — detach; regenerate compose; **keep
   `data/<svc>`** (it becomes an orphan of this project). Release the host port.
@@ -351,7 +351,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Ports
 - `bardolier port add <project> <name> --container-port <n>` — declare an extra
   port (§5.1); assign its host port; regenerate compose. Same offline-root
-  degrading as `service add` (§5, phase 27). Errors
+  degrading as `service add` (§5). Errors
   `PROJECT_RUNNING`, `EXTRA_PORT_ATTACHED`.
 - `bardolier port remove <project> <name>` — remove it; regenerate compose;
   release the host port. Errors `PROJECT_RUNNING`, `EXTRA_PORT_NOT_ATTACHED`.
@@ -386,7 +386,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   with no labels and no cross-root reasoning — and a named `volume`, now only
   the shared toolchain caches plus whatever an older layout left behind, which
   needs every root's claims. An unreadable root folds in its root index for
-  the volume half (§5, §8, phase 27); one that has never been indexed cannot
+  the volume half (§5, §8); one that has never been indexed cannot
   be guessed at safely, so its cache claims are omitted rather than risked —
   `directory` orphans are unaffected, and `unverified_roots` names which root
   was skipped and why. Errors `SSD_NOT_MOUNTED` (no root readable at all).
@@ -418,7 +418,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
     stopped, naming `bardolier down-all` as the command to run instead. A root on
     the internal disk is a first-class mode (§8), and `diskutil eject`-ing `/`
     is not a smaller version of ejecting — it is the wrong command.
-  - **The root's index is reconciled first** (§8, phase 27) — the last instant
+  - **The root's index is reconciled first** (§8) — the last instant
     it is guaranteed readable, and precisely the moment a user takes this path
     before a drive goes away.
   - Otherwise: `down-all` → host holders (`lsof`) → `diskutil eject`. Held
@@ -455,14 +455,14 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   array with per-root `mounted`/`removable` (null when unmounted — nothing to
   ask `diskutil`), so the app can tell an actual SSD from an internal-disk root
   instead of calling both "SSD". `doctor` also reconciles every readable
-  root's index (§8, phase 27) — free, since it already walks them — and a
+  root's index (§8) — free, since it already walks them — and a
   `ports` finding reports a port or name held in two roots at once (the
   collision §5 promises is a finding, not a repair), skipped `ok: true` unless
-  every configured root answered live. A `cli` finding (phase 28) reports
+  every configured root answered live. A `cli` finding reports
   whether `bardolier` resolves in the conventional bin directories `bardolier
   install` uses — the question a Finder-launched app is actually asking,
   independent of whatever PATH the terminal running `doctor` happens to have.
-- `bardolier install [--bin-dir <dir>] [--force]` (phase 28) — link `bardolier`
+- `bardolier install [--bin-dir <dir>] [--force]` — link `bardolier`
   and `bdlr` onto a bin directory a Finder-launched menu-bar app can also find
   (`BardolierExecutable.swift`'s search, §15): `--bin-dir` if given, else the
   first of the conventional directories (`/opt/homebrew/bin`,
@@ -534,7 +534,7 @@ changed to accommodate them.
 {
   "ssd": { "mounted": true, "root": "/Volumes/ssd/claude-projects" }, // default root's path (roots[0])
   "roots": [                          // every configured root; additive
-    // last_indexed (phase 27, additive): null while mounted (reconciled by
+    // last_indexed (additive): null while mounted (reconciled by
     // this very call) or never indexed; an ISO timestamp for an unreadable
     // root that has been seen before.
     { "name": "ssd", "path": "/Volumes/ssd/claude-projects", "mounted": true, "last_indexed": null }
@@ -596,7 +596,7 @@ Schema stability is the contract. Additive changes only once the app ships.
   `~/bardolier-projects`, since a published tool must not assume `/Volumes/ssd`
   exists. Only `eject` assumes a removable volume, and it is simply unavailable
   (`EJECT_NOT_APPLICABLE`) otherwise; `down-all` is the equivalent in that mode.
-- **The root index** (phase 27): `<dirname(config.yml)>/root-index/<sha256(root.path)[:12]>.json`
+- **The root index**: `<dirname(config.yml)>/root-index/<sha256(root.path)[:12]>.json`
   — one file per root, keyed by path so a rename keeps its history. Holds each
   project's name, archetype, base image and every host port it holds, the
   last time that root was readable — never the manifest itself, and never

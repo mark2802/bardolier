@@ -17,7 +17,7 @@
         "base_image": { "type": "string", "enum": ["bardolier-web", "bardolier-ios", "bardolier-and"] },
         "dir": { "type": "string", "minLength": 1 },
         "created": { "type": "string", "format": "date-time" },
-        "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project was created under (phase 18)." }
+        "root": { "type": "string", "minLength": 1, "description": "The configured root's name this project was created under." }
       }
     },
     "manifest_path": { "type": "string", "minLength": 1 },
@@ -34,7 +34,7 @@
     },
     "degraded_roots": {
       "type": "array",
-      "description": "Present only when a configured root could not be read while this ran (phase 27) — allocation used its last known state instead of refusing.",
+      "description": "Present only when a configured root could not be read while this ran — allocation used its last known state instead of refusing.",
       "items": { "$ref": "#/$defs/offline_root" }
     }
   },
@@ -68,7 +68,7 @@
         "connection_hint": { "type": "string", "minLength": 1 },
         "data_dir": {
           "type": "string",
-          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "description": "Absolute path of this service's data directory, <project>/data/<key>.",
           "minLength": 1
         }
       }

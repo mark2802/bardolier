@@ -5,7 +5,7 @@
  * logic of its own, so Preferences (`app-spec.md` §12) changes the catalogue
  * path and the terminal by calling the CLI rather than by writing `config.yml`
  * behind it. `roots` is list-valued and has its own surface instead
- * (`bardolier root add | remove | list`, phase 18). Precedence and path expansion
+ * (`bardolier root add | remove | list`). Precedence and path expansion
  * live in `config.ts`; a second writer in Swift would know some of that and
  * get the rest subtly wrong.
  *

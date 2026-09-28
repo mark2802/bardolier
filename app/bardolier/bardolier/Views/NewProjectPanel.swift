@@ -96,7 +96,7 @@ struct NewProjectPanel: View {
         }
     }
 
-    /// Only shown with more than one configured root (phase 18) — the common
+    /// Only shown with more than one configured root — the common
     /// case stays a two-field form, and `root` stays nil so the CLI's own
     /// default (the first configured root) applies.
     @ViewBuilder

@@ -1,9 +1,9 @@
 /**
- * `bardolier root add | remove | list` — cli-spec.md §6 (Roots), phase 18.
+ * `bardolier root add | remove | list` — cli-spec.md §6 (Roots).
  *
  * A list-valued config key cannot go through `config set` (§8), so `roots`
- * gets its own command surface — the same reasoning phase 6 gave `catalogue`
- * and `config get|set`. `root remove` never touches the directory or anything
+ * gets its own command surface — the same reasoning behind giving `catalogue`
+ * and `config get|set` their own. `root remove` never touches the directory or anything
  * in it: forgetting a location is not deleting one.
  */
 

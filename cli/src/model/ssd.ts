@@ -8,7 +8,7 @@
  * "eject failed" (app-spec.md §10). The success payload and the failure detail
  * therefore share one holder shape.
  *
- * App-facing: additive changes only once the app ships (Phase 5+).
+ * App-facing: additive changes only once the app depends on this shape.
  */
 
 /** A process holding files open on the SSD, as `lsof` reports it. */
@@ -63,11 +63,11 @@ export type EjectOutput = {
    * eject went. Optional in the schema: an older app build decodes without it.
    */
   docker_stopped: boolean
-  /** The configured root's name that was ejected. Additive since phase 18. */
+  /** The configured root's name that was ejected. Additive. */
   root?: string
 }
 
-/** One root's outcome within `eject --all` (phase 22) — never thrown, so a blocked disk cannot hide a clean one. */
+/** One root's outcome within `eject --all` — never thrown, so a blocked disk cannot hide a clean one. */
 export type EjectAllResult = {
   /** The configured root's name. */
   root: string

@@ -7,7 +7,7 @@
  *
  * `{project}` is interpolated with the project name in `env` values at
  * compose-generation time (§9). A service's data is a directory named by its
- * catalogue KEY under the project's `data/` (phase 19) — there is no `volume`
+ * catalogue KEY under the project's `data/` — there is no `volume`
  * field to disagree with it.
  */
 

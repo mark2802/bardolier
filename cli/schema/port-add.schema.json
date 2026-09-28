@@ -37,7 +37,7 @@
     },
     "degraded_roots": {
       "type": "array",
-      "description": "Present only when a configured root could not be read while this ran (phase 27) — allocation used its last known state instead of refusing.",
+      "description": "Present only when a configured root could not be read while this ran — allocation used its last known state instead of refusing.",
       "items": { "$ref": "#/$defs/offline_root" }
     }
   },

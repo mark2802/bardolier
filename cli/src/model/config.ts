@@ -12,7 +12,7 @@ import type { ConfigKey } from '../config.ts'
 
 /**
  * Every settable §8 key, resolved. Paths absolute and tilde-expanded. Roots
- * are list-valued and reported by `bardolier root list` instead (phase 18).
+ * are list-valued and reported by `bardolier root list` instead.
  */
 export type EffectiveConfig = {
   /** null when unset — the §4.1 fallback chain applies. */

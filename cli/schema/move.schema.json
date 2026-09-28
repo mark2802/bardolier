@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/move.schema.json",
   "title": "bardolier move output",
-  "description": "What `bardolier move` did — a project's ports never change, so this is reported by the manifest's new location, never by rewriting anything inside the directory. cli-spec.md §6 (Projects), phase 21. Additive changes only once the app ships (Phase 5+).",
+  "description": "What `bardolier move` did — a project's ports never change, so this is reported by the manifest's new location, never by rewriting anything inside the directory. cli-spec.md §6 (Projects). Additive changes only once the app depends on this shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "moved", "from", "to", "bytes", "mode"],

@@ -2,7 +2,7 @@
 //  DebugStatusView.swift
 //  Bardolier
 //
-//  Phase 5's deliverable UI: a dump of the decoded `bardolier status --json`.
+//  A dump of the decoded `bardolier status --json`.
 //
 //  It exists to prove one thing before any real menu is built — that what the
 //  CLI emits is what the models decode, field for field, against a live SSD
@@ -11,7 +11,7 @@
 //  is what the dev app actually connects to over the internal Docker network
 //  (cli-spec.md §5). Seeing both, correctly, is the done-check.
 //
-//  Phase 6 moved the menu proper into MenuBarRootView; this view stayed, behind
+//  The menu proper lives in MenuBarRootView; this view stays, behind
 //  "Diagnostics…", because what it proves is still worth being able to check:
 //  the raw decode of every field, next to what `bardolier status --json` prints in
 //  a terminal. The rendering helpers below deliberately hold no logic worth

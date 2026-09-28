@@ -6,8 +6,8 @@
 //
 //  These types are the app's whole knowledge of the CLI. They are a MIRROR, not
 //  a second source of truth: every property here exists because a schema says
-//  it does, and the schemas are additive-only from Phase 4's contract freeze
-//  onward. When a schema grows a field, add an optional property here; never
+//  it does, and the schemas are additive-only once the app depends on them.
+//  When a schema grows a field, add an optional property here; never
 //  invent one, and never derive a value the CLI could have reported.
 //
 //  Two decisions worth stating once:
@@ -111,7 +111,7 @@ nonisolated struct CatalogueOrigin: BardolierToken {
 /// A settable key of the CLI config file (cli-spec.md §8) — what Preferences
 /// writes through `bardolier config set` (app-spec.md §12). `roots` is
 /// list-valued and is not settable this way — see `ConfiguredRoot` and
-/// `bardolier root add | remove | list` (phase 18).
+/// `bardolier root add | remove | list`.
 nonisolated struct ConfigKey: BardolierToken {
     let rawValue: String
     static let cataloguePath = ConfigKey(rawValue: "catalogue_path")
@@ -131,8 +131,8 @@ nonisolated struct DoctorFindingID: BardolierToken {
     static let cli = DoctorFindingID(rawValue: "cli")
 }
 
-/// `volume | directory` — what one row of `volumes orphaned` would reclaim
-/// (phase 19). Open, like every token here, so a later kind cannot break this
+/// `volume | directory` — what one row of `volumes orphaned` would reclaim.
+/// Open, like every token here, so a later kind cannot break this
 /// build.
 nonisolated struct OrphanKind: BardolierToken {
     let rawValue: String
@@ -156,7 +156,7 @@ nonisolated struct BardolierStatus: Codable, Hashable, Sendable {
     let docker: DockerStatus
     let projects: [BardolierProject]
     let orphanedVolumes: [OrphanedVolume]
-    /// Every configured root's readable state. Additive since phase 18.
+    /// Every configured root's readable state. Additive.
     let roots: [ConfiguredRoot]?
 }
 
@@ -167,13 +167,13 @@ nonisolated struct SsdStatus: Codable, Hashable, Sendable {
     let root: String
 }
 
-/// One configured root (cli-spec.md §8, phase 18) — mirrors `status.roots`
+/// One configured root (cli-spec.md §8) — mirrors `status.roots`
 /// and every `root add | remove | list` payload.
 nonisolated struct ConfiguredRoot: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let path: String
     let mounted: Bool
-    /// When this root was last scanned (phase 27) — nil while mounted (its
+    /// When this root was last scanned — nil while mounted (its
     /// index is reconciled on every `status` call, so this stays
     /// uninteresting) or never indexed. `root add|remove|list` never set it.
     let lastIndexed: String?
@@ -181,8 +181,8 @@ nonisolated struct ConfiguredRoot: Codable, Hashable, Identifiable, Sendable {
     var id: String { name }
 }
 
-/// One root a command could not read while it ran (cli-spec.md §5, §8;
-/// phase 27) — allocation used its last known state instead of refusing.
+/// One root a command could not read while it ran (cli-spec.md §5, §8) —
+/// allocation used its last known state instead of refusing.
 /// Mirrors `$defs/offline_root`, duplicated across new/clone/service-add/port-add.
 nonisolated struct OfflineRoot: Codable, Hashable, Sendable {
     let root: String
@@ -217,13 +217,13 @@ nonisolated struct BardolierProject: Codable, Hashable, Identifiable, Sendable {
     /// rename here would need a `CodingKeys` that says the same thing twice.
     let appUrl: String?
     /// Extra ports declared on this project (§5.1), sorted by name. Additive
-    /// since Phase 12 — absent on an older CLI, decoded as nil either way.
+    /// — absent on an older CLI, decoded as nil either way.
     let extraPorts: [AttachedExtraPort]?
-    /// The configured root's name this project lives under. Additive since phase 18.
+    /// The configured root's name this project lives under. Additive.
     let root: String?
     /// `<dir>/work`, where repositories live and the dev container works
     /// (§4.2). Reported for the same reason `dir` is: no path is composed here.
-    /// Additive since phase 19.
+    /// Additive.
     let workDir: String?
 
     var id: String { name }
@@ -245,7 +245,7 @@ nonisolated struct ProjectService: Codable, Hashable, Identifiable, Sendable {
 nonisolated struct OrphanedVolume: Codable, Hashable, Identifiable, Sendable {
     /// A Docker volume name, or `<project>/<key>` for a data directory.
     let name: String
-    /// What reclaiming this destroys (phase 19). Nil on an older CLI, which
+    /// What reclaiming this destroys. Nil on an older CLI, which
     /// only ever reported volumes.
     let kind: OrphanKind?
     /// Host path of a `directory` orphan; nil for a named volume.
@@ -269,7 +269,7 @@ nonisolated struct ProjectSummary: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let archetype: Archetype
     let state: ProjectState
-    /// The configured root's name this project lives under. Additive since phase 18.
+    /// The configured root's name this project lives under. Additive.
     let root: String?
 
     var id: String { name }
@@ -283,7 +283,7 @@ nonisolated struct DoctorOutput: Codable, Hashable, Sendable {
     let findings: [DoctorFinding]
 }
 
-/// One configured root's state, as reported on the `ssd` finding. Additive since phase 18.
+/// One configured root's state, as reported on the `ssd` finding. Additive.
 nonisolated struct DoctorRootState: Codable, Hashable, Identifiable, Sendable {
     let name: String
     let path: String
@@ -304,7 +304,7 @@ nonisolated struct DoctorFinding: Codable, Hashable, Identifiable, Sendable {
     let detail: String
     /// Present only when the finding is actionable.
     let remedy: String?
-    /// Per-root state. Present only on the `ssd` finding. Additive since phase 18.
+    /// Per-root state. Present only on the `ssd` finding. Additive.
     let roots: [DoctorRootState]?
 }
 
@@ -328,8 +328,8 @@ nonisolated struct NewOutput: Codable, Hashable, Sendable {
     /// Seeded file names in write order (§10).
     let seeded: [String]
     let services: [AttachedService]
-    /// Present only when a configured root could not be read while this ran
-    /// (phase 27) — ports were allocated against its last known state.
+    /// Present only when a configured root could not be read while this ran —
+    /// ports were allocated against its last known state.
     let degradedRoots: [OfflineRoot]?
 }
 
@@ -340,11 +340,11 @@ nonisolated struct CreatedProject: Codable, Hashable, Sendable {
     let dir: String
     /// RFC 3339 timestamp, kept as the string the CLI emitted.
     let created: String
-    /// The configured root's name this project was created under. Additive since phase 18.
+    /// The configured root's name this project was created under. Additive.
     let root: String?
 }
 
-/// What `clone` created (phase 20) — `NewOutput`'s fields plus what makes it a
+/// What `clone` created — `NewOutput`'s fields plus what makes it a
 /// copy. The same `project` and `services` blocks, because a clone IS a new
 /// project; only the three trailing fields are its own.
 nonisolated struct CloneOutput: Codable, Hashable, Sendable {
@@ -362,12 +362,12 @@ nonisolated struct CloneOutput: Codable, Hashable, Sendable {
     let withContent: Bool
     /// Bytes copied; 0 for a shape-only clone.
     let bytesCopied: Int
-    /// Present only when a configured root could not be read while this ran
-    /// (phase 27) — ports were allocated against its last known state.
+    /// Present only when a configured root could not be read while this ran —
+    /// ports were allocated against its last known state.
     let degradedRoots: [OfflineRoot]?
 }
 
-/// What `move` did (phase 21, §8.2) — a project's ports never change, so this
+/// What `move` did (§8.2) — a project's ports never change, so this
 /// is reported by the manifest's new location, never by rewriting anything
 /// inside the directory.
 nonisolated struct MoveOutput: Codable, Hashable, Sendable {
@@ -395,8 +395,8 @@ nonisolated struct AttachedService: Codable, Hashable, Identifiable, Sendable {
     let hostPort: Int
     let containerPort: Int
     let connectionHint: String
-    /// Absolute path of this service's data directory, `<project>/data/<key>`
-    /// (phase 19). There is no named volume behind a service any more.
+    /// Absolute path of this service's data directory, `<project>/data/<key>`.
+    /// There is no named volume behind a service any more.
     let dataDir: String
 
     var id: String { key }
@@ -452,7 +452,7 @@ nonisolated struct DeleteOutput: Codable, Hashable, Sendable {
     /// Host ports the project no longer holds, free for the next allocation (§5).
     let releasedPorts: [Int]
     /// Removed under `--purge`.
-    /// Both are empty since phase 19: a project's data lives inside its
+    /// Both are always empty: a project's data lives inside its
     /// directory and goes with it.
     let removedVolumes: [String]
     /// Left behind under `--keep-data`; they become listed orphans.
@@ -468,7 +468,7 @@ nonisolated struct ServiceAddOutput: Codable, Hashable, Sendable {
     let services: [AttachedService]
     let composePath: String
     let composeRegenerated: Bool
-    /// Present only when a configured root could not be read while this ran (phase 27).
+    /// Present only when a configured root could not be read while this ran.
     let degradedRoots: [OfflineRoot]?
 }
 
@@ -505,7 +505,7 @@ nonisolated struct PortAddOutput: Codable, Hashable, Sendable {
     let extraPorts: [AttachedExtraPort]
     let composePath: String
     let composeRegenerated: Bool
-    /// Present only when a configured root could not be read while this ran (phase 27).
+    /// Present only when a configured root could not be read while this ran.
     let degradedRoots: [OfflineRoot]?
 }
 
@@ -563,7 +563,7 @@ nonisolated struct OrphanedVolumesOutput: Codable, Hashable, Sendable {
     let totalBytes: Int
     let totalHuman: String
     /// Roots this scan skipped named-volume claims for — unreadable and never
-    /// indexed (phase 27). Present only when non-empty; directory orphans
+    /// indexed. Present only when non-empty; directory orphans
     /// above are unaffected.
     let unverifiedRoots: [String]?
 }
@@ -571,7 +571,7 @@ nonisolated struct OrphanedVolumesOutput: Codable, Hashable, Sendable {
 nonisolated struct VolumeRemoveOutput: Codable, Hashable, Sendable {
     /// The orphan's name — a Docker volume, or `<project>/<key>`.
     let volume: String
-    /// What was reclaimed (phase 19). Nil on an older CLI.
+    /// What was reclaimed. Nil on an older CLI.
     let kind: OrphanKind?
     /// Host path of a `directory` orphan; nil for a named volume.
     let path: String?
@@ -613,7 +613,7 @@ nonisolated struct EjectOutput: Codable, Hashable, Sendable {
     /// Optional because the field is additive: a CLI from before it says
     /// nothing, and nothing is the same as false here.
     let dockerStopped: Bool?
-    /// The configured root's name that was ejected. Additive since phase 18.
+    /// The configured root's name that was ejected. Additive.
     let root: String?
 }
 
@@ -628,7 +628,7 @@ nonisolated struct SsdHolder: Codable, Hashable, Identifiable, Sendable {
     var id: Int { pid }
 }
 
-/// `bardolier eject --all` (phase 22): down-all once, then every mounted
+/// `bardolier eject --all`: down-all once, then every mounted
 /// removable root, best-effort — one blocked disk must not hide a clean one.
 nonisolated struct EjectAllOutput: Codable, Hashable, Sendable {
     let stopped: [String]
@@ -703,7 +703,7 @@ nonisolated struct CatalogueService: Codable, Hashable, Identifiable, Sendable {
     var id: String { key }
 }
 
-// MARK: - root add / remove / list (cli-spec.md §8, phase 18)
+// MARK: - root add / remove / list (cli-spec.md §8)
 
 nonisolated struct RootAddOutput: Codable, Hashable, Sendable {
     let path: String
@@ -729,7 +729,7 @@ nonisolated struct RootListOutput: Codable, Hashable, Sendable {
 
 /// Every settable §8 key, resolved: defaults, then the file, then the
 /// environment. Roots are list-valued and reported by `bardolier root list`
-/// instead (phase 18) — see `ConfiguredRoot`.
+/// instead — see `ConfiguredRoot`.
 nonisolated struct EffectiveConfig: Codable, Hashable, Sendable {
     /// nil when unset — the §4.1 fallback chain applies.
     let cataloguePath: String?

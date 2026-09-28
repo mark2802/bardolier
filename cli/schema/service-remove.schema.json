@@ -22,7 +22,7 @@
         },
         "data_dir": {
           "type": "string",
-          "description": "The kept data directory, <project>/data/<key>. It becomes a listed orphan of this project (phase 19); the catalogue is not consulted to name it."
+          "description": "The kept data directory, <project>/data/<key>. It becomes a listed orphan of this project; the catalogue is not consulted to name it."
         }
       }
     },
@@ -53,7 +53,7 @@
         "connection_hint": { "type": "string", "minLength": 1 },
         "data_dir": {
           "type": "string",
-          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "description": "Absolute path of this service's data directory, <project>/data/<key>.",
           "minLength": 1
         }
       }

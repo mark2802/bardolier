@@ -1,5 +1,5 @@
 /**
- * Payload for `bardolier install` — `cli-spec.md` §6 (Lifecycle / SSD), phase 28.
+ * Payload for `bardolier install` — `cli-spec.md` §6 (Lifecycle / SSD).
  *
  * Not app-facing the way `status` or `new` are — the app never runs this
  * itself, a person or `npm run setup` does, once, before the app exists on

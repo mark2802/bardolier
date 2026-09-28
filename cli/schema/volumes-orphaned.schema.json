@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/volumes-orphaned.schema.json",
   "title": "bardolier volumes orphaned output",
-  "description": "Everything no current project manifest claims, with sizes: named volumes, and projects' leftover data directories (phase 19). cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app ships (Phase 5+).",
+  "description": "Everything no current project manifest claims, with sizes: named volumes, and projects' leftover data directories. cli-spec.md §6 (Volumes / disk). Read-only (§2). Additive changes only once the app depends on this shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["orphaned", "total_bytes", "total_human"],
@@ -20,7 +20,7 @@
     "total_human": { "type": "string", "minLength": 1 },
     "unverified_roots": {
       "type": "array",
-      "description": "Roots this scan skipped named-volume claims for — unreadable and never indexed (phase 27). Present only when non-empty; directory orphans above are unaffected.",
+      "description": "Roots this scan skipped named-volume claims for — unreadable and never indexed. Present only when non-empty; directory orphans above are unaffected.",
       "items": { "type": "string", "minLength": 1 }
     }
   },
@@ -37,12 +37,12 @@
         },
         "kind": {
           "type": "string",
-          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory (phase 19). Absent means volume.",
+          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory. Absent means volume.",
           "enum": ["volume", "directory"]
         },
         "path": {
           "type": ["string", "null"],
-          "description": "Host path of a directory orphan; null for a named volume. Additive since phase 19."
+          "description": "Host path of a directory orphan; null for a named volume. Additive."
         },
         "size_bytes": { "type": "integer", "minimum": 0 },
         "size_human": { "type": "string", "minLength": 1 },

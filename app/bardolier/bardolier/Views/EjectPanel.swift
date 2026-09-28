@@ -10,7 +10,7 @@
 //       then `diskutil` (cli-spec.md §6). The app calls one command; it does
 //       not stop projects itself and then unmount, because ordering that
 //       sequence is the CLI's job and doing it twice is how the two get out of
-//       step. `--all` (phase 22) is the same command widened to every
+//       step. `--all` is the same command widened to every
 //       removable root at once, best-effort: it is never thrown for a single
 //       blocked disk, so the panel renders `EjectAllOutput`'s per-root list
 //       instead of picking one result to show.
@@ -38,7 +38,7 @@
 import SwiftUI
 
 /// Which disk the panel is aimed at — a single configured root, or every
-/// removable one at once (phase 22). Kept apart from a bare `String?` so the
+/// removable one at once. Kept apart from a bare `String?` so the
 /// "All roots" choice can't be confused with "no choice made yet".
 private enum EjectTarget: Hashable {
     case root(String)
@@ -58,7 +58,7 @@ struct EjectPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Plain "Close all" when no configured root is a removable
-            // volume: `eject` doesn't apply to any of them (§10, phase 18),
+            // volume: `eject` doesn't apply to any of them (§10),
             // so the panel doesn't offer language for an action it can't do.
             PanelHeader(title: store.anyRootRemovable ? "Close all & eject" : "Close all", back: back)
 
@@ -100,7 +100,7 @@ struct EjectPanel: View {
         return nil
     }
 
-    /// Only shown when the CLI would otherwise have to guess (phase 18, 22):
+    /// Only shown when the CLI would otherwise have to guess:
     /// more than one MOUNTED, REMOVABLE root. A plain internal-disk root is
     /// never offered — picking one would only ever answer
     /// EJECT_NOT_APPLICABLE — and a single removable root resolves itself via
@@ -150,8 +150,8 @@ struct EjectPanel: View {
     private var readyState: some View {
         if !store.anyRootRemovable {
             // No configured root is a removable volume — this is `down-all`
-            // wearing the same panel, not eject waiting on a mount (§10,
-            // phase 18): no disk gate, no picker, no disk to name.
+            // wearing the same panel, not eject waiting on a mount (§10):
+            // no disk gate, no picker, no disk to name.
             Text("Every running project is stopped. Nothing is unmounted — none of the configured roots is a removable disk.")
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
@@ -373,7 +373,7 @@ struct EjectPanel: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// `eject --all` (phase 22) — one row per candidate rather than picking a
+    /// `eject --all` — one row per candidate rather than picking a
     /// single result to show, because a mixed batch (two clean, one still
     /// held) is the whole point of best-effort: nothing here is a failure to
     /// dismiss until every row says so.
@@ -447,7 +447,7 @@ struct EjectPanel: View {
         }
     }
 
-    // MARK: - Not applicable (phase 10: a local, non-removable root path)
+    // MARK: - Not applicable (a local, non-removable root path)
 
     /// Nothing is wrong — there is simply nothing to eject, so this reads as
     /// information rather than a failure: no warning triangle, no Retry (it

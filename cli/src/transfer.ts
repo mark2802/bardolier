@@ -1,6 +1,5 @@
 /**
- * Copying a project directory into place — shared by `clone` (phase 20) and
- * the move that follows it (phase 21).
+ * Copying a project directory into place — shared by `clone` and `move`.
  *
  * Two rules, both about what an interrupted copy leaves behind:
  *
@@ -124,7 +123,7 @@ export type Relocated = {
   readonly mode: MoveMode
 }
 
-/** Seams `move` (phase 21) can replace in a test — same idea as `stageProject`'s `populate`. */
+/** Seams `move` can replace in a test — same idea as `stageProject`'s `populate`. */
 export type Relocation = {
   readonly rename?: Rename
   readonly free?: FreeSpace

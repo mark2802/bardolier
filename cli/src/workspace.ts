@@ -45,7 +45,7 @@ export function orderManifest(manifest: ProjectManifest): Record<string, unknown
     base_image: manifest.base_image,
   }
   // Right after base_image, because it's the same kind of thing — what the
-  // dev container actually runs (Phase 13, `deps.ts`) — before the ports.
+  // dev container actually runs (`deps.ts`) — before the ports.
   const packages = manifest.extra_packages ?? []
   if (packages.length > 0) ordered.extra_packages = [...packages].sort()
   const services = manifest.services ?? {}
@@ -84,7 +84,7 @@ export function composePath(dir: string): string {
 }
 
 /**
- * Write the manifest, then fold it into its root's index (§5, phase 27) —
+ * Write the manifest, then fold it into its root's index (§5) —
  * write-through, so the index needs no separate scan to stay correct for
  * everything bardolier itself does. `dir`'s parent IS the root's path (a
  * project directory, or `clone`'s `.<name>.incoming` staging directory,

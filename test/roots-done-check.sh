@@ -222,6 +222,12 @@ $BARDOLIER root add "$ROOT_B" --name b --json >/dev/null || bad "re-adding root 
 head "13. An indexed-but-unreadable root: allocation and the orphan scan degrade; \`status\` still doesn't refuse"
 
 $BARDOLIER new delta --archetype web --root a --json >/dev/null || bad "new delta exited non-zero"
+# Baseline before root b goes offline. Real Docker may already carry a
+# bardolier volume this scenario never created (another done-check's shared
+# toolchain cache, say) — that is not this section's concern. What matters is
+# that going offline introduces no NEW orphan, which is what a lost claim on
+# gamma's cache would look like.
+ORPHANS_BEFORE="$(json_value "$($BARDOLIER status --json)" "d.orphaned_volumes.map((o) => o.name).sort().join(',')")"
 # root b still carries gamma's index from section 9 (write-through at `new`,
 # confirmed there by section 9's own `status` call) — the remove/re-add in
 # section 12 never touched it, and nothing has rescanned it since.
@@ -242,9 +248,9 @@ json_assert "$STATUS_PARTIAL" "
   d.projects.every((p) => p.root === 'a') &&
   d.projects.some((p) => p.name === 'alpha') &&
   d.projects.some((p) => p.name === 'delta') &&
-  d.orphaned_volumes.length === 0 &&
+  d.orphaned_volumes.map((o) => o.name).sort().join(',') === '$ORPHANS_BEFORE' &&
   d.roots.find((r) => r.name === 'b')?.last_indexed !== null
-" && ok "status still succeeds, lists only root a's projects, reports no orphans, and dates root b's index" \
+" && ok "status still succeeds, lists only root a's projects, introduces no new orphans, and dates root b's index" \
   || bad "status did not degrade the way §7 promises: $STATUS_PARTIAL"
 
 # ── 14. Write-through needs no scan; a never-indexed root stays strict on names

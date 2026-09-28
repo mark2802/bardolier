@@ -146,8 +146,8 @@ describe('new (cli-spec.md §6, §10)', () => {
   })
 
   test('a --services request that cannot be honoured creates nothing', async () => {
-    // The successful path is Phase 3's (test/phase3.test.ts); what matters here
-    // is that a rejected `new` leaves no half-made project behind.
+    // The successful path is test/services.test.ts's; what matters here is
+    // that a rejected `new` leaves no half-made project behind.
     const box = sandbox()
     await assert.rejects(
       () => runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: 'toaster' }),

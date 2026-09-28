@@ -1,5 +1,5 @@
 /**
- * `bardolier move <name> --root <target>` — `cli-spec.md` §6 (Projects), phase 21.
+ * `bardolier move <name> --root <target>` — `cli-spec.md` §6 (Projects).
  *
  * A project changes disks without changing anything about itself. Every bind
  * in the compose file is relative to the compose file's own directory (§9),
@@ -67,7 +67,7 @@ export async function runMove(ctx: Context, request: MoveRequest): Promise<MoveO
 
   const result = relocate(project.dir, target.path, project.name)
 
-  // Write-through (§5, phase 27): the project's ports and name are unchanged,
+  // Write-through (§5): the project's ports and name are unchanged,
   // but which root holds them is — an offline source or target must not go on
   // reporting (or fail to report) this project under the wrong one.
   if (sourceRoot) removeFromRootIndex(ctx, sourceRoot, project.name)

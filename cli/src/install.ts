@@ -1,6 +1,6 @@
 /**
  * Locating and installing `bardolier` on the host's PATH — the CLI-side half
- * of `BardolierExecutable.swift`'s search. Phase 28.
+ * of `BardolierExecutable.swift`'s search.
  *
  * A GUI app launched from Finder inherits almost no PATH
  * (`BardolierExecutable.swift`'s header), so the app searches a small set of

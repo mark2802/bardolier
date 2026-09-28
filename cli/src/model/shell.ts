@@ -7,7 +7,7 @@
  * straight to its process API with no quoting, no shell, and no parsing of
  * human output (§2).
  *
- * App-facing: additive changes only once the app ships (Phase 5+).
+ * App-facing: additive changes only once the app depends on this shape.
  */
 
 export type ShellOutput = {

@@ -48,7 +48,7 @@ struct MenuBarRootView: View {
     @State private var expandedProject: String?
     @State private var confirmation: ConfirmationRequest?
 
-    // Option-held state for the root-shell alternate item (phase 14). Started
+    // Option-held state for the root-shell alternate item. Started
     // and stopped with the menu, not a permanent global monitor.
     @StateObject private var optionKey = OptionKeyObserver()
 
@@ -270,7 +270,7 @@ struct MenuBarRootView: View {
     /// itself decides whether the button inside it can be pressed, and reading
     /// a holder list while the eject is still running is exactly the point.
     ///
-    /// `.notApplicable` (phase 10) is the one phase that closes the row instead
+    /// `.notApplicable` is the one phase that closes the row instead
     /// of opening a panel: the root's path is a plain local directory, so there is
     /// nothing a panel could offer beyond the reason, and the row already has
     /// somewhere to put that (`disabledReason`) — the same treatment a missing
@@ -321,7 +321,7 @@ struct MenuBarRootView: View {
             return "Nothing to eject"
         default:
             // No configured root is a removable volume: say what the click
-            // will actually do (phase 18) rather than promising an eject
+            // will actually do rather than promising an eject
             // that would fail before stopping anything.
             return store.anyRootRemovable ? "Close all & eject" : "Close all"
         }
@@ -393,7 +393,7 @@ struct ProjectRow: View {
                         // Option-held swaps to a root shell — same idiom as
                         // Finder's Option-held Secure Empty Trash. The common
                         // case says nothing about this; it's there for whoever
-                        // holds the key (phase 14).
+                        // holds the key.
                         MenuTextRow(
                             title: optionKey.isOptionHeld ? "Open root shell" : "Open shell",
                             systemImage: optionKey.isOptionHeld ? "terminal.fill" : "terminal",
@@ -429,7 +429,7 @@ struct ProjectRow: View {
                     ) {
                         openClone()
                     }
-                    // Only with somewhere to move to (phase 26, §8.2): with one
+                    // Only with somewhere to move to (§8.2): with one
                     // configured root the row would always lead nowhere.
                     if store.roots.count > 1 {
                         MenuTextRow(
@@ -484,7 +484,7 @@ struct ProjectRow: View {
         }
     }
 
-    /// The project's data lives inside its folder (phase 19), so deleting the
+    /// The project's data lives inside its folder, so deleting the
     /// folder destroys it. Without the toggle the CLI refuses PROJECT_HAS_DATA
     /// rather than taking it silently (CLAUDE.md: never destroy data to save a
     /// step).

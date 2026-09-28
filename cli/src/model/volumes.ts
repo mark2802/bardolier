@@ -6,7 +6,7 @@
  * gets from `status`, and two definitions would eventually disagree about what
  * an orphan looks like.
  *
- * App-facing: additive changes only once the app ships (Phase 5+).
+ * App-facing: additive changes only once the app depends on this shape.
  */
 
 import type { OrphanedVolume, OrphanKind } from './status.ts'
@@ -21,7 +21,7 @@ export type VolumesOrphanedOutput = {
   total_human: string
   /**
    * Roots this scan skipped named-volume claims for, because they are both
-   * unreadable and never indexed (phase 27) — present only when non-empty.
+   * unreadable and never indexed — present only when non-empty.
    * Directory orphans above are unaffected and still complete.
    */
   unverified_roots?: string[]
@@ -30,9 +30,9 @@ export type VolumesOrphanedOutput = {
 export type VolumesRemoveOutput = {
   /** The orphan's name — a Docker volume, or `<project>/<key>`. */
   volume: string
-  /** Additive since phase 19; absent means `volume`. */
+  /** Additive; absent means `volume`. */
   kind?: OrphanKind
-  /** Host path of a `directory` orphan; null for a named volume. Additive since phase 19. */
+  /** Host path of a `directory` orphan; null for a named volume. Additive. */
   path?: string | null
   /** False when the user declined the confirmation; nothing was touched. */
   removed: boolean

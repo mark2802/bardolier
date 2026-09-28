@@ -9,7 +9,7 @@
  * The target root must already be readable. Creating it ourselves would put
  * the project on the internal disk the moment the disk was unplugged — exactly
  * the failure the split-storage design exists to prevent. `--root <name>`
- * (phase 18) picks which configured root to use, defaulting to the first;
+ * picks which configured root to use, defaulting to the first;
  * an unreadable target is ROOT_UNREADABLE, not SSD_NOT_MOUNTED — it names the
  * one root this call cares about, not "nothing is mounted anywhere".
  */
@@ -42,11 +42,11 @@ export type NewRequest = {
   readonly archetype: string | undefined
   /** Raw `--services a,b`; ports are assigned now, at creation (§5, §6). */
   readonly services: string | undefined
-  /** `--root <name>`, defaulting to the first configured root (phase 18). */
+  /** `--root <name>`, defaulting to the first configured root. */
   readonly root?: string
 }
 
-/** Shared with `clone`, whose new name is validated by exactly this rule (phase 20). */
+/** Shared with `clone`, whose new name is validated by exactly this rule. */
 export function requireProjectName(name: string | undefined, usage: string): string {
   if (!name) throw new BardolierError('INVALID_ARGUMENT', `Usage: bardolier ${usage}`)
   if (!NAME_PATTERN.test(name)) {
@@ -58,7 +58,7 @@ export function requireProjectName(name: string | undefined, usage: string): str
   return name
 }
 
-/** Shared with `adopt`, which validates the same flag the same way (phase 30). */
+/** Shared with `adopt`, which validates the same flag the same way. */
 export function requireArchetype(value: string | undefined): Archetype {
   if (!value) {
     throw new BardolierError('INVALID_ARGUMENT', `--archetype is required (one of: ${ARCHETYPES.join(', ')}).`)
@@ -72,8 +72,8 @@ export function requireArchetype(value: string | undefined): Archetype {
 /**
  * Which readable root to create under. `fallback` is `roots[0]` for `new` and
  * the SOURCE's root for `clone` — a clone is another one of these, and that is
- * where its kind lives (phase 20). `purpose` only changes the ROOT_UNREADABLE
- * wording — `move` (phase 21) isn't creating anything.
+ * where its kind lives. `purpose` only changes the ROOT_UNREADABLE
+ * wording — `move` isn't creating anything.
  */
 export function requireRoot(
   ctx: Context,
@@ -105,7 +105,7 @@ export function requireRoot(
  *
  * Unlike a port (`allocator.ts`), this cannot be allowed to guess: a name
  * collision is invariant 3, not invariant 4. So an unreadable root without an
- * index is still ROOT_UNREADABLE here — the one case phase 27 leaves strict —
+ * index is still ROOT_UNREADABLE here — the one case the offline-root degrade leaves strict —
  * and one with an index is checked against it exactly like a readable root.
  */
 export function requireFreeName(ctx: Context, name: string, dir: string): void {

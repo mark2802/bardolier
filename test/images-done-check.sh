@@ -29,7 +29,7 @@ else
   bad 'a base image declared in §4.3 has no Dockerfile — build would report it unavailable'
 fi
 
-if npm test >/dev/null 2>&1; then ok "npm test — including test/phase8.test.ts"; else bad "npm test"; fi
+if npm test >/dev/null 2>&1; then ok "npm test — including test/images.test.ts"; else bad "npm test"; fi
 if npm run typecheck >/dev/null 2>&1; then ok "npm run typecheck"; else bad "npm run typecheck"; fi
 
 # ── 2. The images themselves ──────────────────────────────────────────────────

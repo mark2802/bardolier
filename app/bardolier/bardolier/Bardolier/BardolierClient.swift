@@ -74,7 +74,7 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["config", "set", key.rawValue, value])
     }
 
-    /// Every configured root (phase 18) — `roots[0]` is the default `new` targets.
+    /// Every configured root — `roots[0]` is the default `new` targets.
     /// `roots` is list-valued and so has its own surface rather than a
     /// `config set` key; Preferences edits the list through these three calls.
     func rootList() async throws -> RootListOutput {
@@ -92,7 +92,7 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["root", "remove", name])
     }
 
-    /// `root` picks which configured root to create it under (phase 18);
+    /// `root` picks which configured root to create it under;
     /// `nil` defers to the CLI's own default (the first configured root).
     func new(name: String, archetype: Archetype, services: [String] = [], root: String? = nil) async throws -> NewOutput {
         var argv = ["new", name, "--archetype", archetype.rawValue]
@@ -105,7 +105,7 @@ nonisolated struct BardolierClient: Sendable {
         return try await run(argv)
     }
 
-    /// Clone a project (phase 20). `root` defaults to the SOURCE's root, not the
+    /// Clone a project. `root` defaults to the SOURCE's root, not the
     /// first configured one, so omitting it keeps a clone beside its original.
     ///
     /// `withContent` copies `work/`, `data/` and `local/` and fails
@@ -123,7 +123,7 @@ nonisolated struct BardolierClient: Sendable {
         return try await run(argv)
     }
 
-    /// Move a project to another configured root (phase 21, §8.2). `root` is
+    /// Move a project to another configured root (§8.2). `root` is
     /// required by the CLI — unlike `clone`'s, there is no meaningful default.
     /// Fails PROJECT_RUNNING on a running project; the app relays that refusal
     /// rather than stopping the project to get around it.
@@ -141,7 +141,7 @@ nonisolated struct BardolierClient: Sendable {
         try await run(["down", project])
     }
 
-    /// Delete a project. Its data lives inside the directory (phase 19), so a
+    /// Delete a project. Its data lives inside the directory, so a
     /// plain delete refuses PROJECT_HAS_DATA once there is any and `purge` is
     /// the only way through. CONFIRM WITH THE USER FIRST — this always passes
     /// `--force`.
@@ -168,7 +168,7 @@ nonisolated struct BardolierClient: Sendable {
     /// launches the user's terminal with `exec` verbatim.
     ///
     /// `root: true` appends `--root` (Option-held "Open root shell" in the
-    /// menu, phase 14) — same seam as every other flag this client appends
+    /// menu) — same seam as every other flag this client appends
     /// itself; no caller may append `--root` any more than `--json`.
     func shell(project: String, root: Bool = false) async throws -> ShellInvocation {
         try await run(["shell", project] + (root ? ["--root"] : []))
@@ -180,7 +180,7 @@ nonisolated struct BardolierClient: Sendable {
 
     /// Destroys data. CONFIRM WITH THE USER FIRST — this passes `--force`.
     /// Reclaim one orphan — a named volume, or a `<project>/<key>` data
-    /// directory (phase 19). `volumes orphaned` names both kinds.
+    /// directory. `volumes orphaned` names both kinds.
     func removeVolume(name: String) async throws -> VolumeRemoveOutput {
         try await run(["volumes", "rm", name, "--force"])
     }
@@ -197,13 +197,13 @@ nonisolated struct BardolierClient: Sendable {
     /// does not have — whether it may stop the Docker ENGINE when that VM's
     /// file share is what holds the disk. The user answers it by pressing the
     /// button the blocked panel offers, never by the app deciding.
-    /// `root` names which configured root to eject (phase 18) — required
+    /// `root` names which configured root to eject — required
     /// unless exactly one configured root is a mounted, removable volume.
     func eject(root: String? = nil, stopDocker: Bool = false) async throws -> EjectOutput {
         try await run(["eject"] + (root.map { [$0] } ?? []) + (stopDocker ? ["--stop-docker"] : []))
     }
 
-    /// Every mounted, removable root, best-effort (phase 22). Never throws for
+    /// Every mounted, removable root, best-effort. Never throws for
     /// a blocked disk — that comes back as one `EjectAllResult` with
     /// `ejected: false` alongside whichever others succeeded; only
     /// `EJECT_NOT_APPLICABLE` (no removable root at all) is a thrown failure.

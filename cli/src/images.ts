@@ -70,7 +70,7 @@ export const IMAGE_PLATFORM: Readonly<Partial<Record<BaseImage, string>>> = {
  * It is declared HERE, in one place, because three things must agree about it:
  * the Dockerfile's `GRADLE_USER_HOME`, the mount the generated compose file
  * writes, and the volume `up` creates before Compose asks for it. The Dockerfile
- * coupling is asserted in `test/phase8.test.ts` rather than trusted.
+ * coupling is asserted in `test/images.test.ts` rather than trusted.
  *
  * `bardolier-web` carries the same shape of cache for `uv`'s downloaded wheels
  * (docs/development/phases/11-python-web-toolchain.md) — Python projects migrated onto this
@@ -103,7 +103,7 @@ export const IMAGE_CACHE: Readonly<Partial<Record<BaseImage, ImageCache>>> = {
  * HOST_UID may collide with a user the base image already ships, which moves
  * `~` — and compose cannot mount a volume at a path it cannot predict. All
  * three Dockerfiles set `ENV HOME` to this and must agree with it
- * (`test/phase9.test.ts`).
+ * (`test/images.test.ts`).
  */
 export const CONTAINER_HOME = '/state/home'
 

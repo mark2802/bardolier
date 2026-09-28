@@ -65,8 +65,8 @@ export function resolveCatalogue(config: Config): ResolvedCatalogue {
     return { catalogue: parseCatalogue(text, config.catalogue_path), path: config.catalogue_path, origin: 'config' }
   }
 
-  // Only the default root is consulted (non-goal: no per-root catalogue,
-  // phase 18) — `services.yml` is one shared file, like the config file itself.
+  // Only the default root is consulted (non-goal: no per-root catalogue) —
+  // `services.yml` is one shared file, like the config file itself.
   const onSsd = join(defaultRoot(config).path, 'services.yml')
   const ssdText = read(onSsd)
   if (ssdText !== null) return { catalogue: parseCatalogue(ssdText, onSsd), path: onSsd, origin: 'ssd' }

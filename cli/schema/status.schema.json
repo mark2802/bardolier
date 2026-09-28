@@ -25,7 +25,7 @@
         },
         "root": {
           "type": "string",
-          "description": "The default root's path (roots[0]). Present and reportable even when mounted is false. See the top-level `roots` array for every configured root (phase 18)."
+          "description": "The default root's path (roots[0]). Present and reportable even when mounted is false. See the top-level `roots` array for every configured root."
         }
       }
     },
@@ -55,7 +55,7 @@
     },
     "roots": {
       "type": "array",
-      "description": "Every configured root's readable state. Additive since phase 18.",
+      "description": "Every configured root's readable state. Additive.",
       "items": {
         "$ref": "#/$defs/configured_root"
       }
@@ -73,7 +73,7 @@
         "last_indexed": {
           "type": ["string", "null"],
           "format": "date-time",
-          "description": "Additive since phase 27. Null while mounted (reconciled on every status call) or never indexed."
+          "description": "Additive. Null while mounted (reconciled on every status call) or never indexed."
         }
       }
     },
@@ -155,12 +155,12 @@
         },
         "root": {
           "type": "string",
-          "description": "The configured root's name this project lives under. Additive since phase 18.",
+          "description": "The configured root's name this project lives under. Additive.",
           "minLength": 1
         },
         "work_dir": {
           "type": "string",
-          "description": "<dir>/work — where repositories live and the dev container works (§4.2). Reported for the same reason dir is: the app must never compose a path. Additive since phase 19.",
+          "description": "<dir>/work — where repositories live and the dev container works (§4.2). Reported for the same reason dir is: the app must never compose a path. Additive.",
           "minLength": 1
         }
       }
@@ -258,7 +258,7 @@
         },
         "kind": {
           "type": "string",
-          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory (phase 19). Absent means volume.",
+          "description": "What reclaiming this destroys: a Docker named volume, or a project's leftover data directory. Absent means volume.",
           "enum": [
             "volume",
             "directory"
@@ -269,7 +269,7 @@
             "string",
             "null"
           ],
-          "description": "Host path of a directory orphan; null for a named volume. Additive since phase 19."
+          "description": "Host path of a directory orphan; null for a named volume. Additive."
         },
         "size_bytes": {
           "type": "integer",

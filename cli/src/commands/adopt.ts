@@ -1,6 +1,6 @@
 /**
  * `bardolier adopt <source-path> <name> --archetype <a> [--services a,b]
- * [--root <name>] [--move] [--dry-run]` — `cli-spec.md` §6 (Projects), phase 30.
+ * [--root <name>] [--move] [--dry-run]` — `cli-spec.md` §6 (Projects).
  *
  * The mechanical half of bringing an existing, non-bardolier project onto
  * bardolier (`docs/migration-guide.md` steps 3-4): create the project, and
@@ -16,7 +16,7 @@
  * off to one side and swapped into place only once complete (`transfer.ts`)
  * — an interrupted adopt leaves the target root exactly as it found it.
  *
- * Unlike `move` (phase 21), the source is always copied into the STAGED
+ * Unlike `move`, the source is always copied into the STAGED
  * project rather than renamed in place — there is no single directory to
  * rename, since the source lands one level down, inside a project this call
  * is also creating. `--move` only changes what happens to the source
@@ -51,7 +51,7 @@ export type AdoptRequest = {
   readonly name: string | undefined
   readonly archetype: string | undefined
   readonly services: string | undefined
-  /** `--root <name>`, defaulting to the first configured root — same as `new` (phase 18). */
+  /** `--root <name>`, defaulting to the first configured root — same as `new`. */
   readonly root?: string
   /** Delete the source once the copy lands. Default leaves it untouched. */
   readonly move: boolean

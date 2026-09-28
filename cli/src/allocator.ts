@@ -22,7 +22,7 @@
  * already holds; checking only the socket would hand out a port belonging to a
  * project that happens to be stopped.
  *
- * A root `discoverProjects` cannot reach no longer stops this (phase 27): its
+ * A root `discoverProjects` cannot reach no longer stops this: its
  * last known ports, from `rootindex.ts`, are folded into the taken set instead
  * of refusing outright. Without even that — a root that has never been
  * indexed — allocation proceeds anyway; the cost of being wrong is a loud
@@ -60,7 +60,7 @@ export type PortHolder = {
  * that is reported. The host probe is the backstop — if such a project is
  * running, its port is bound and will not be handed out anyway.
  *
- * With more than one root (phase 18), a root that cannot be read folds in its
+ * With more than one root, a root that cannot be read folds in its
  * ROOT INDEX instead — the last set of ports it held, per `rootindex.ts`. A
  * root never yet indexed contributes nothing here rather than refusing: see
  * the module header for why that is the right side to be wrong on.

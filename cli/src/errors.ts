@@ -2,7 +2,7 @@
  * Stable error codes — THE single definition. Nothing else may declare one.
  *
  * `cli-spec.md` §2 lists these as "not exhaustive". The spec's own codes are
- * frozen contract: never rename or remove one once the app ships (Phase 5+).
+ * frozen contract: never rename or remove one once the app depends on them.
  * Codes added by the implementation are grouped separately below so the
  * distinction stays visible; they are equally stable once shipped.
  *
@@ -32,7 +32,7 @@ const SPEC_ERROR_CODES = [
 const EXTENDED_ERROR_CODES = [
   /** Argument parsing rejected the invocation (missing/unknown arg or flag). */
   'INVALID_ARGUMENT',
-  /** A known command exists but its behaviour is not built yet (Phase 0 stubs). */
+  /** A known command exists but its behaviour is not built yet (a registry stub). */
   'NOT_IMPLEMENTED',
   /** Config file or service catalogue present but unparseable/invalid. */
   'CONFIG_INVALID',
@@ -48,15 +48,15 @@ const EXTENDED_ERROR_CODES = [
   'PACKAGE_NOT_ATTACHED',
   /** `eject` on a root whose volume isn't removable — use `down-all` instead. */
   'EJECT_NOT_APPLICABLE',
-  /** A name resolved to a project in more than one root (phase 18). */
+  /** A name resolved to a project in more than one root. */
   'PROJECT_AMBIGUOUS',
-  /** A configured root could not be read where the answer must be complete (phase 18). */
+  /** A configured root could not be read where the answer must be complete. */
   'ROOT_UNREADABLE',
-  /** A copy would not fit on the target root, refused before any byte moved (phase 20). */
+  /** A copy would not fit on the target root, refused before any byte moved. */
   'INSUFFICIENT_SPACE',
-  /** `install` found no writable bin directory (an explicit --bin-dir, or any conventional one) — phase 28. */
+  /** `install` found no writable bin directory (an explicit --bin-dir, or any conventional one). */
   'INSTALL_NO_WRITABLE_DIR',
-  /** `install`'s target path already exists and is not a link this repo made; --force names it (phase 28). */
+  /** `install`'s target path already exists and is not a link this repo made; --force names it. */
   'INSTALL_PATH_OCCUPIED',
   /** Anything that escaped as an unexpected exception. */
   'INTERNAL_ERROR',
@@ -116,7 +116,7 @@ export function toBardolierError(cause: unknown): BardolierError {
   return new BardolierError('INTERNAL_ERROR', message)
 }
 
-/** Phase 0: every command is a stub. Removed command-by-command as behaviour lands. */
+/** The registry's default for a command not yet behaviourally implemented. */
 export function notImplemented(command: string): never {
   throw new BardolierError('NOT_IMPLEMENTED', `\`bardolier ${command}\` is not implemented yet.`)
 }

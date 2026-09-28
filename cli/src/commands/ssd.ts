@@ -7,15 +7,15 @@
  * holders too, so they come down first; and the holder check happens after,
  * when what remains is genuinely the user's own Xcode or shell. The
  * removability check comes first of all — a root may be a plain directory on
- * the internal disk (phase 10), and there is no point stopping every project
+ * the internal disk, and there is no point stopping every project
  * on the way to a `diskutil eject` that was never going to apply.
  *
- * With more than one configured root (phase 18), `eject` targets exactly one:
+ * With more than one configured root, `eject` targets exactly one:
  * an explicit `[root]` argument, or — when only one configured root turns out
  * to be an actually-removable, mounted volume — that one implicitly. Anything
  * else (none, or more than one, removable) is INVALID_ARGUMENT naming every
  * configured root, because there is no safe guess among disks — unless the
- * caller says `--all` (phase 22), which drops the guess entirely and unmounts
+ * caller says `--all`, which drops the guess entirely and unmounts
  * every removable candidate, best-effort: one disk still held by an Xcode
  * does not cost the user an eject on a second, clean one. `--all` and
  * `[root]` are mutually exclusive; a plain internal-disk root is never a
@@ -134,7 +134,7 @@ export type EjectOptions = {
    * close instead.
    */
   readonly stopDocker?: boolean
-  /** Which configured root to eject (phase 18). Required when more than one qualifies. */
+  /** Which configured root to eject. Required when more than one qualifies. */
   readonly root?: string
 }
 
@@ -240,7 +240,7 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
   }
 
   if (!(await ctx.device.removable(ssd.volume))) {
-    // A local root (phase 10) is a fully supported mode, but `eject` means
+    // A local root is a fully supported mode, but `eject` means
     // `diskutil eject` — asked of `/` or another ordinary directory, that is
     // at best a no-op and at worst a request to unmount the wrong thing.
     // Checked before down-all, so a refusal here touches no container.
@@ -250,7 +250,7 @@ export async function runEject(ctx: Context, options: EjectOptions = {}): Promis
     )
   }
 
-  // RECONCILE (phase 27): the last instant this root is guaranteed readable —
+  // RECONCILE: the last instant this root is guaranteed readable —
   // rewrite its index now so bardolier answers name/port questions about it
   // correctly for as long as it stays unplugged.
   reconcileReadableRoots(ctx, discoverProjects(ctx.config))
@@ -278,7 +278,7 @@ export async function runEjectAll(ctx: Context, options: EjectOptions = {}): Pro
     )
   }
 
-  // RECONCILE (phase 27), for every candidate at once — same reasoning as
+  // RECONCILE, for every candidate at once — same reasoning as
   // the single-root `eject` above.
   reconcileReadableRoots(ctx, discoverProjects(ctx.config))
 

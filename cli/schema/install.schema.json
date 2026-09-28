@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/install.schema.json",
   "title": "bardolier install output",
-  "description": "What `bardolier install` linked onto the host's PATH. cli-spec.md §6 (Lifecycle / SSD), phase 28.",
+  "description": "What `bardolier install` linked onto the host's PATH. cli-spec.md §6 (Lifecycle / SSD).",
   "type": "object",
   "additionalProperties": false,
   "required": ["bin_dir", "links", "created_bin_dir", "node_version", "node_ok", "resolves"],

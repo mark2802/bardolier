@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/clone.schema.json",
   "title": "bardolier clone output",
-  "description": "What `bardolier clone` created — the `new` fields plus what makes it a copy. cli-spec.md §6 (Projects), phase 20. Additive changes only once the app ships (Phase 5+).",
+  "description": "What `bardolier clone` created — the `new` fields plus what makes it a copy. cli-spec.md §6 (Projects). Additive changes only once the app depends on this shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "manifest_path", "compose_path", "seeded", "services", "source", "with_content", "bytes_copied"],
@@ -48,7 +48,7 @@
     },
     "degraded_roots": {
       "type": "array",
-      "description": "Present only when a configured root could not be read while this ran (phase 27) — allocation used its last known state instead of refusing.",
+      "description": "Present only when a configured root could not be read while this ran — allocation used its last known state instead of refusing.",
       "items": { "$ref": "#/$defs/offline_root" }
     }
   },
@@ -82,7 +82,7 @@
         "connection_hint": { "type": "string", "minLength": 1 },
         "data_dir": {
           "type": "string",
-          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "description": "Absolute path of this service's data directory, <project>/data/<key>.",
           "minLength": 1
         }
       }

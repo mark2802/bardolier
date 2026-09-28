@@ -14,7 +14,7 @@
 export const DOCTOR_CHECKS = ['config', 'ssd', 'docker', 'base_images', 'catalogue', 'manifests', 'ports', 'cli'] as const
 export type DoctorCheck = (typeof DOCTOR_CHECKS)[number]
 
-/** One configured root's state, as reported on the `ssd` finding. Additive since phase 18. */
+/** One configured root's state, as reported on the `ssd` finding. Additive. */
 export type DoctorRootState = {
   name: string
   path: string
@@ -38,7 +38,7 @@ export type DoctorFinding = {
   detail: string
   /** What to do about it. Present only when the finding is actionable. */
   remedy?: string
-  /** Per-root state. Present only on the `ssd` finding. Additive since phase 18. */
+  /** Per-root state. Present only on the `ssd` finding. Additive. */
   roots?: DoctorRootState[]
 }
 

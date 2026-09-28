@@ -1,8 +1,8 @@
 /**
  * Orphan derivation — `cli-spec.md` §6 (Volumes / disk), §7.
  *
- * An orphan is something this tool made that NOTHING now claims. Since phase 19
- * there are two kinds, derived two different ways, because they are two
+ * An orphan is something this tool made that NOTHING now claims. There are two
+ * kinds, derived two different ways, because they are two
  * different risks:
  *
  *   - A DIRECTORY under a project's own `data/`. Claimed while the manifest
@@ -17,7 +17,7 @@
  *     carry our labels and are still listed — leaving them out would hide
  *     gigabytes from the one command whose job is to account for them.
  *
- * An unreadable root no longer refuses this outright (phase 27): its ROOT
+ * An unreadable root no longer refuses this outright: its ROOT
  * INDEX (`rootindex.ts`) supplies the cache claims a rescan would have found.
  * A root that has never been indexed cannot be guessed at the way a port can
  * — reporting its cache orphaned could destroy a project's build cache the
@@ -83,7 +83,7 @@ export type VolumeScan = {
   readonly orphans: readonly OrphanedVolume[]
   /**
    * Roots this scan could not read AND have never been indexed — named-volume
-   * orphans are omitted entirely while this is non-empty (phase 27; directory
+   * orphans are omitted entirely while this is non-empty (directory
    * orphans are unaffected, they never needed more than the one root).
    */
   readonly unverifiedRoots: readonly string[]

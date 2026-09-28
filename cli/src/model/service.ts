@@ -2,7 +2,7 @@
  * Payloads for `service add | remove | list` — `cli-spec.md` §6 (Services).
  *
  * App-facing contracts like §7's `status`: additive changes only once the app
- * ships (Phase 5+).
+ * depends on this shape.
  *
  * `AttachedService` is the shared row. It is deliberately Docker-free — key,
  * ports, hint and data directory all come from the manifest plus the catalogue
@@ -25,7 +25,7 @@ export type AttachedService = {
   container_port: number
   /** Ready-to-copy string for host GUI tools, e.g. `postgresql://localhost:5433`. */
   connection_hint: string
-  /** Absolute path of this service's data directory, `<project>/data/<key>` (phase 19). */
+  /** Absolute path of this service's data directory, `<project>/data/<key>`. */
   data_dir: string
 }
 
@@ -38,12 +38,12 @@ export type ServiceAddOutput = {
   compose_path: string
   /** False when the regenerated compose file was byte-identical to the old one. */
   compose_regenerated: boolean
-  /** Present only when a configured root could not be read while this ran (phase 27). */
+  /** Present only when a configured root could not be read while this ran. */
   degraded_roots?: OfflineRoot[]
 }
 
 /**
- * What detaching left behind. Since phase 19 the data directory is named by
+ * What detaching left behind. The data directory is named by
  * the catalogue KEY, so it is always knowable — a service the catalogue has
  * forgotten can still be detached AND still be told where its data went.
  */

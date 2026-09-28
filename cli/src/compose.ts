@@ -33,7 +33,7 @@ export const COMPOSE_FILENAME = 'docker-compose.yml'
 /** The compose service key for the dev container (its container_name is `bardolier-<project>`). */
 export const DEV_SERVICE = 'dev'
 
-/** Label namespace. `down-all` (Phase 4) selects on these rather than on name prefixes. */
+/** Label namespace. `down-all` selects on these rather than on name prefixes. */
 export const LABEL_PROJECT = 'bardolier.project'
 export const LABEL_ROLE = 'bardolier.role'
 export const LABEL_SERVICE = 'bardolier.service'
@@ -162,7 +162,7 @@ function devService(manifest: ProjectManifest): ComposeService {
     // lends the container, if it has it (PASSTHROUGH_ENV).
     environment: [...(app ? [`PORT=${app.container}`] : []), ...PASSTHROUGH_ENV],
     // Four relative binds, resolved against the compose file's own directory,
-    // so the file stays independent of where the root mounts (§4.2, phase 19).
+    // so the file stays independent of where the root mounts (§4.2).
     // `/data` is READ-ONLY here: the data is visible for inspection, but
     // writing into a live data directory from a second container corrupts it —
     // the service that owns it mounts the same path read-write below. Last is

@@ -33,7 +33,7 @@
         "connection_hint": { "type": "string", "minLength": 1 },
         "data_dir": {
           "type": "string",
-          "description": "Absolute path of this service's data directory, <project>/data/<key> (phase 19).",
+          "description": "Absolute path of this service's data directory, <project>/data/<key>.",
           "minLength": 1
         }
       }

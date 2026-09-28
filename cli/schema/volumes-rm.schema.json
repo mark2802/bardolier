@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/volumes-rm.schema.json",
   "title": "bardolier volumes rm output",
-  "description": "What reclaiming one orphan destroyed — a named volume or a leftover data directory (phase 19). cli-spec.md §6 (Volumes / disk). Additive changes only once the app ships (Phase 5+).",
+  "description": "What reclaiming one orphan destroyed — a named volume or a leftover data directory. cli-spec.md §6 (Volumes / disk). Additive changes only once the app depends on this shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["volume", "removed", "size_bytes", "size_human", "last_project"],
@@ -14,12 +14,12 @@
     },
     "kind": {
       "type": "string",
-      "description": "What was reclaimed (phase 19). Absent means volume.",
+      "description": "What was reclaimed. Absent means volume.",
       "enum": ["volume", "directory"]
     },
     "path": {
       "type": ["string", "null"],
-      "description": "Host path of a directory orphan; null for a named volume. Additive since phase 19."
+      "description": "Host path of a directory orphan; null for a named volume. Additive."
     },
     "removed": {
       "type": "boolean",

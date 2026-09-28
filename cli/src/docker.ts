@@ -1,11 +1,11 @@
 /**
  * The Docker seam — every `docker` invocation this tool makes goes through here.
  *
- * Phase 1 only asked questions. Phase 2 adds the mutations the lifecycle needs —
- * `compose up`, `compose down`, `build`, `volume rm` — and nothing else. Phase 4
- * adds what `volumes orphaned` and `down-all` need: volume LABELS (how an
- * orphan is attributed to the project it came from, §7), volume SIZES, and
- * force-removing a stray container by name. Every process failure is mapped to
+ * Covers both queries and the mutations the lifecycle needs — `compose up`,
+ * `compose down`, `build`, `volume rm` — plus what `volumes orphaned` and
+ * `down-all` need: volume LABELS (how an orphan is attributed to the project
+ * it came from, §7), volume SIZES, and force-removing a stray container by
+ * name. Every process failure is mapped to
  * DOCKER_UNAVAILABLE here so no raw stderr or spawn error escapes into a
  * command (cli-spec.md §2).
  *

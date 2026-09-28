@@ -1,5 +1,5 @@
 /**
- * Payload for `bardolier adopt` — `cli-spec.md` §6 (Projects), phase 30.
+ * Payload for `bardolier adopt` — `cli-spec.md` §6 (Projects).
  *
  * The mechanical half of `docs/migration-guide.md`'s steps 3-4: create the
  * project and get an existing, external repository into `work/<repo>/`, in
@@ -58,9 +58,9 @@ export type AdoptOutput = {
   bytes: number
   dry_run: boolean
   /**
-   * Present only when a configured root could not be read while this ran
-   * (phase 27) — ports were allocated against its last known state. Absent
-   * under --dry-run, which allocates nothing.
+   * Present only when a configured root could not be read while this ran —
+   * ports were allocated against its last known state. Absent under
+   * --dry-run, which allocates nothing.
    */
   degraded_roots?: OfflineRoot[]
 }

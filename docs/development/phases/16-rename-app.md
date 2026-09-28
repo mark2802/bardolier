@@ -10,7 +10,7 @@ boundary applies: nothing here creates or edits `.xcodeproj`/`.pbxproj`.
   re-point the synchronized folder group.
 - Fix the hard-coded `<owner's home>/claude-yard/cli/bin/cproj.js` path in the
   scheme (`xcshareddata/xcschemes/*.xcscheme`) — it is both stale after the
-  rename and one of the three personal-path leaks phase 20 scrubs.
+  rename and one of the three personal-path leaks phase 23 scrubs.
 - Confirm the target still builds before handing back; a broken project file is
   not something this phase can diagnose from the CLI side.
 

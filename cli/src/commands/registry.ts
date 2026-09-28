@@ -1,16 +1,13 @@
 /**
  * The command surface — cli-spec.md §6, complete.
  *
- * Phase 0 declared the whole surface so `bardolier --help` is the contract you can
+ * The whole surface is declared up front so `bardolier --help` is the contract you can
  * read from the terminal. Each command records the error codes §6 says it can
  * raise, so help output and the app's error mapping (app-spec.md §13) are
  * driven off one declaration rather than drifting apart.
  *
- * Commands land phase by phase — Phase 1 the read-only core, Phase 2 the
- * project lifecycle, Phase 3 services and port allocation, Phase 4 shell,
- * volumes, down-all and eject. Nothing else about a command's declaration
- * changes when one is implemented: the usage, flags and error codes are the
- * frozen part.
+ * A command's usage, flags and error codes are fixed at declaration; only its
+ * `run` implementation changes as behaviour lands.
  *
  * Every `run` here is a thin adapter: validate the shape of the invocation,
  * build a Context, call the command module, pair the payload with its human
@@ -318,7 +315,7 @@ export const COMMANDS: readonly CommandNode[] = [
     summary: 'Bring the dev container and attached services up. Validates ports. Idempotent.',
     flags: [{ name: '--no-shell', description: "Suppress the app's shell-open after start. The CLI never spawns a terminal." }],
     // An unreadable root degrades the app_port retrofit rather than raising
-    // ROOT_UNREADABLE (phase 27) — see `allocator.ts`.
+    // ROOT_UNREADABLE — see `allocator.ts`.
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('up'), 1)
@@ -390,7 +387,7 @@ export const COMMANDS: readonly CommandNode[] = [
         summary: 'Attach a service, assign its host port, regenerate compose.',
         flags: [],
         // An unreadable root degrades allocation rather than raising
-        // ROOT_UNREADABLE (phase 27) — see `degraded_roots` on the payload.
+        // ROOT_UNREADABLE — see `degraded_roots` on the payload.
         errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'SERVICE_ATTACHED', 'SERVICE_UNKNOWN', 'PORT_UNAVAILABLE'],
         run: async (inv) => {
           const [project, service] = exactArgs(inv, byPath('service add'), 2)
@@ -453,7 +450,7 @@ export const COMMANDS: readonly CommandNode[] = [
         usage: 'port add <project> <name> --container-port <n>',
         summary: 'Declare an extra port, assign its host port, regenerate compose.',
         flags: [{ name: '--container-port', arg: '<n>', description: 'Fixed port inside the container. Required.' }],
-        // Same offline-root degrading as `service add` (phase 27) — no ROOT_UNREADABLE here either.
+        // Same offline-root degrading as `service add` — no ROOT_UNREADABLE here either.
         errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PROJECT_RUNNING', 'EXTRA_PORT_ATTACHED', 'PORT_UNAVAILABLE', 'INVALID_ARGUMENT'],
         run: async (inv) => {
           const [project, name] = exactArgs(inv, byPath('port add'), 2)
@@ -577,7 +574,7 @@ export const COMMANDS: readonly CommandNode[] = [
         flags: [],
         // SSD_NOT_MOUNTED is not in §6's list but is a safety requirement:
         // with no manifests to read, every volume would look reclaimable. A
-        // PARTIAL view no longer refuses (phase 27) — an unreadable root
+        // PARTIAL view no longer refuses — an unreadable root
         // folds in its index instead, or is named in `unverified_roots`.
         errors: ['SSD_NOT_MOUNTED', 'DOCKER_UNAVAILABLE'],
         run: async (inv) => {
@@ -653,7 +650,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['install'],
     group: 'Lifecycle / SSD',
     usage: 'install [--bin-dir <dir>] [--force]',
-    summary: 'Link `bardolier`/`bdlr` onto a bin directory a Finder-launched app can also find (phase 28).',
+    summary: 'Link `bardolier`/`bdlr` onto a bin directory a Finder-launched app can also find.',
     flags: [
       { name: '--bin-dir', arg: '<dir>', description: 'Install here instead of searching the conventional directories.' },
       { name: '--force', description: 'Replace an occupied path that is not a link this repo made.' },
@@ -719,7 +716,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['root'],
     group: 'Roots',
     usage: 'root <add | remove | list>',
-    summary: 'Where projects live (§8, phase 18) — an ordered list of {name, path}; roots[0] is the default `new` targets.',
+    summary: 'Where projects live (§8) — an ordered list of {name, path}; roots[0] is the default `new` targets.',
     flags: [],
     errors: [],
     run: group('root'),

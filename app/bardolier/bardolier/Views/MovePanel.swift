@@ -2,7 +2,7 @@
 //  MovePanel.swift
 //  Bardolier
 //
-//  Move a project to another configured root (app-spec.md §8.2, phase 21/26).
+//  Move a project to another configured root (app-spec.md §8.2).
 //
 //  Unlike `ClonePanel`, there is nothing to type: `move` takes no name and no
 //  content choice, so this is a root picker and a button. And unlike `clone`'s

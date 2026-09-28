@@ -7,10 +7,9 @@
  * an exception (§8: status/doctor must still answer).
  *
  * The injection seam is `config.roots`: point them at temp dirs and the whole
- * layer is testable without a real disk. Phase 18 widens this from one root to
- * many; `mounted` on `Discovery` keeps its Phase 1 meaning — "at least one
- * root is readable" — so `status` can go on answering when some, but not all,
- * roots are gone.
+ * layer is testable without a real disk. There can be many configured roots;
+ * `mounted` on `Discovery` means "at least one root is readable" — so
+ * `status` can go on answering when some, but not all, roots are gone.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -76,7 +75,7 @@ export type RootMount = {
   readonly name: string
   readonly path: string
   readonly mounted: boolean
-  /** The mount point containing `path` (phase 17). Null only when `path` isn't readable. */
+  /** The mount point containing `path`. Null only when `path` isn't readable. */
   readonly volume: string | null
 }
 
@@ -96,7 +95,7 @@ export type DiscoveredProject = {
   readonly name: string
   readonly dir: string
   readonly manifest: ProjectManifest
-  /** The configured root's name this project was found under (phase 18). */
+  /** The configured root's name this project was found under. */
   readonly root: string
 }
 

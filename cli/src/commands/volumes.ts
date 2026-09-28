@@ -12,7 +12,7 @@
  * not its container happens to be up right now, and for a named volume the
  * running-container case is caught underneath by `removeVolume` anyway.
  *
- * Since phase 19 an orphan is either a named volume or a project's leftover
+ * An orphan is either a named volume or a project's leftover
  * data directory (`<project>/<key>`). `rm` takes either — by that name, or by
  * the directory's own path, which is what the human output shows.
  */

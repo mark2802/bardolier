@@ -5,7 +5,7 @@
  *
  *   - It confirms unless `--force`, and refuses to guess when there is no
  *     terminal to ask (see `confirm.ts`).
- *   - A project holding data refuses outright. Since phase 19 the service data
+ *   - A project holding data refuses outright. The service data
  *     and the container's `$HOME` are INSIDE the directory, so "remove the
  *     directory but keep the data" cannot mean anything — there is no
  *     `--keep-data` to ask for it. A plain `delete` therefore fails
@@ -96,7 +96,7 @@ export async function runDelete(ctx: Context, request: DeleteRequest): Promise<D
 
   rmSync(dir, { recursive: true, force: true })
 
-  // Write-through (§5, phase 27): a deleted project must stop being reported
+  // Write-through (§5): a deleted project must stop being reported
   // as a name or port held anywhere, including by an offline root's index.
   const root = findRoot(ctx.config, project.root)
   if (root) removeFromRootIndex(ctx, root, manifest.name)

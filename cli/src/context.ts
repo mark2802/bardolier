@@ -7,11 +7,11 @@
  * which is how the whole lifecycle is verifiable on a machine with no SSD and
  * no Docker daemon.
  *
- * Phase 2 widens it from "what we read" to "what we do": mutating Docker calls,
- * a host-port probe, a confirmation prompt, and a clock. Phase 4 adds the last
- * of it — the SSD device, which is how `eject` asks `lsof` who is holding the
- * volume and tells `diskutil` to unmount it. Everything with an observable side
- * effect belongs here, or the tests stop being honest.
+ * It covers both "what we read" and "what we do": mutating Docker calls, a
+ * host-port probe, a confirmation prompt, a clock, and the SSD device — which
+ * is how `eject` asks `lsof` who is holding the volume and tells `diskutil`
+ * to unmount it. Everything with an observable side effect belongs here, or
+ * the tests stop being honest.
  */
 
 import type { Config, LoadOptions, LoadedConfig } from './config.ts'
@@ -49,7 +49,7 @@ export type Context = {
   readonly confirm: Confirm
   /** Host `git` behind the seam: who the human is, and what a project did (§12). */
   readonly git: Git
-  /** Whether `bardolier` is already installed where a Finder-launched app would find it (`doctor`'s `cli` finding, phase 28). */
+  /** Whether `bardolier` is already installed where a Finder-launched app would find it (`doctor`'s `cli` finding). */
   readonly cli: CliLocator
   readonly host: HostIdentity
   /** The clock, injected so `new`'s `created` timestamp is assertable. */

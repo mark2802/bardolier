@@ -9,7 +9,7 @@
  * "the manifest describes what is running" true at all times.
  *
  * Detaching KEEPS the data directory. It becomes a listed orphan of the project
- * that holds it, reclaimable through `volumes rm` (Phase 4). Removing a service
+ * that holds it, reclaimable through `volumes rm`. Removing a service
  * is a wiring change; losing a database to it would be a data loss the user
  * never asked for.
  *

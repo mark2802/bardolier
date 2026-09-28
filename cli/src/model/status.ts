@@ -1,7 +1,7 @@
 /**
  * `status` JSON — THE app's primary contract. `cli-spec.md` §7.
  *
- * Schema stability is the contract: once the app ships (Phase 5+), changes to
+ * Schema stability is the contract: once the app depends on this shape, changes to
  * this shape are ADDITIVE ONLY. Never rename or remove a field; never narrow a
  * union. The Swift `Codable` models in `app/` mirror this file.
  */
@@ -54,19 +54,19 @@ export type StatusProject = {
    * composed by the caller, for the same reason `connection_hint` is.
    */
   app_url: string | null
-  /** Extra ports declared on this project (§5.1), sorted by name. Additive since Phase 12. */
+  /** Extra ports declared on this project (§5.1), sorted by name. Additive. */
   extra_ports?: AttachedExtraPort[]
-  /** The configured root's name this project lives under. Additive since phase 18. */
+  /** The configured root's name this project lives under. Additive. */
   root?: string
   /**
    * `<dir>/work`, where repositories live and the dev container works (§4.2).
    * Reported for the same reason `dir` is: the app must never compose a path.
-   * Additive since phase 19.
+   * Additive.
    */
   work_dir?: string
 }
 
-/** One configured root's readable state (phase 18). */
+/** One configured root's readable state. */
 export type StatusRoot = {
   name: string
   path: string
@@ -75,21 +75,21 @@ export type StatusRoot = {
    * ISO 8601 UTC of the last time this root's manifests were scanned, or null
    * — either it is currently mounted (its index is reconciled on every status
    * call, so this stays uninteresting), or it has never been indexed at all.
-   * Additive since phase 27.
+   * Additive.
    */
   last_indexed?: string | null
 }
 
-/** Both things `volumes orphaned` can offer to reclaim (phase 19). */
+/** Both things `volumes orphaned` can offer to reclaim. */
 export const ORPHAN_KINDS = ['volume', 'directory'] as const
 export type OrphanKind = (typeof ORPHAN_KINDS)[number]
 
 export type OrphanedVolume = {
   /** A Docker volume name, or `<project>/<key>` for a data directory. */
   name: string
-  /** Additive since phase 19; absent means `volume`. */
+  /** Additive; absent means `volume`. */
   kind?: OrphanKind
-  /** Host path of a `directory` orphan; null for a named volume. Additive since phase 19. */
+  /** Host path of a `directory` orphan; null for a named volume. Additive. */
   path?: string | null
   size_bytes: number
   size_human: string
@@ -102,6 +102,6 @@ export type Status = {
   docker: { available: boolean }
   projects: StatusProject[]
   orphaned_volumes: OrphanedVolume[]
-  /** Every configured root's readable state. Additive since phase 18. */
+  /** Every configured root's readable state. Additive. */
   roots?: StatusRoot[]
 }

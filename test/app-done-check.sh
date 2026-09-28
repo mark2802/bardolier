@@ -335,7 +335,7 @@ if command -v swiftc >/dev/null 2>&1 && [ -n "$SDK" ]; then
       -enable-upcoming-feature InferSendableFromCaptures \
       -enable-upcoming-feature NonisolatedNonsendingByDefault \
       -target arm64-apple-macos15.0 -sdk "$SDK" $(find "$APP" -name '*.swift') >"$TMP/swift.log" 2>&1; then
-    ok "the app sources type-check (weaker than ⌘B — see phase6's header)"
+    ok "the app sources type-check (weaker than ⌘B: catches nothing about Xcode target membership)"
   else
     bad "swiftc -typecheck failed:"
     grep "error:" "$TMP/swift.log" | head -5 | sed 's/^/      /'

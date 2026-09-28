@@ -202,7 +202,7 @@ copy is working, same as clone.
    next `up`.
 4. With more than one configured root, the picker offers only roots `doctor`
    reports mounted AND removable — never a plain internal-disk root, which
-   would only ever answer `EJECT_NOT_APPLICABLE` (phase 22). A single such
+   would only ever answer `EJECT_NOT_APPLICABLE`. A single such
    root resolves itself without a picker, same as a single configured root
    always has. Among more than one, the picker adds an **All roots** choice
    driving `bardolier eject --all --json`: every candidate, best-effort. The
@@ -245,8 +245,8 @@ that explains itself.
 - Every CLI error code maps to a short, human message; unknown codes fall back to
   the `error.message` string. Never surface a raw stack trace.
 - If `bardolier` itself is missing/not on PATH, show a clear first-run message with
-  the expected install location and the `npm run setup` (`bardolier install`,
-  phase 28) command that fixes it.
+  the expected install location and the `npm run setup` (`bardolier install`)
+  command that fixes it.
 - A success notice (an assigned host port, a reclaimed size — §6, §9) self-
   dismisses a few seconds after it appears; it also carries a dismiss control
   for closing it sooner, never the only way it goes away. A failure or a

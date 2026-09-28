@@ -2,7 +2,7 @@
 //  ClonePanel.swift
 //  Bardolier
 //
-//  Clone a project (app-spec.md §8.1, phase 20).
+//  Clone a project (app-spec.md §8.1).
 //
 //  `NewProjectPanel` with one field fewer and one checkbox more: a clone takes
 //  its archetype, services and packages from its source (cli-spec.md §4.2), so
@@ -98,7 +98,7 @@ struct ClonePanel: View {
         }
     }
 
-    /// Only shown with more than one configured root (phase 18). Left nil in the
+    /// Only shown with more than one configured root. Left nil in the
     /// common case so the CLI's own default — the source's root — applies.
     @ViewBuilder
     private var rootPicker: some View {

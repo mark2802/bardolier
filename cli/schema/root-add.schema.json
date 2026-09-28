@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bardolier.local/schema/root-add.schema.json",
   "title": "bardolier root add output",
-  "description": "What `bardolier root add` wrote (cli-spec.md §8, phase 18). Additive changes only once the app ships (Phase 5+).",
+  "description": "What `bardolier root add` wrote (cli-spec.md §8). Additive changes only once the app depends on this shape.",
   "type": "object",
   "additionalProperties": false,
   "required": ["path", "created", "added", "roots"],
@@ -29,7 +29,7 @@
         "last_indexed": {
           "type": ["string", "null"],
           "format": "date-time",
-          "description": "Additive since phase 27, for parity with status.roots — root add/remove/list never populate it themselves."
+          "description": "Additive, for parity with status.roots — root add/remove/list never populate it themselves."
         }
       }
     }
