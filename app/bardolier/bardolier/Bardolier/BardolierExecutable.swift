@@ -26,7 +26,10 @@ nonisolated enum BardolierExecutable {
     static let pathDefaultsKey = "BardolierPath"
 
     /// Named in the first-run message so the instruction can be copy-pasted.
-    static let defaultsSuite = "com.mw.bardolier"
+    /// `UserDefaults.standard` is keyed by the running bundle identifier, so
+    /// this reads that rather than duplicating it — a copy would drift the
+    /// moment the bundle ID changed.
+    static var defaultsSuite: String { Bundle.main.bundleIdentifier ?? "com.mw.bardolier" }
 
     /// Overrides the search entirely — how the app is run from Xcode against a
     /// working copy of the CLI.

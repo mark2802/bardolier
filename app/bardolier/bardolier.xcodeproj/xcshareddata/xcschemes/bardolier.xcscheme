@@ -53,12 +53,12 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "BDLR_BIN"
-            value = "/Users/mark/dev/mark2802/bardolier/cli/bin/bardolier.js"
-            isEnabled = "YES">
+            value = ""
+            isEnabled = "NO">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "BDLR_SSD_ROOT"
-            value = "/Volumes/ExtremeSSD"
+            value = ""
             isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>

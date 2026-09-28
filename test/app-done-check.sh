@@ -423,5 +423,22 @@ do
   [ ! -e "$gone" ] && ok "$gone no longer exists" || bad "$gone is a leftover — deletions must be real deletions"
 done
 
+# ── 11. Personal config hygiene (host machine only) ────────────────────────────
+head "11. No one developer's machine baked into the shared project files"
+
+SCHEME="app/bardolier/bardolier.xcodeproj/xcshareddata/xcschemes/bardolier.xcscheme"
+
+if [ -f "$PBXPROJ" ] && grep -q 'DEVELOPMENT_TEAM = [A-Z0-9]' "$PBXPROJ"; then
+  todo "$PBXPROJ has a DEVELOPMENT_TEAM set — clear it to None in Signing & Capabilities for every target/configuration so a fresh clone doesn't inherit it"
+elif [ -f "$PBXPROJ" ]; then
+  ok "no DEVELOPMENT_TEAM baked into the pbxproj"
+fi
+
+if [ -f "$SCHEME" ] && grep -qE 'value = "/Users/[^/]+/' "$SCHEME"; then
+  todo "$SCHEME has an absolute /Users/<you>/... path in an environment variable — clear the value (or disable the variable) in Edit Scheme > Run > Arguments"
+elif [ -f "$SCHEME" ]; then
+  ok "no absolute personal path left in the shared scheme"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 summary "App"

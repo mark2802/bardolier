@@ -218,7 +218,7 @@ enum BardolierTerminal {
                 message: "macOS is blocking Bardolier from controlling \(terminal). "
                     + "Turn it on in System Settings → Privacy & Security → Automation → Bardolier. "
                     + "If Bardolier isn’t listed there, the permission was denied before it could be "
-                    + "remembered: run `tccutil reset AppleEvents com.mw.bardolier`, then try again.",
+                    + "remembered: run `tccutil reset AppleEvents \(BardolierExecutable.defaultsSuite)`, then try again.",
                 isPermissionDenied: true
             )
         }
