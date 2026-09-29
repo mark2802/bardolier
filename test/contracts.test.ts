@@ -606,6 +606,7 @@ describe('command surface (cli-spec.md §6)', () => {
     'service remove',
     'shell',
     'status',
+    'teardown',
     'up',
     'volumes orphaned',
     'volumes rm',

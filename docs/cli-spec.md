@@ -478,6 +478,22 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   (no usable directory, explicit or conventional), `INSTALL_PATH_OCCUPIED`
   (something else is at the path and `--force` was not given, or it is a
   directory).
+- `bardolier teardown [--images] [--force]` — the inverse of the README's
+  Install section, minus the one thing it never promised to be reversible:
+  project data. In order — `down-all`; every `bardolier`/`bdlr` link this
+  checkout owns, across every conventional bin directory, the same
+  conservatism `install`'s own linking uses (a real file, or a symlink
+  pointing elsewhere, is left alone); then the config directory
+  (`~/.config/bardolier` or `$BARDOLIER_CONFIG`'s directory — `config.yml` and
+  the root index both live there). **`--images`** additionally removes the
+  base images present (`bardolier-web`, `bardolier-ios`, `bardolier-and`) —
+  opt-in, since they are multi-gigabyte but fully re-downloadable (`bardolier
+  build` remakes them from scratch); left alone by default. Confirms unless
+  `--force`, and refuses to guess under `--json` with no terminal to ask
+  (`INVALID_ARGUMENT`), the same pattern as `delete` and `volumes rm`. Never
+  touches a project directory, a named service/cache volume, or a configured
+  root's contents. A daemon-less Docker degrades the same way `down-all`
+  does — reported, not a failure — and still removes the links and config.
 
 ### Roots
 

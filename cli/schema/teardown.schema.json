@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bardolier.local/schema/teardown.schema.json",
+  "title": "bardolier teardown output",
+  "description": "Reversing a README Install: containers stopped, PATH links and config removed, base images too under --images. cli-spec.md §6 (Lifecycle / SSD). Never touches a project directory or a named volume.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["confirmed", "stopped", "stray_containers", "docker_available", "config_dir", "config_removed", "unlinked", "images_removed"],
+  "properties": {
+    "confirmed": {
+      "type": "boolean",
+      "description": "False when the user declined the confirmation; nothing else in this payload was touched."
+    },
+    "stopped": {
+      "type": "array",
+      "description": "Projects down-all stopped on the way, sorted.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "stray_containers": {
+      "type": "array",
+      "description": "bardolier-* containers removed that no manifest claimed.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "docker_available": {
+      "type": "boolean",
+      "description": "False when the daemon was unreachable — containers, symlinks and config are handled regardless."
+    },
+    "config_dir": {
+      "type": "string",
+      "minLength": 1,
+      "description": "~/.config/bardolier (or $BARDOLIER_CONFIG's directory) — config.yml and the root index both live here."
+    },
+    "config_removed": { "type": "boolean", "description": "False when there was nothing there to begin with." },
+    "unlinked": {
+      "type": "array",
+      "description": "bardolier/bdlr links this checkout owned and removed, across every conventional bin directory.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "removed"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "removed": { "type": "boolean" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "images_removed": {
+      "type": "array",
+      "description": "Base image tags removed — only when --images was passed. Empty, not omitted, otherwise.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

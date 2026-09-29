@@ -142,6 +142,8 @@ export type Docker = {
   removeVolume(name: string): Promise<void>
   /** `docker rm --force` one container by name. Used by `down-all` to sweep strays. */
   removeContainer(name: string): Promise<void>
+  /** `docker rmi <repository>:<tag>`. Used by `teardown --images`; a no-op-shaped call on an image not present still throws, so callers check `images()` first. */
+  removeImage(repository: string, tag: string): Promise<void>
   /**
    * Stop the Docker engine itself — the VM, not a container (`docker desktop
    * stop`).
@@ -441,6 +443,11 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
       // has already decided is ours and unwanted; a running stray is exactly
       // the case that needs removing.
       await ok(['rm', '--force', name], `remove container ${name}`)
+      docker.refresh()
+    },
+
+    async removeImage(repository, tag) {
+      await ok(['rmi', `${repository}:${tag}`], `remove image ${repository}:${tag}`)
       docker.refresh()
     },
 
