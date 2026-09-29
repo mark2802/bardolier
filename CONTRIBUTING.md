@@ -107,6 +107,15 @@ none — and stays. The spec names any decision that must be answered first
 (see `INTENT.md`'s decision table), and the check covers every `INTENT.md`
 invariant the work could break.
 
+## Merging
+
+`main` is protected: every change lands via a pull request, `.github/workflows/ci.yml`
+(`BARDOLIER_SKIP_DOCKER=1 test/regression.sh`) must pass, and that applies to
+admins too — there is no override for a red check. `npm install` wires a
+`pre-push` hook (`.githooks/pre-push`, via `core.hooksPath`) that runs the
+same command locally, so a failing branch never reaches GitHub in the first
+place; `git push --no-verify` bypasses it for a genuine reason.
+
 ## Irreversible decisions
 
 If reversing a choice would touch more than roughly 20 files — language,

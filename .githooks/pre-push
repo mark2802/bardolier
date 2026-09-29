@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Blocks a push whose offline checks fail — the closest local equivalent to
+# "don't raise a PR with failing tests" GitHub itself has no hook for.
+# Mirrors .github/workflows/ci.yml exactly, so a push that passes here passes
+# CI too. Bypass for a genuine reason with `git push --no-verify`.
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: running the offline check suite (BARDOLIER_SKIP_DOCKER=1 test/regression.sh)…"
+if BARDOLIER_SKIP_DOCKER=1 bash test/regression.sh; then
+  exit 0
+fi
+
+echo
+echo "pre-push: the check suite failed — push blocked. Fix it, or 'git push --no-verify' to bypass." >&2
+exit 1
