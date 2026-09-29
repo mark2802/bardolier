@@ -14,7 +14,7 @@ import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
-import { chooseBinDir, findInstalled, linkOne, runInstall, satisfiesNodeEngine, shimPath } from '../cli/src/install.ts'
+import { chooseBinDir, findInstalled, linkOne, runInstall, runUninstall, satisfiesNodeEngine, shimPath, unlinkOne } from '../cli/src/install.ts'
 import { tempDirs } from './helpers.ts'
 
 const dir = tempDirs('bardolier-install-')
@@ -138,5 +138,58 @@ describe('linkOne', () => {
     symlinkSync(target, join(binDir, 'bardolier'))
     const result = linkOne(binDir, 'bardolier', target, false)
     assert.equal(result.action, 'already_linked')
+  })
+})
+
+describe('unlinkOne / runUninstall (bardolier teardown, cli-spec.md §6)', () => {
+  test('removes a symlink pointing at our target', () => {
+    const binDir = dir()
+    symlinkSync(shimPath(), join(binDir, 'bardolier'))
+    const result = unlinkOne(binDir, 'bardolier', shimPath())
+    assert.deepEqual(result, { name: 'bardolier', path: join(binDir, 'bardolier'), removed: true })
+    assert.equal(existsSync(join(binDir, 'bardolier')), false)
+  })
+
+  test('removes a dangling symlink — this repo\'s own litter from a since-renamed path', () => {
+    const binDir = dir()
+    symlinkSync(join(binDir, 'nowhere'), join(binDir, 'bardolier'))
+    const result = unlinkOne(binDir, 'bardolier', shimPath())
+    assert.equal(result?.removed, true)
+  })
+
+  test('leaves a real file alone, reporting why', () => {
+    const binDir = dir()
+    writeFileSync(join(binDir, 'bardolier'), '#!/bin/sh\necho not us\n')
+    const result = unlinkOne(binDir, 'bardolier', shimPath())
+    assert.equal(result?.removed, false)
+    assert.equal(existsSync(join(binDir, 'bardolier')), true)
+  })
+
+  test('leaves a symlink pointing elsewhere alone', () => {
+    const binDir = dir()
+    const elsewhere = join(binDir, 'something-else')
+    writeFileSync(elsewhere, '#!/bin/sh\n')
+    symlinkSync(elsewhere, join(binDir, 'bardolier'))
+    const result = unlinkOne(binDir, 'bardolier', shimPath())
+    assert.equal(result?.removed, false)
+    assert.equal(existsSync(join(binDir, 'bardolier')), true)
+  })
+
+  test('nothing at the path is simply absent, not reported', () => {
+    assert.equal(unlinkOne(dir(), 'bardolier', shimPath()), null)
+  })
+
+  test('runUninstall finds both names across every directory given, not just the first', () => {
+    const a = dir()
+    const b = dir()
+    symlinkSync(shimPath(), join(a, 'bardolier'))
+    symlinkSync(shimPath(), join(b, 'bdlr'))
+
+    const found = runUninstall([a, b])
+    assert.deepEqual(
+      found.map((l) => l.name).sort(),
+      ['bardolier', 'bdlr'],
+    )
+    assert.ok(found.every((l) => l.removed))
   })
 })

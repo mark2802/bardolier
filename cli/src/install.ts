@@ -29,7 +29,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BardolierError } from './errors.ts'
-import type { InstallLink, InstallOutput } from './model/install.ts'
+import type { InstallLink, InstallOutput, UninstallLink } from './model/install.ts'
 
 /** The two names `cli/package.json`'s `bin` map declares. */
 export const INSTALL_NAMES = ['bardolier', 'bdlr'] as const
@@ -168,6 +168,53 @@ export function linkOne(binDir: string, name: string, target: string, force: boo
   unlinkSync(path)
   symlinkSync(target, path)
   return { name, path, target, action: 'replaced' }
+}
+
+/**
+ * The inverse of `linkOne`: remove `<dir>/<name>` only if it is a link this
+ * checkout could have made — a symlink whose target is `target`, or a
+ * dangling one (this repo's own litter from a since-renamed path). A real
+ * file, or a symlink pointing anywhere else, is left alone and reported as
+ * skipped, the same conservatism `linkOne` applies going the other way.
+ */
+export function unlinkOne(dir: string, name: string, target: string): UninstallLink | null {
+  const path = join(dir, name)
+  let stat: ReturnType<typeof lstatSync>
+  try {
+    stat = lstatSync(path)
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw cause
+  }
+
+  if (!stat.isSymbolicLink()) return { name, path, removed: false, reason: 'not a link this repo made' }
+
+  const dangling = !existsSync(path)
+  if (!dangling && realpathSync(path) !== target) {
+    return { name, path, removed: false, reason: 'points elsewhere' }
+  }
+
+  unlinkSync(path)
+  return { name, path, removed: true }
+}
+
+/**
+ * Remove every `bardolier`/`bdlr` link this checkout owns, across every
+ * conventional directory — not just the first, since `--bin-dir` can have
+ * put one somewhere `install`'s own search would not have chosen. Used by
+ * `bardolier teardown`. Directories with nothing to find are silently
+ * skipped; only dirs holding one of the two names are reported.
+ */
+export function runUninstall(dirs: readonly string[] = conventionalBinDirectories()): UninstallLink[] {
+  const target = shimPath()
+  const found: UninstallLink[] = []
+  for (const dir of dirs) {
+    for (const name of INSTALL_NAMES) {
+      const result = unlinkOne(dir, name, target)
+      if (result) found.push(result)
+    }
+  }
+  return found
 }
 
 function engineRange(): string {

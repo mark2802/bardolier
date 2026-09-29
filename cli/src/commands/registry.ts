@@ -39,6 +39,7 @@ import {
   runVolumeRemove,
 } from './volumes.ts'
 import { renderDownAll, renderEject, renderEjectAll, runDownAll, runEject, runEjectAll } from './ssd.ts'
+import { renderTeardown, runTeardown } from './teardown.ts'
 import {
   collectServiceList,
   renderServiceAdd,
@@ -660,6 +661,24 @@ export const COMMANDS: readonly CommandNode[] = [
       noArgs(inv, 'install')
       const binDir = stringFlag(inv, '--bin-dir')
       return output(runInstall({ ...(binDir !== undefined ? { binDir } : {}), force: boolFlag(inv, '--force') }), renderInstall)
+    },
+  },
+  {
+    path: ['teardown'],
+    group: 'Lifecycle / SSD',
+    usage: 'teardown [--images] [--force]',
+    summary: 'Reverse an Install: stop every container, unlink `bardolier`/`bdlr`, forget every root. Project data is never touched.',
+    flags: [
+      { name: '--images', description: 'Also remove the base images (bardolier-web, bardolier-ios, bardolier-and). Re-downloadable/rebuildable; left alone by default.' },
+      { name: '--force', description: 'Skip the confirmation prompt.' },
+    ],
+    errors: ['DOCKER_UNAVAILABLE', 'INVALID_ARGUMENT'],
+    run: async (inv) => {
+      noArgs(inv, 'teardown')
+      return output(
+        await runTeardown(createContext(), { images: boolFlag(inv, '--images'), force: boolFlag(inv, '--force'), json: inv.json }),
+        renderTeardown,
+      )
     },
   },
   {

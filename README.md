@@ -44,6 +44,13 @@ npm run setup:app        # xcodebuild → /Applications/Bardolier.app
 (`npm run setup:app` only runs on macOS with Xcode installed; the CLI has no
 such restriction.)
 
+To reverse this — stop every container, remove the `bardolier`/`bdlr` PATH
+links, and forget every configured root — run `bardolier teardown`. It never
+touches a project directory or its data; add `--images` to also remove the
+base images (left alone by default, since `bardolier build` remakes them).
+Then delete `/Applications/Bardolier.app` if you built it, and the clone
+itself.
+
 ## Quickstart
 
 ```sh

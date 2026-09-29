@@ -20,6 +20,15 @@ export type InstallLink = {
   action: InstallLinkAction
 }
 
+/** One symlink `bardolier uninstall`/`teardown` found and either removed or left alone. */
+export type UninstallLink = {
+  name: string
+  path: string
+  removed: boolean
+  /** Why it was left alone, when `removed` is false — it isn't a link this repo made. */
+  reason?: string
+}
+
 export type InstallOutput = {
   bin_dir: string
   links: InstallLink[]

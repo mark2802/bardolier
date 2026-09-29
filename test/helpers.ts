@@ -167,6 +167,7 @@ export type DockerCall =
   | { readonly kind: 'ensureVolume'; readonly name: string; readonly labels: Readonly<Record<string, string>> }
   | { readonly kind: 'removeVolume'; readonly name: string }
   | { readonly kind: 'removeContainer'; readonly name: string }
+  | { readonly kind: 'removeImage'; readonly repository: string; readonly tag: string }
   | { readonly kind: 'exec'; readonly request: ContainerExec }
   | { readonly kind: 'stopEngine' }
 
@@ -180,6 +181,7 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
   const available = options.available ?? true
   const calls: DockerCall[] = []
   let running = new Set(options.running ?? [])
+  const images = new Set(options.images ?? [])
   const volumes = new Map<string, StubVolume>()
   for (const entry of options.volumes ?? []) {
     const volume = typeof entry === 'string' ? { name: entry } : entry
@@ -204,8 +206,7 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
           [...running].map((name) => ({ names: [name], image: 'stub', state: 'running', labels: {} }))
       : fail,
     images: available
-      ? async (): Promise<readonly DockerImage[]> =>
-          (options.images ?? []).map((repository) => ({ repository, tag: 'latest' }))
+      ? async (): Promise<readonly DockerImage[]> => [...images].map((repository) => ({ repository, tag: 'latest' }))
       : fail,
     volumeNames: available ? async () => [...volumes.keys()] : fail,
     volumes: available
@@ -255,6 +256,11 @@ export function stubDocker(options: StubDockerOptions = {}): StubDocker {
       requireAvailable(`remove container ${name}`)
       calls.push({ kind: 'removeContainer', name })
       running.delete(name)
+    },
+    async removeImage(repository, tag) {
+      requireAvailable(`remove image ${repository}:${tag}`)
+      calls.push({ kind: 'removeImage', repository, tag })
+      images.delete(repository)
     },
     async exec(request) {
       // Deliberately does NOT `requireAvailable`: the real one never throws, and

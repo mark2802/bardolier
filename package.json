@@ -13,6 +13,7 @@
     "cli"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "bardolier": "node cli/bin/bardolier.js",
     "setup": "node cli/bin/bardolier.js install",
     "setup:app": "bash scripts/build-app.sh",
