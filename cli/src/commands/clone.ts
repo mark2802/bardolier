@@ -167,7 +167,10 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     if (request.withContent && existsSync(copied)) {
       renameSync(copied, join(staging, WORK_DIR, name))
     }
-    for (const file of seededFiles(manifest, definitions)) {
+    // A pre-`work/<name>/` source keeps its flat `work/CLAUDE.md`; seeding the folder
+    // would move `shell` and the handoff off `/work`, where its sessions are filed.
+    const legacy = request.withContent && existsSync(join(staging, WORK_DIR, 'CLAUDE.md'))
+    for (const file of legacy ? [] : seededFiles(manifest, definitions)) {
       const path = join(staging, file.name)
       if (existsSync(path)) {
         const isEnv = file.name.endsWith(`/${DOCS_DIR}/${ENV_DOC}`)

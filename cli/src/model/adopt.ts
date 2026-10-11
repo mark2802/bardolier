@@ -35,8 +35,9 @@ export type AdoptProject = {
 export type AdoptSource = {
   /** The path given on the command line, resolved to absolute. */
   path: string
-  /** Where it lands (or would land): `<project>/work/<basename>`. */
+  /** Where it lands (or would land): `<project>/work/<name>`. */
   dir: string
+  /** The folder name under `work/` — the project's name, not the source's. */
   basename: string
 }
 

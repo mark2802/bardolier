@@ -723,7 +723,7 @@ no file at that path. `clone --with-content` renames the copied `work/<source>/`
 `env.md`, which names the source, unless that file is not bardolier's.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
-— bardolier's files sit above `work/`, inside no working tree — and nothing takes
+— bardolier's own files sit above `work/`, inside no working tree; the seeds in `work/<name>/` are ordinary repo files — and nothing takes
 a build context from a project directory (`deps.ts` builds from a generated
 context under the config dir).
 

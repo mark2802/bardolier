@@ -48,8 +48,8 @@
       "required": ["path", "dir", "basename"],
       "properties": {
         "path": { "type": "string", "minLength": 1, "description": "The path given on the command line, resolved to absolute." },
-        "dir": { "type": "string", "minLength": 1, "description": "Where it lands (or, under --dry-run, would land): <project>/work/<basename>." },
-        "basename": { "type": "string", "minLength": 1 }
+        "dir": { "type": "string", "minLength": 1, "description": "Where it lands (or, under --dry-run, would land): <project>/work/<name>." },
+        "basename": { "type": "string", "minLength": 1, "description": "The folder name under work/ — the project's name, not the source's." }
       }
     },
     "mode": {

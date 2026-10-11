@@ -297,6 +297,17 @@ describe('clone (cli-spec.md §6)', () => {
     await assert.rejects(runClone(makeContext(box), { source: 'source', name: 'other', withContent: true }), { code: 'INVALID_ARGUMENT' })
   })
 
+  test('--with-content of a flat-layout source (work/CLAUDE.md) seeds nothing, so /work stays the workdir', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    mkdirSync(box.path('source', 'work'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'CLAUDE.md'), '# flat')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.deepEqual(result.seeded, [])
+    assert.ok(!existsSync(box.path('twin', 'work', 'twin')))
+  })
+
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {
     const box = sandbox()
     box.writeProject('source', richSource())
