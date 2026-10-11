@@ -384,7 +384,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Shell
 - `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
   dev container and returns the exec invocation: `{ "container": "...", "exec":
-  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<work_folder>` after `exec` when
+  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<work_folder>` before `-it` when
   the manifest records one and that directory exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.

@@ -14,7 +14,7 @@ environment is described without depending on bardolier.
   Dockerfile's `ARG` lines.
 - `project.yml` gains optional `work_folder` (schema, model, `orderManifest`); `new`,
   `adopt` and a shape `clone` set it to the project name, `clone --with-content` copies
-  it and re-renders only an untouched `env.md`.
+  it and re-renders only a bardolier-rendered `env.md`.
 - `Docker.exec` gains `workdir`; `agentWorkdir` (`layout.ts`) gives `/work/<work_folder>`
   when recorded and present, else `/work`, for `shell` and the handoff (§10, §12).
 - `env --write` refuses a project with no `work_folder`.
