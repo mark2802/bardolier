@@ -42,13 +42,6 @@ export const CONTAINER_LOCAL = '/local'
  */
 export const NEVER_INDEX = '.metadata_never_index'
 
-export const REPOSITORY_URL = 'https://github.com/mark2802/bardolier'
-
-/** Whether `text` is an `env.md` bardolier rendered, as opposed to a repo's own file of that name. */
-export function isRenderedEnvMd(text: string): boolean {
-  return text.startsWith('# Environment — ') && text.includes(`Created with Bardolier — ${REPOSITORY_URL}`)
-}
-
 /**
  * Where the agent starts inside the container: `/work/<work_folder>` when the manifest
  * records one and the folder exists, else `/work` (§10).

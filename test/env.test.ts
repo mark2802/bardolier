@@ -66,7 +66,10 @@ describe('env (cli-spec.md §6)', () => {
 
     assert.throws(() => runEnv(ctx, 'myapp', { write: true }), { code: 'INVALID_ARGUMENT' })
     assert.equal(box.exists('myapp', 'work', 'myapp'), false)
-    assert.ok(runEnv(ctx, 'myapp').content.startsWith('# Environment — myapp'))
+    const preview = runEnv(ctx, 'myapp')
+    assert.ok(preview.content.startsWith('# Environment — myapp'))
+    assert.ok(!preview.content.includes('/work/myapp'), 'no folder is recorded, so none is named')
+    assert.equal(preview.changed, false)
   })
 
   test('--write updates the recorded work_folder a clone kept, not a new work/<name>/', async () => {

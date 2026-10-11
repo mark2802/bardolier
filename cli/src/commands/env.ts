@@ -12,9 +12,9 @@ import { dirname, join } from 'node:path'
 import { attachedKeys } from '../compose.ts'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { WORK_DIR, isRenderedEnvMd } from '../layout.ts'
+import { WORK_DIR } from '../layout.ts'
 import type { EnvOutput } from '../model/env.ts'
-import { DOCS_DIR, ENV_DOC, envMd } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, envMd, isRenderedEnvMd } from '../scaffold.ts'
 import { requireProject } from '../workspace.ts'
 import { resolveServices } from './service.ts'
 
@@ -28,7 +28,7 @@ export function runEnv(ctx: Context, name: string | undefined, options: { write?
   // Without a recorded folder there is nowhere to write, and none is invented (§10).
   const path = join(dir, WORK_DIR, folder ?? manifest.name, DOCS_DIR, ENV_DOC)
   const current = folder !== undefined && existsSync(path) ? readFileSync(path, 'utf8') : undefined
-  const changed = current !== content
+  const changed = folder !== undefined && current !== content
   if (options.write && folder === undefined) {
     throw new BardolierError('INVALID_ARGUMENT', `\`${manifest.name}\` has no work_folder in project.yml; add one to use --write.`)
   }

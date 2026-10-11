@@ -267,7 +267,7 @@ describe('clone (cli-spec.md §6)', () => {
     assert.equal(box.read('twin', 'home', '.zsh_history'), 'secrets')
   })
 
-  test('--with-content keeps work/<source>/ as is; an untouched env.md is re-rendered, an edited one kept', async () => {
+  test('--with-content keeps work/<source>/ as is; a rendered env.md is re-rendered even after the source drifted', async () => {
     const box = sandbox()
     const source = await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
     assert.ok(source.seeded.length > 0)
@@ -279,11 +279,11 @@ describe('clone (cli-spec.md §6)', () => {
     const env = box.read('twin', 'work', 'source', 'docs', 'env.md') ?? ''
     assert.ok(env.includes('# Environment — twin') && env.includes('/work/source'), env)
 
-    const edited = box.path('source', 'work', 'source', 'docs', 'env.md')
-    writeFileSync(edited, `${readFileSync(edited, 'utf8')}\nMy notes.\n`)
+    const drifted = box.path('source', 'work', 'source', 'docs', 'env.md')
+    writeFileSync(drifted, `${readFileSync(drifted, 'utf8')}\nMy notes.\n`)
     const second = await runClone(makeContext(box), { source: 'source', name: 'twin2', withContent: true })
-    assert.deepEqual(second.seeded, [])
-    assert.ok((box.read('twin2', 'work', 'source', 'docs', 'env.md') ?? '').includes('My notes.'))
+    assert.deepEqual(second.seeded, ['work/source/docs/env.md'])
+    assert.ok((box.read('twin2', 'work', 'source', 'docs', 'env.md') ?? '').includes('# Environment — twin2'))
   })
 
   test('--with-content of a source with no work_folder seeds nothing and records none', async () => {

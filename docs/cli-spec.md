@@ -728,7 +728,7 @@ are filed under that folder.
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` writes a seed only where the copy has no file at that path.
 `clone --with-content` writes none, and re-renders the kept folder's `env.md` for the clone
-only if it is still exactly what the source rendered; an edited one stays.
+only if bardolier wrote it (the rule `env --write` uses); a repo's own file stays.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's own files sit above `work/`, inside no working tree; the seeds in `work/<name>/` are ordinary repo files — and nothing takes

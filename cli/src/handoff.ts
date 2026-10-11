@@ -69,9 +69,8 @@ export const MAX_STATUS_LISTED = 20
  * session in the container's working directory, so the answer comes from the
  * conversation that was actually happening rather than from a cold read of the
  * files. That only resolves to the right session because each project has its
- * own `$HOME` and therefore its own Claude config dir (`images.ts`) — every dev
- * container works in the same `/work`, so a shared one would file every
- * project's sessions together.
+ * own `$HOME` and therefore its own Claude config dir (`images.ts`) — a shared
+ * one would file every project's sessions together.
  */
 export const SUMMARY_PROMPT = [
   'Write a handoff note for whoever resumes this project later — most likely you, weeks from now,',

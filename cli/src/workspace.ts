@@ -45,7 +45,7 @@ export function orderManifest(manifest: ProjectManifest): Record<string, unknown
     base_image: manifest.base_image,
   }
   if (manifest.work_folder !== undefined) ordered.work_folder = manifest.work_folder
-  // Right after base_image, because it's the same kind of thing — what the
+  // After base_image, because it's the same kind of thing — what the
   // dev container actually runs (`deps.ts`) — before the ports.
   const packages = manifest.extra_packages ?? []
   if (packages.length > 0) ordered.extra_packages = [...packages].sort()

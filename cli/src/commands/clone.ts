@@ -37,7 +37,7 @@ import type { AttachedService } from '../model/service.ts'
 import { attachedKeys } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { describeService } from '../services.ts'
-import { DOCS_DIR, ENV_DOC, envMd, seededFiles } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, envMd, isRenderedEnvMd, seededFiles } from '../scaffold.ts'
 import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, ensureProjectDirs } from '../layout.ts'
 import { findRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
@@ -158,12 +158,12 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
 
     // A content clone is an identical copy: it keeps the source's `work_folder`, as its
     // sessions (`home/`) and absolute paths are filed under it, and writes no seeds. A copied
-    // `env.md` is re-rendered for the clone only if it is still exactly what the source
-    // rendered — an edited one is the user's file (§10).
+    // `env.md` is re-rendered for the clone only if bardolier wrote it (the same rule
+    // as `env --write`) — a repo's own file is the user's (§10).
     const folder = manifest.work_folder
     if (request.withContent) {
       const path = folder === undefined ? undefined : join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
-      if (folder !== undefined && path !== undefined && existsSync(path) && readFileSync(path, 'utf8') === envMd(from, definitions, folder)) {
+      if (folder !== undefined && path !== undefined && existsSync(path) && isRenderedEnvMd(readFileSync(path, 'utf8'))) {
         writeFileSync(path, envMd(manifest, definitions, folder))
         seeded.push(`${WORK_DIR}/${folder}/${DOCS_DIR}/${ENV_DOC}`)
       }
