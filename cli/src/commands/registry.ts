@@ -563,7 +563,7 @@ export const COMMANDS: readonly CommandNode[] = [
     group: 'Projects',
     usage: 'env <name> [--write]',
     summary: 'Render the project’s docs/env.md from its manifest; --write refreshes the file.',
-    flags: [{ name: '--write', description: 'Overwrite work/<name>/docs/env.md instead of printing it.' }],
+    flags: [{ name: '--write', description: 'Overwrite docs/env.md in the project’s work_folder instead of printing it.' }],
     errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'SERVICE_UNKNOWN', 'INVALID_ARGUMENT'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('env'), 1)

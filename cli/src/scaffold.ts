@@ -151,7 +151,7 @@ export type EnvService = { readonly key: string; readonly definition: CatalogueS
  * `docs/env.md`: deterministic for a manifest + catalogue + bundled image, and
  * free of host ports (machine-specific; a clone allocates its own).
  */
-export function envMd(manifest: ProjectManifest, services: readonly EnvService[], folder = manifest.name): string {
+export function envMd(manifest: ProjectManifest, services: readonly EnvService[], folder = manifest.work_folder ?? manifest.name): string {
   const { name, archetype } = manifest
   const toolchain = Object.entries(imageToolchain(manifest.base_image)).map(
     ([arg, version]) => `- ${TOOL_LABEL[arg] ?? arg}: ${version}`,
@@ -221,9 +221,9 @@ export type SeededFile = {
   readonly contents: string
 }
 
-/** The §10 seed set — four files under `work/<name>/`. */
+/** The §10 seed set — four files under `work/<work_folder>/`. */
 export function seededFiles(manifest: ProjectManifest, services: readonly EnvService[]): SeededFile[] {
-  const base = `${WORK_DIR}/${manifest.name}`
+  const base = `${WORK_DIR}/${manifest.work_folder ?? manifest.name}`
   return [
     { name: `${base}/CLAUDE.md`, contents: claudeMd(manifest.name) },
     { name: `${base}/${DOCS_DIR}/${ENV_DOC}`, contents: envMd(manifest, services) },

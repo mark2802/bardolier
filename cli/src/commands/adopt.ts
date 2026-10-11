@@ -104,6 +104,7 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
     name,
     archetype,
     base_image: ARCHETYPE_BASE_IMAGE[archetype],
+    work_folder: name,
     created: ctx.now().toISOString(),
   }
 

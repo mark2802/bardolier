@@ -10,6 +10,7 @@ import { validate } from '../cli/src/schema.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runServiceAdd } from '../cli/src/commands/service.ts'
 import { runEnv } from '../cli/src/commands/env.ts'
+import { requireProject, writeManifest } from '../cli/src/workspace.ts'
 import { makeContext, sandboxes } from './helpers.ts'
 
 const sandbox = sandboxes()
@@ -54,11 +55,27 @@ describe('env (cli-spec.md §6)', () => {
     assert.equal(box.read('myapp', 'work', 'myapp', 'docs', 'env.md'), 'DATABASE_URL=...')
   })
 
-  test('--write updates the seeded folder a clone kept, not a new work/<name>/', async () => {
+  test('--write without a work_folder refuses and creates nothing; printing still works', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
+    const { manifest, dir } = requireProject(ctx, 'myapp')
+    delete manifest.work_folder
+    writeManifest(ctx, dir, manifest)
+    rmSync(box.path('myapp', 'work', 'myapp'), { recursive: true })
+
+    assert.throws(() => runEnv(ctx, 'myapp', { write: true }), { code: 'INVALID_ARGUMENT' })
+    assert.equal(box.exists('myapp', 'work', 'myapp'), false)
+    assert.ok(runEnv(ctx, 'myapp').content.startsWith('# Environment — myapp'))
+  })
+
+  test('--write updates the recorded work_folder a clone kept, not a new work/<name>/', async () => {
     const box = sandbox()
     const ctx = makeContext(box)
     await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
     renameSync(box.path('myapp', 'work', 'myapp'), box.path('myapp', 'work', 'origin'))
+    const { manifest, dir } = requireProject(ctx, 'myapp')
+    writeManifest(ctx, dir, { ...manifest, work_folder: 'origin' })
 
     const out = runEnv(ctx, 'myapp', { write: true })
     assert.ok(out.path.endsWith('work/origin/docs/env.md'), out.path)

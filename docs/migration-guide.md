@@ -166,7 +166,9 @@ under `work/<name>/` and, on `adopt`, writes none of them over a file the repo a
   `docs/env.md` (the environment — `bardolier env <name> --write` refreshes it
   after services change), `docs/product.md` and `docs/dev-principles.md` by hand.
   Claude Code loads `CLAUDE.md` from its starting directory and above, so run
-  `claude` from `/work/<name>`, not `/work`.
+  `claude` from `/work/<name>`, not `/work` — `adopt` records that as `work_folder` in
+  `project.yml`, which `shell` and the handoff follow. A project made before the field
+  existed stays in `/work` until you add `work_folder: <folder>` yourself.
 
 Read the repo's `CLAUDE.md` anyway, for one thing: instructions that assume
 the old shape — `docker compose up` from the repo root, `localhost:5432`

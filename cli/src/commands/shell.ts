@@ -46,9 +46,9 @@ export async function runShell(
     )
   }
 
-  // A project seeded under `work/<name>/` is where the agent should start: Claude
-  // Code reads CLAUDE.md from its starting directory upward, never downward (§10).
-  const workdir = agentWorkdir(project.dir, project.name)
+  // The recorded `work_folder` is where the agent should start: Claude Code reads
+  // CLAUDE.md from its starting directory upward, never downward (§10).
+  const workdir = agentWorkdir(project.manifest, project.dir)
   const dir = workdir === CONTAINER_WORK ? [] : ['-w', workdir]
 
   return {

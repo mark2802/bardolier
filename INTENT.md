@@ -52,3 +52,4 @@ depends on them — never inside a plan bullet.
 | Number of roots | many, each with a derived mount point | 2026-09-05 |
 | Per-project truth | one `project.yml`; no second registry | 2026-08-20 |
 | Cross-root knowledge while a root is offline | a derived index on the internal disk, rebuilt from the manifests, never authoritative | 2026-09-07 |
+| The agent's working folder | recorded in project.yml as work_folder, one folder name under work/; absent means /work; never inferred from file contents | 2026-10-11 |

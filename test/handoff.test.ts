@@ -54,15 +54,16 @@ function context(box: Sandbox, options: Parameters<typeof createContext>[0] = {}
 describe('the handoff note', () => {
   const answered = (stdout: string) => (): ExecResult => ({ code: 0, stdout, stderr: '' })
 
-  async function stoppedProject(box: Sandbox, options: { exec?: () => ExecResult; git?: Git } = {}) {
+  async function stoppedProject(box: Sandbox, options: { exec?: () => ExecResult; git?: Git; workFolder?: string } = {}) {
     const docker = stubDocker({
       running: [devContainerName('myapp')],
       ...(options.exec ? { exec: options.exec } : {}),
     })
     const ctx = context(box, { docker, git: options.git ?? stubGit(SOME_FACTS) })
-    box.writeProject('myapp', manifest('myapp'))
+    box.writeProject('myapp', manifest('myapp', options.workFolder === undefined ? {} : { work_folder: options.workFolder }))
     // `work/` is where the repositories are (phase 19); the note walks it.
     mkdirSync(join(box.path('myapp'), 'work', 'lexer'), { recursive: true })
+    if (options.workFolder === 'myapp') mkdirSync(join(box.path('myapp'), 'work', 'myapp'), { recursive: true })
     return { docker, ctx }
   }
 
@@ -79,26 +80,26 @@ describe('the handoff note', () => {
     )
   })
 
-  test('asks the agent in work/<name>/ when that seeded directory exists, else in /work', async () => {
+  test('asks the agent in the manifest’s work_folder when it exists, else in /work', async () => {
+    const workdirOf = (docker: { calls: readonly { kind: string; request?: unknown }[] }) => {
+      const call = docker.calls.find((c) => c.kind === 'exec')
+      return (call?.request as { workdir?: string } | undefined)?.workdir
+    }
+
     const box = sandbox()
-    const { docker, ctx } = await stoppedProject(box, { exec: answered('ok') })
-    mkdirSync(join(box.path('myapp'), 'work', 'myapp'), { recursive: true })
-    writeFileSync(join(box.path('myapp'), 'work', 'myapp', 'CLAUDE.md'), '# myapp')
+    const { docker, ctx } = await stoppedProject(box, { exec: answered('ok'), workFolder: 'myapp' })
     await runDown(ctx, 'myapp')
-    const call = docker.calls.find((c) => c.kind === 'exec')
-    assert.equal(call?.kind === 'exec' ? call.request.workdir : null, '/work/myapp')
+    assert.equal(workdirOf(docker), '/work/myapp')
 
-    writeFileSync(join(box.path('myapp'), 'work', 'CLAUDE.md'), '# flat')
-    const flat = await stoppedProject(box, { exec: answered('ok') })
-    await runDown(flat.ctx, 'myapp')
-    const flatCall = flat.docker.calls.find((c) => c.kind === 'exec')
-    assert.equal(flatCall?.kind === 'exec' ? flatCall.request.workdir : null, undefined)
+    // Recorded, but the folder is gone: /work, not a directory `docker exec -w` cannot enter.
+    const gone = await stoppedProject(sandbox(), { exec: answered('ok'), workFolder: 'missing' })
+    await runDown(gone.ctx, 'myapp')
+    assert.equal(workdirOf(gone.docker), undefined)
 
-    const legacy = sandbox()
-    const old = await stoppedProject(legacy, { exec: answered('ok') })
-    await runDown(old.ctx, 'myapp')
-    const oldCall = old.docker.calls.find((c) => c.kind === 'exec')
-    assert.equal(oldCall?.kind === 'exec' ? oldCall.request.workdir : null, undefined)
+    // A manifest with no work_folder (flat layout, or older) stays in /work.
+    const legacy = await stoppedProject(sandbox(), { exec: answered('ok') })
+    await runDown(legacy.ctx, 'myapp')
+    assert.equal(workdirOf(legacy.docker), undefined)
   })
 
   test('carries the agent’s own summary when it answers', async () => {

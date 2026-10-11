@@ -286,30 +286,39 @@ describe('clone (cli-spec.md §6)', () => {
     assert.ok((box.read('twin2', 'work', 'source', 'docs', 'env.md') ?? '').includes('My notes.'))
   })
 
-  test('--with-content of a source with no seeds seeds work/<name>/ and keeps a repo’s own docs/env.md', async () => {
+  test('--with-content of a source with no work_folder seeds nothing and records none', async () => {
     const box = sandbox()
     box.writeProject('source', richSource())
     mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
     writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.deepEqual(result.seeded, [])
     assert.equal(box.read('twin', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
-    assert.ok(result.seeded.includes('work/twin/CLAUDE.md'))
-    assert.ok(existsSync(box.path('twin', 'work', 'twin', 'docs', 'env.md')))
+    assert.ok(!existsSync(box.path('twin', 'work', 'twin')))
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, undefined)
   })
 
-  test('--with-content of a flat-layout source (work/CLAUDE.md) seeds nothing, so /work stays the workdir', async () => {
+  test('--with-content keeps the source’s work_folder; a repo already named like the clone is left alone', async () => {
     const box = sandbox()
-    box.writeProject('source', richSource())
-    mkdirSync(box.path('source', 'work'), { recursive: true })
-    writeFileSync(box.path('source', 'work', 'CLAUDE.md'), '# flat')
-    mkdirSync(box.path('source', 'work', 'source'), { recursive: true })
-    writeFileSync(box.path('source', 'work', 'source', 'keep.txt'), 'x')
+    await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+    mkdirSync(box.path('source', 'work', 'twin'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'twin', 'CLAUDE.md'), '# another repo')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
-    assert.deepEqual(result.seeded, [])
-    assert.ok(!existsSync(box.path('twin', 'work', 'twin')))
-    assert.ok(existsSync(box.path('twin', 'work', 'source', 'keep.txt')), 'the repo folder keeps its name')
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, 'source')
+    assert.equal(box.read('twin', 'work', 'twin', 'CLAUDE.md'), '# another repo')
+    assert.deepEqual(result.seeded, ['work/source/docs/env.md'])
+  })
+
+  test('a shape clone records and seeds its own work_folder', async () => {
+    const box = sandbox()
+    await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: false })
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, 'twin')
+    assert.ok(result.seeded.includes('work/twin/CLAUDE.md'))
+    assert.ok(!existsSync(box.path('twin', 'work', 'source')))
   })
 
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {

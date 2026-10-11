@@ -158,6 +158,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     name,
     archetype,
     base_image: ARCHETYPE_BASE_IMAGE[archetype],
+    work_folder: name,
     created: ctx.now().toISOString(),
   }
 

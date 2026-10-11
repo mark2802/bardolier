@@ -134,6 +134,8 @@ Source of truth for one project. The compose file is derived from this.
 name: myapp
 archetype: web            # web | ios | android | library
 base_image: bardolier-web    # resolved from archetype
+work_folder: myapp        # where the agent starts and the seeds live (§10);
+                          # one folder name under work/; absent = /work
 extra_packages:            # OS packages beyond base_image; absent/empty = none
   - libnss3
 services:
@@ -259,8 +261,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Projects
 - `bardolier new <name> --archetype <a> [--services a,b] [--root <name>]`
   Creates dir, manifest, compose, the four folders of §3, and
-  the four seeds of §10 under `work/<name>/`, under the named root (default: the first configured root
-  — §8).
+  the four seeds of §10 under `work/<name>/` (recorded as `work_folder`), under the named root
+  (default: the first configured root — §8).
   Assigns ports for any initial services. An unreadable root beyond the
   target degrades rather than blocking this (§5): the response
   carries `degraded_roots` naming which one and how stale its index is.
@@ -291,14 +293,16 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   manifest's `archetype`, `base_image`, `extra_packages`, attached service keys
   and each extra port's `container_port`; **no host port is copied** — `app_port`,
   every service port and every extra port is allocated fresh (§5), and `created`
-  is now. Compose is rendered from the new manifest, the §10 seeds written under `work/<new name>/` where the copy brought none,
-  `.bardolier/` left behind. `--root` defaults to the SOURCE's root.
+  is now. Compose is rendered from the new manifest, the §10 seeds written under
+  `work/<new name>/` (recorded as its `work_folder`), `.bardolier/` left behind.
+  `--root` defaults to the SOURCE's root.
   `--with-content` copies all four folders of §3 — `work/`, `data/`, `local/`
-  and `home/` — byte-for-byte, and requires the source stopped
+  and `home/` — byte-for-byte, keeps the source's `work_folder` and writes no seeds
+  (§10), and requires the source stopped
   (`PROJECT_RUNNING`), because service state copied out from under a running
   Postgres is torn. A clone means an identical copy; the consequence to know is
-  that Claude Code files its transcripts by working directory and every dev
-  container works in `/work` (§9), so `claude --continue` in a fresh clone
+  that Claude Code files its transcripts by working directory and the agent
+  starts in the same `work/` folder (§10), so `claude --continue` in a fresh clone
   resumes the SOURCE's last conversation until a new one is started. The copy is
   staged under
   `<root>/.<name>.incoming` and renamed into place only once complete, and is
@@ -324,9 +328,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   `ROOT_UNREADABLE`, `INSUFFICIENT_SPACE`, `INVALID_ARGUMENT`.
 - `bardolier env <name> [--write]` — render `docs/env.md` (§10) from the manifest
   and the bundled image. Prints by default; `--write` overwrites
-  `work/<name>/docs/env.md` (creating `docs/`), skipping a write whose bytes
-  already match, and reports `changed`. It refuses (`INVALID_ARGUMENT`) a file it did
-  not render, e.g. a repo's own `docs/env.md`. Errors: `PROJECT_NOT_FOUND`,
+  `docs/env.md` in the project's `work_folder` (creating `docs/`), skipping a write whose bytes
+  already match, and reports `changed`. It refuses (`INVALID_ARGUMENT`) a project with
+  no `work_folder`, and a file it did not render, e.g. a repo's own `docs/env.md`. Errors: `PROJECT_NOT_FOUND`,
   `PROJECT_AMBIGUOUS`, `SERVICE_UNKNOWN`, `INVALID_ARGUMENT`.
 - `bardolier list` — array of projects with archetype + running state + root
 
@@ -379,8 +383,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Shell
 - `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
   dev container and returns the exec invocation: `{ "container": "...", "exec":
-  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<name>` after `exec` when
-  `work/<name>/CLAUDE.md` exists, §10). The **app** spawns the terminal; the
+  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<work_folder>` after `exec` when
+  the manifest records one and that directory exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
   `--root` swaps in `["docker","exec","-u","root","-it","<c>","bash"]` — same
@@ -699,14 +703,14 @@ Schema stability is the contract. Additive changes only once the app ships.
 ## 10. Seeded files (by `new`)
 
 Four files under `work/<name>/`, so other repositories can be cloned into `work/`
-beside the project without clashing. `shell` opens in
-`/work/<name>` when its `CLAUDE.md` exists (else `/work`), because Claude Code loads
-`CLAUDE.md` from its starting directory and above. A flat `work/CLAUDE.md` (a project
-from before this layout) wins: its sessions are filed under `/work`, so `shell` and
-the handoff stay there and `clone` seeds nothing. Likewise a `clone --with-content` keeps
-the source's `work/<folder>/` under that name (its sessions and absolute paths are filed
-there), so the seeded folder is `work/<name>/` or, failing that, the one folder whose
-`CLAUDE.md` sits beside a bardolier-rendered `docs/env.md`; with two, `/work`.
+beside the project without clashing. The folder is recorded as `work_folder` in
+`project.yml` (§4.2) and is never inferred from file contents. `shell` and the handoff
+(§12) start the agent in `/work/<work_folder>` when it is recorded and the directory
+exists, else `/work`, because Claude Code loads `CLAUDE.md` from its starting directory
+and above. A project with no `work_folder` (made before this layout) stays in `/work`;
+add the field by hand to move it. `new`, `adopt` and a shape `clone` record their own
+name; `clone --with-content` keeps the source's value, as its sessions and absolute paths
+are filed under that folder.
 
 - `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
   read them only when a task needs them.
@@ -722,10 +726,9 @@ there), so the seeded folder is `work/<name>/` or, failing that, the one folder 
 - `docs/dev-principles.md` — generic coding and process guidelines.
 
 Seeds are written once and are the owner's from then on (except `env.md`'s
-refresh). `adopt` and `clone --with-content` write a seed only where the copy has
-no file at that path. `clone --with-content` re-renders the kept folder's `env.md` for
-the clone only if it is still exactly what the source rendered; an edited one stays.
-A source with no seeds gets fresh ones in `work/<name>/`.
+refresh). `adopt` writes a seed only where the copy has no file at that path.
+`clone --with-content` writes none, and re-renders the kept folder's `env.md` for the clone
+only if it is still exactly what the source rendered; an edited one stays.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's own files sit above `work/`, inside no working tree; the seeds in `work/<name>/` are ordinary repo files — and nothing takes
@@ -757,8 +760,8 @@ true and still reachable, so the note is written there, into
   host: `work/` may hold several (§3), so every direct subdirectory that is a
   working tree is reported — branch, recent commits, what is uncommitted — and a
   project with none says so. And the agent's own account, via
-  `claude --print --continue` run INSIDE the dev container (in `/work/<name>` when
-  that directory's seeded `CLAUDE.md` exists, else `/work`), the half that knows
+  `claude --print --continue` run INSIDE the dev container (in the project's
+  `work_folder`, §10, else `/work`), the half that knows
   what was being
   *attempted*; no git archaeology recovers that.
 - **Written before `compose down`.** The session lives in the dev container and

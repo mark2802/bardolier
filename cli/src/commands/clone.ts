@@ -38,7 +38,7 @@ import { attachedKeys } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { describeService } from '../services.ts'
 import { DOCS_DIR, ENV_DOC, envMd, seededFiles } from '../scaffold.ts'
-import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, agentFolder, ensureProjectDirs } from '../layout.ts'
+import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, ensureProjectDirs } from '../layout.ts'
 import { findRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
 import { validate } from '../schema.ts'
@@ -70,8 +70,6 @@ function contentSources(sourceDir: string): CopySource[] {
   })
 }
 
-const isFlat = (projectDir: string): boolean => existsSync(join(projectDir, WORK_DIR, 'CLAUDE.md'))
-
 export async function runClone(ctx: Context, request: CloneRequest): Promise<CloneOutput> {
   const source = requireProject(ctx, request.source)
   const name = requireProjectName(request.name, 'clone <source> <name> [--root <name>] [--with-content]')
@@ -97,6 +95,9 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     base_image: from.base_image,
     created: ctx.now().toISOString(),
   }
+  // A shape clone is seeded under its own name; a content clone keeps the source's folder.
+  const workFolder = request.withContent ? from.work_folder : name
+  if (workFolder !== undefined) manifest.work_folder = workFolder
   if (from.extra_packages && from.extra_packages.length > 0) manifest.extra_packages = [...from.extra_packages]
 
   // NO HOST PORT IS COPIED. Each is allocated fresh, in the order `new` uses —
@@ -155,12 +156,12 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     copyInto(staging, sources)
     writeManifest(ctx, staging, manifest)
 
-    // A content clone is an identical copy: the source's `work/<folder>/` keeps its name,
-    // as its sessions (`home/`) and absolute paths are filed under it. A copied `env.md`
-    // is re-rendered for the clone only if it is still exactly what the source rendered —
-    // an edited one is the user's file (§10). A source with no seeds gets fresh ones.
-    const folder = request.withContent ? agentFolder(staging, source.name) : undefined
-    if (request.withContent && (folder !== undefined || isFlat(staging))) {
+    // A content clone is an identical copy: it keeps the source's `work_folder`, as its
+    // sessions (`home/`) and absolute paths are filed under it, and writes no seeds. A copied
+    // `env.md` is re-rendered for the clone only if it is still exactly what the source
+    // rendered — an edited one is the user's file (§10).
+    const folder = manifest.work_folder
+    if (request.withContent) {
       const path = folder === undefined ? undefined : join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
       if (folder !== undefined && path !== undefined && existsSync(path) && readFileSync(path, 'utf8') === envMd(from, definitions, folder)) {
         writeFileSync(path, envMd(manifest, definitions, folder))
