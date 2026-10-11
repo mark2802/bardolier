@@ -37,6 +37,7 @@ export const SCHEMA_NAMES = [
   'deps-remove',
   'deps-list',
   'shell',
+  'env',
   'volumes-orphaned',
   'volumes-rm',
   'down-all',

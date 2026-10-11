@@ -23,8 +23,8 @@
  * afterwards: removed once the copy is confirmed landed, never before.
  */
 
-import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join, resolve as resolvePath } from 'node:path'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { allocateAppPort, allocatePorts } from '../allocator.ts'
@@ -73,7 +73,6 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   const archetype = requireArchetype(request.archetype)
   const target = requireRoot(ctx, request.root, defaultRoot(ctx.config))
   const sourceDir = requireSourceDir(request.source)
-  const repoName = basename(sourceDir)
   const mode: 'copy' | 'move' = request.move ? 'move' : 'copy'
 
   const dir = join(target.path, name)
@@ -84,10 +83,10 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   const definitions = catalogue ? resolveServices(catalogue, requested) : []
 
   // A read-only stat walk — real even under --dry-run, unlike a port (see model/adopt.ts).
-  const bytes = sourceBytes([{ from: sourceDir, to: join(WORK_DIR, repoName) }])
+  const bytes = sourceBytes([{ from: sourceDir, to: join(WORK_DIR, name) }])
   requireSpace(target.path, bytes)
 
-  const sourceOutput = { path: sourceDir, dir: join(dir, WORK_DIR, repoName), basename: repoName }
+  const sourceOutput = { path: sourceDir, dir: join(dir, WORK_DIR, name), basename: name }
 
   if (request.dryRun) {
     return {
@@ -105,6 +104,7 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
     name,
     archetype,
     base_image: ARCHETYPE_BASE_IMAGE[archetype],
+    work_folder: name,
     created: ctx.now().toISOString(),
   }
 
@@ -137,12 +137,19 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   }
 
   const seeded: string[] = []
+  const skipped: string[] = []
   const staged = stageProject(target.path, name, (staging) => {
     ensureProjectDirs(staging, definitions.map(({ key }) => key))
-    copyInto(staging, [{ from: sourceDir, to: join(WORK_DIR, repoName) }])
+    copyInto(staging, [{ from: sourceDir, to: join(WORK_DIR, name) }])
     writeManifest(ctx, staging, manifest)
 
-    for (const file of seededFiles(name, archetype)) {
+    // Gap-fill only: the adopted repo may already have a CLAUDE.md or docs/ (§10).
+    for (const file of seededFiles(manifest, definitions)) {
+      if (existsSync(join(staging, file.name))) {
+        skipped.push(file.name)
+        continue
+      }
+      mkdirSync(dirname(join(staging, file.name)), { recursive: true })
       writeFileSync(join(staging, file.name), file.contents)
       seeded.push(file.name)
     }
@@ -164,9 +171,10 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
     manifest_path: manifestPath(staged.dir),
     compose_path: composePath(staged.dir),
     seeded,
+    ...(skipped.length > 0 ? { seeds_skipped: skipped } : {}),
     requested_services: requested,
     services: attached,
-    source: { ...sourceOutput, dir: join(staged.dir, WORK_DIR, repoName) },
+    source: { ...sourceOutput, dir: join(staged.dir, WORK_DIR, name) },
     mode,
     bytes: staged.bytes,
     dry_run: false,
@@ -197,6 +205,7 @@ export function renderAdopt(output: AdoptOutput): string[] {
     `  compose:  ${output.compose_path}  (generated — do not edit)`,
   ]
   if (output.seeded && output.seeded.length > 0) lines.push(`  seeded:   ${output.seeded.join(', ')}`)
+  if (output.seeds_skipped) lines.push(`  kept:     ${output.seeds_skipped.join(', ')} (already in the source)`)
   if (output.services.length > 0) {
     lines.push('  services:')
     for (const service of output.services) {

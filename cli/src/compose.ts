@@ -94,7 +94,7 @@ const HEADER = [
 ].join('\n')
 
 /** `{project}` interpolation, the one substitution the catalogue promises (§4.1). */
-function interpolate(template: string, project: string): string {
+export function interpolate(template: string, project: string): string {
   return template.replaceAll('{project}', project)
 }
 

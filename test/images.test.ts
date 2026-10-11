@@ -316,13 +316,13 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
     }
   })
 
-  test('the seeded CLAUDE.md steers the agent the same way the image does (§10)', () => {
-    const ios = seededFiles('myapp', 'ios').find((file) => file.name === 'work/CLAUDE.md')?.contents ?? ''
+  test('the seeded env.md steers the agent the same way the image does (§10)', () => {
+    const ios = seededFiles(manifest('myapp', { archetype: 'ios', base_image: 'bardolier-ios', work_folder: 'myapp' }), []).find((file) => file.name.endsWith('docs/env.md'))?.contents ?? ''
     assert.match(ios, /xcodebuild/, 'the ios note must name the command it is forbidding')
     assert.match(ios, /swiftlint/, 'and what the container CAN do instead')
     assert.match(ios, /logic tests/)
 
-    const android = seededFiles('myapp', 'android').find((file) => file.name === 'work/CLAUDE.md')?.contents ?? ''
+    const android = seededFiles(manifest('myapp', { archetype: 'android', base_image: 'bardolier-and', work_folder: 'myapp' }), []).find((file) => file.name.endsWith('docs/env.md'))?.contents ?? ''
     assert.match(android, /Gradle builds and unit tests \*\*run in this container\*\*/)
     assert.match(android, /adb/, 'the android note must name adb, which the image does not carry')
   })

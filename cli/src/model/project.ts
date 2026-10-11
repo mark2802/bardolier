@@ -35,6 +35,11 @@ export type ProjectManifest = {
   archetype: Archetype
   /** Resolved from `archetype` via ARCHETYPE_BASE_IMAGE. */
   base_image: BaseImage
+  /**
+   * The folder under `work/` where the agent starts and the seeds live (§10), as one
+   * path segment. Absent = `/work`. Recorded, never inferred from file contents.
+   */
+  work_folder?: string
   /** Keyed by catalogue key (`postgres`, `redis`, …). Absent/empty = no services. */
   services?: Record<string, ProjectService>
   /**

@@ -29,7 +29,7 @@ function fixtureSource(dir: string): string {
 }
 
 describe('adopt (cli-spec.md §6, phase 30)', () => {
-  test('creates the project and copies the source into work/<basename>, leaving the source untouched', async () => {
+  test('creates the project and copies the source into work/<name>, leaving the source untouched', async () => {
     const box = sandbox()
     const source = fixtureSource(externalDir())
 
@@ -46,12 +46,12 @@ describe('adopt (cli-spec.md §6, phase 30)', () => {
     assert.equal(result.dry_run, false)
     assert.equal(result.mode, 'copy')
     assert.equal(result.project.dir, box.path('myapp'))
-    assert.equal(result.source.basename, 'my-old-app')
+    assert.equal(result.source.basename, 'myapp')
     assert.ok(result.bytes > 0)
 
-    assert.equal(box.read('myapp', 'work', 'my-old-app', 'package.json'), '{"name":"my-old-app"}')
-    assert.equal(box.read('myapp', 'work', 'my-old-app', 'src', 'index.js'), 'console.log("hi")')
-    assert.equal(box.exists('myapp', 'work', 'CLAUDE.md'), true, 'the archetype seed still landed')
+    assert.equal(box.read('myapp', 'work', 'myapp', 'package.json'), '{"name":"my-old-app"}')
+    assert.equal(box.read('myapp', 'work', 'myapp', 'src', 'index.js'), 'console.log("hi")')
+    assert.equal(box.exists('myapp', 'work', 'myapp', 'docs', 'env.md'), true, 'the seeds filled the gaps')
 
     // The source is untouched — this was a copy, not a move.
     assert.equal(existsSync(source), true)
@@ -82,6 +82,24 @@ describe('adopt (cli-spec.md §6, phase 30)', () => {
     assert.equal(typeof result.services[0]?.host_port, 'number')
   })
 
+  test('seeds fill gaps only: the repo’s own CLAUDE.md and docs/ are never overwritten', async () => {
+    const box = sandbox()
+    const source = fixtureSource(externalDir())
+    writeFileSync(join(source, 'CLAUDE.md'), '# mine')
+    mkdirSync(join(source, 'docs'), { recursive: true })
+    writeFileSync(join(source, 'docs', 'product.md'), '# my product')
+
+    const result = await runAdopt(makeContext(box), {
+      source, name: 'myapp', archetype: 'web', services: undefined, move: false, dryRun: false,
+    })
+
+    assert.ok(validate('adopt', result).valid)
+    assert.deepEqual(result.seeds_skipped, ['work/myapp/CLAUDE.md', 'work/myapp/docs/product.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/docs/env.md', 'work/myapp/docs/dev-principles.md'])
+    assert.equal(box.read('myapp', 'work', 'myapp', 'CLAUDE.md'), '# mine')
+    assert.equal(box.read('myapp', 'work', 'myapp', 'docs', 'product.md'), '# my product')
+  })
+
   test('--move deletes the source once the copy has landed', async () => {
     const box = sandbox()
     const source = fixtureSource(externalDir())
@@ -96,7 +114,7 @@ describe('adopt (cli-spec.md §6, phase 30)', () => {
     })
 
     assert.equal(result.mode, 'move')
-    assert.equal(box.read('myapp', 'work', 'my-old-app', 'package.json'), '{"name":"my-old-app"}')
+    assert.equal(box.read('myapp', 'work', 'myapp', 'package.json'), '{"name":"my-old-app"}')
     assert.equal(existsSync(source), false, 'the source should be gone after --move')
   })
 

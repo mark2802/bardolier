@@ -34,7 +34,7 @@ own files sit at the top; everything else lives in four bind-mounted folders:
 ```
 
 Two consequences run through every step below. **The repo you are migrating
-becomes `work/<repo>/`**, not the project directory itself — so nothing
+becomes `work/<name>/`** (via `adopt`; a hand-placed extra repo is `work/<repo>/`), not the project directory itself — so nothing
 bardolier writes is inside a working tree, there is nothing to gitignore, and a
 `git clean -xdf` cannot reach the data. And **service data is a directory on the
 same disk as the project**, visible from the Mac at `data/<svc>/`, rather than a
@@ -98,7 +98,7 @@ bardolier new <name> --archetype web --services <postgres,redis,...>
 ```
 
 This assigns ports and writes `project.yml`, a generated `docker-compose.yml`,
-the four folders above, and one seeded file: `work/CLAUDE.md`. Do this
+the four folders above, and four seeded files under `work/<name>/` (`CLAUDE.md`, `docs/env.md`, `docs/product.md`, `docs/dev-principles.md`). Do this
 **before** moving the real source in — `new` refuses (`PROJECT_EXISTS`) if a
 project of that name already exists in any root, and it's the only thing that
 assigns ports.
@@ -113,8 +113,7 @@ same "never guess or hand-compose the host port" rule Part 2 states for
 
 ### 4. Get the source in — move, clone, or copy, depending what it is
 
-**It lands in `work/<repo>/`** — a directory per repository, beside the seeded
-`work/CLAUDE.md`, never the project directory itself. (`down`'s handoff note
+**`adopt` lands it in `work/<name>/`**, the project's own folder, filling in the seeds only where the repo has no file of that name. Further repositories go in `work/<repo>/` beside it, never the project directory itself. (`down`'s handoff note
 walks `work/*/`, so a tree dumped directly into `work/` is invisible to it.)
 Repos that used to be checked out side by side each become their own directory
 under `work/`; they share one container and one network.
@@ -156,19 +155,20 @@ check was for.
 
 ### 5. Leave the repo's own files alone — nothing collides any more
 
-There is nothing to merge or clobber. bardolier seeds one file,
-`work/CLAUDE.md`, and the repo arrived as `work/<repo>/`, a directory below it:
+There is nothing to merge or clobber. bardolier seeds four files
+under `work/<name>/` and, on `adopt`, writes none of them over a file the repo already has:
 
 - **`.gitignore` / `.dockerignore`** — the repo's own, untouched. bardolier
   adds no entry to either; its files are above `work/` and inside no working tree,
   so there is nothing left to ignore.
-- **`CLAUDE.md`** — two files, not one. bardolier's `work/CLAUDE.md` says where
-  the agent is (the layout, `/data` read-only, service names, the boundary);
-  the repo's own `work/<repo>/CLAUDE.md` keeps its dev-workflow content
-  unchanged. Claude Code reads both — the parent and the one in the working
-  directory — so they layer instead of competing. Don't copy the repo's
-  content up, and don't paste bardolier's sections down into a file that is
-  about to be committed.
+- **`CLAUDE.md` and `docs/`** — the repo's own win; `adopt` reports them as
+  `seeds_skipped`. If the repo has a `CLAUDE.md`, add pointers to the missing
+  `docs/env.md` (the environment — `bardolier env <name> --write` refreshes it
+  after services change), `docs/product.md` and `docs/dev-principles.md` by hand.
+  Claude Code loads `CLAUDE.md` from its starting directory and above, so run
+  `claude` from `/work/<name>`, not `/work` — `adopt` records that as `work_folder` in
+  `project.yml`, which `shell` and the handoff follow. A project made before the field
+  existed stays in `/work` until you add `work_folder: <folder>` yourself.
 
 Read the repo's `CLAUDE.md` anyway, for one thing: instructions that assume
 the old shape — `docker compose up` from the repo root, `localhost:5432`

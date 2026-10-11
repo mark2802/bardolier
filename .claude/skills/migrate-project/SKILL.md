@@ -28,7 +28,7 @@ What it cannot do from a markdown file:
   asking is. Never guess past one. State what you found and the options; let
   the owner decide.
 - **Run the mechanical steps, not hand-compose them.** Part 1 steps 3–4
-  (create the project, get the repository into `work/<repo>/`) are
+  (create the project, get the repository into `work/<name>/`) are
   `bardolier adopt <source-path> <name> --archetype <a> [--services a,b]
   [--root <name>] [--move]` — one command, not a `bardolier new` followed by
   a hand-run `mv`/`git clone`. Run it with `--dry-run` first and show the
@@ -45,7 +45,7 @@ What it cannot do from a markdown file:
   something seems to need a compose edit, it needs a CLI capability instead —
   see "when the guide doesn't cover something" below.
 - **Leave the repo's own files alone** (guide Part 1 step 5) — nothing
-  inside `work/<repo>/` needs to change to run under bardolier; resist the
+  inside `work/<name>/` needs to change to run under bardolier; resist the
   urge to "clean up" what the migration merely relocated.
 
 ## Sequence

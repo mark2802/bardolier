@@ -43,16 +43,17 @@ const sandbox = sandboxes()
 
 // ── the four directories (§3, §4.2) ──────────────────────────────────────────
 describe('the project directory’s shape', () => {
-  test('`new` creates the four folders and the one seed, and nothing else', async () => {
+  test('`new` creates the four folders and the four seeds under work/<name>/, and nothing else', async () => {
     const box = sandbox()
     const result = await runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined })
 
-    assert.deepEqual(result.seeded, ['work/CLAUDE.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
     assert.deepEqual(
       readdirSync(box.path('myapp')).sort(),
       ['data', 'docker-compose.yml', 'home', 'local', 'project.yml', 'work'],
     )
-    assert.deepEqual(readdirSync(box.path('myapp', 'work')), ['CLAUDE.md'])
+    assert.deepEqual(readdirSync(box.path('myapp', 'work')), ['myapp'])
+    assert.deepEqual(readdirSync(box.path('myapp', 'work', 'myapp')).sort(), ['CLAUDE.md', 'docs'])
     assert.deepEqual(readdirSync(box.path('myapp', 'home')), [])
     assert.deepEqual(readdirSync(box.path('myapp', 'local')), [])
   })
@@ -66,7 +67,7 @@ describe('the project directory’s shape', () => {
       }
     }
     for (const archetype of ['web', 'ios', 'android', 'library'] as const) {
-      assert.deepEqual(seededFiles('myapp', archetype).map((f) => f.name), ['work/CLAUDE.md'])
+      assert.deepEqual(seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), []).map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
     }
   })
 
@@ -139,7 +140,7 @@ describe('the repository boundary', () => {
   test('the seed lives in work/, where a clone beside it will never contain it', async () => {
     const box = sandbox()
     await runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined })
-    assert.ok(box.exists('myapp', 'work', 'CLAUDE.md'))
+    assert.ok(box.exists('myapp', 'work', 'myapp', 'CLAUDE.md'))
     assert.equal(box.exists('myapp', 'CLAUDE.md'), false)
   })
 
@@ -150,7 +151,7 @@ describe('the repository boundary', () => {
     await runUp(ctx, { name: 'myapp', noShell: true })
 
     // What `git status` in `work/` could ever see: its own contents.
-    assert.deepEqual(readdirSync(box.path('myapp', 'work')), ['CLAUDE.md'])
+    assert.deepEqual(readdirSync(box.path('myapp', 'work')), ['myapp'])
     // …and what `git clean -xdf` in there therefore cannot reach.
     for (const name of ['project.yml', 'docker-compose.yml', DATA_DIR, 'home', 'local']) {
       assert.ok(box.exists('myapp', name), `${name} must live above work/`)

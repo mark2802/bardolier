@@ -15,7 +15,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { RootConfig } from '../config.ts'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
@@ -158,6 +158,7 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
     name,
     archetype,
     base_image: ARCHETYPE_BASE_IMAGE[archetype],
+    work_folder: name,
     created: ctx.now().toISOString(),
   }
 
@@ -198,7 +199,8 @@ export async function runNew(ctx: Context, request: NewRequest): Promise<NewOutp
   writeManifest(ctx, dir, manifest)
 
   const seeded: string[] = []
-  for (const file of seededFiles(name, archetype)) {
+  for (const file of seededFiles(manifest, definitions)) {
+    mkdirSync(dirname(join(dir, file.name)), { recursive: true })
     writeFileSync(join(dir, file.name), file.contents)
     seeded.push(file.name)
   }

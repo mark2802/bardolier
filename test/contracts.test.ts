@@ -156,6 +156,13 @@ describe('project manifest contract (cli-spec.md §4.2)', () => {
     assert.ok(validate('project', bare).valid)
   })
 
+  test('work_folder is one folder name: a segment is valid, a path or dot-dot is not', () => {
+    assert.ok(validate('project', { ...manifest, work_folder: 'my-app.v2' }).valid)
+    for (const bad of ['..', '.', 'a/b', '/work', '']) {
+      assert.equal(validate('project', { ...manifest, work_folder: bad }).valid, false, bad)
+    }
+  })
+
   test('rejects a service entry missing its host_port', () => {
     const bad = { ...manifest, services: { postgres: {} } }
     assert.equal(validate('project', bad).valid, false)
@@ -591,6 +598,7 @@ describe('command surface (cli-spec.md §6)', () => {
     'down',
     'down-all',
     'eject',
+    'env',
     'install',
     'list',
     'move',

@@ -16,7 +16,7 @@
  * `home/` unwritable by the container's own uid.
  */
 
-import { mkdirSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
 /** Host-side directory names, relative to the project directory. */
@@ -41,6 +41,16 @@ export const CONTAINER_LOCAL = '/local'
  * (`device.ts`). Cheaper to prevent than to work around.
  */
 export const NEVER_INDEX = '.metadata_never_index'
+
+/**
+ * Where the agent starts inside the container: `/work/<work_folder>` when the manifest
+ * records one and the folder exists, else `/work` (§10).
+ */
+export function agentWorkdir(manifest: { work_folder?: string }, projectDir: string): string {
+  const folder = manifest.work_folder
+  if (folder === undefined || !existsSync(join(workDir(projectDir), folder))) return CONTAINER_WORK
+  return `${CONTAINER_WORK}/${folder}`
+}
 
 export function workDir(dir: string): string {
   return join(dir, WORK_DIR)

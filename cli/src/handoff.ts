@@ -36,7 +36,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import type { Context } from './context.ts'
 import type { GitFacts } from './git.ts'
-import { entries, workDir, WORK_DIR } from './layout.ts'
+import { CONTAINER_WORK, agentWorkdir, entries, workDir, WORK_DIR } from './layout.ts'
 import { devContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 
@@ -69,9 +69,8 @@ export const MAX_STATUS_LISTED = 20
  * session in the container's working directory, so the answer comes from the
  * conversation that was actually happening rather than from a cold read of the
  * files. That only resolves to the right session because each project has its
- * own `$HOME` and therefore its own Claude config dir (`images.ts`) — every dev
- * container works in the same `/work`, so a shared one would file every
- * project's sessions together.
+ * own `$HOME` and therefore its own Claude config dir (`images.ts`) — a shared
+ * one would file every project's sessions together.
  */
 export const SUMMARY_PROMPT = [
   'Write a handoff note for whoever resumes this project later — most likely you, weeks from now,',
@@ -101,10 +100,11 @@ export function summaryArgv(): string[] {
  * purpose — see the module note. A zero exit with empty output is also null: a
  * heading with nothing under it is worse than no heading.
  */
-async function askAgent(ctx: Context, project: string): Promise<string | null> {
+async function askAgent(ctx: Context, project: string, workdir?: string): Promise<string | null> {
   const result = await ctx.docker.exec({
     container: devContainerName(project),
     argv: summaryArgv(),
+    ...(workdir === undefined ? {} : { workdir }),
     timeoutMs: SUMMARY_TIMEOUT_MS,
   })
   if (result.code !== 0) return null
@@ -224,7 +224,11 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
   const { manifest, dir, devRunning } = request
 
   const repos = await repositories(ctx, dir)
-  const summary = devRunning ? await askAgent(ctx, manifest.name) : null
+  // Sessions are filed by working directory, and the recorded `work_folder` is where the
+  // agent runs `claude` — ask it there (§12).
+  const agentDir = agentWorkdir(manifest, dir)
+  const workdir = agentDir === CONTAINER_WORK ? undefined : agentDir
+  const summary = devRunning ? await askAgent(ctx, manifest.name, workdir) : null
 
   const path = handoffPath(dir)
   const existing = existsSync(path)

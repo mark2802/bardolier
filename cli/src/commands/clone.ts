@@ -25,8 +25,8 @@
  * nothing about it is written in either case.
  */
 
-import { existsSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { allocateAppPort, allocateExtraPort, allocatePorts } from '../allocator.ts'
@@ -37,7 +37,7 @@ import type { AttachedService } from '../model/service.ts'
 import { attachedKeys } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { describeService } from '../services.ts'
-import { seededFiles } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, envMd, isRenderedEnvMd, seededFiles } from '../scaffold.ts'
 import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, ensureProjectDirs } from '../layout.ts'
 import { findRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
@@ -95,6 +95,9 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     base_image: from.base_image,
     created: ctx.now().toISOString(),
   }
+  // A shape clone is seeded under its own name; a content clone keeps the source's folder.
+  const workFolder = request.withContent ? from.work_folder : name
+  if (workFolder !== undefined) manifest.work_folder = workFolder
   if (from.extra_packages && from.extra_packages.length > 0) manifest.extra_packages = [...from.extra_packages]
 
   // NO HOST PORT IS COPIED. Each is allocated fresh, in the order `new` uses —
@@ -153,12 +156,27 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     copyInto(staging, sources)
     writeManifest(ctx, staging, manifest)
 
-    // Re-seeded unless the copy brought one: a seed you would overwrite is the
-    // user's file by then (§10).
-    for (const file of seededFiles(name, manifest.archetype)) {
-      if (existsSync(join(staging, file.name))) continue
-      writeFileSync(join(staging, file.name), file.contents)
-      seeded.push(file.name)
+    // A content clone is an identical copy: it keeps the source's `work_folder`, as its
+    // sessions (`home/`) and absolute paths are filed under it, and writes no seeds. A copied
+    // `env.md` is re-rendered for the clone only if bardolier wrote it (the same rule
+    // as `env --write`) — a repo's own file is the user's (§10).
+    const folder = manifest.work_folder
+    if (request.withContent) {
+      if (folder !== undefined) {
+        const path = join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
+        if (existsSync(path) && isRenderedEnvMd(readFileSync(path, 'utf8'))) {
+          writeFileSync(path, envMd(manifest, definitions, folder))
+          seeded.push(`${WORK_DIR}/${folder}/${DOCS_DIR}/${ENV_DOC}`)
+        }
+      }
+    } else {
+      for (const file of seededFiles(manifest, definitions)) {
+        const path = join(staging, file.name)
+        if (existsSync(path)) continue
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, file.contents)
+        seeded.push(file.name)
+      }
     }
 
     // Rendered from the new manifest, never copied: a generated file is never

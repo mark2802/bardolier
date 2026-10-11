@@ -17,7 +17,7 @@
 
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { CONTAINER_WORK } from '../layout.ts'
+import { CONTAINER_WORK, agentWorkdir } from '../layout.ts'
 import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
@@ -46,6 +46,11 @@ export async function runShell(
     )
   }
 
+  // The recorded `work_folder` is where the agent should start: Claude Code reads
+  // CLAUDE.md from its starting directory upward, never downward (§10).
+  const workdir = agentWorkdir(project.manifest, project.dir)
+  const dir = workdir === CONTAINER_WORK ? [] : ['-w', workdir]
+
   return {
     project: project.name,
     container,
@@ -54,9 +59,9 @@ export async function runShell(
     // `-u root` (only when asked) is `docker exec` overriding the image's own
     // USER for this one exec — ephemeral, same as any other runtime change.
     exec: options.root
-      ? ['docker', 'exec', '-u', 'root', '-it', container, 'bash']
-      : ['docker', 'exec', '-it', container, 'bash'],
-    workdir: CONTAINER_WORK,
+      ? ['docker', 'exec', '-u', 'root', ...dir, '-it', container, 'bash']
+      : ['docker', 'exec', ...dir, '-it', container, 'bash'],
+    workdir,
   }
 }
 

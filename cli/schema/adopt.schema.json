@@ -27,6 +27,11 @@
       "description": "File names written per §10, in write order. Absent under --dry-run.",
       "items": { "type": "string", "minLength": 1 }
     },
+    "seeds_skipped": {
+      "type": "array",
+      "description": "Seed paths the source already had, left untouched. Absent when none.",
+      "items": { "type": "string", "minLength": 1 }
+    },
     "requested_services": {
       "type": "array",
       "description": "Catalogue keys requested by --services, whether or not yet attached.",
@@ -43,8 +48,8 @@
       "required": ["path", "dir", "basename"],
       "properties": {
         "path": { "type": "string", "minLength": 1, "description": "The path given on the command line, resolved to absolute." },
-        "dir": { "type": "string", "minLength": 1, "description": "Where it lands (or, under --dry-run, would land): <project>/work/<basename>." },
-        "basename": { "type": "string", "minLength": 1 }
+        "dir": { "type": "string", "minLength": 1, "description": "Where it lands (or, under --dry-run, would land): <project>/work/<name>." },
+        "basename": { "type": "string", "minLength": 1, "description": "The folder name under work/ — the project's name, not the source's." }
       }
     },
     "mode": {

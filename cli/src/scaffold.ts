@@ -3,21 +3,35 @@
  *
  * `new` writes these once and never touches them again: they are the user's
  * files from that moment on, unlike the compose file, which is regenerated.
- * That asymmetry is deliberate — a seed you cannot edit is a nuisance, and a
- * derived file you can edit is a lie.
+ * The one exception is `env.md`, which `bardolier env --write` refreshes on
+ * request.
  *
- * There is exactly one seed, and it goes into `work/`. There is
- * no repo root to seed: bardolier's files live above `work/`, outside every
- * working tree, so there is nothing for a `.gitignore` to hide and nothing a
- * build context has ever been taken from (`deps.ts` builds from a generated
- * context under the config dir).
+ * They live in `work/<name>/` so other repositories can be cloned into `work/`
+ * beside the project without clashing. Nothing here names bardolier except one
+ * footer line: the environment must be reproducible without the tool.
  */
 
 import type { Archetype } from './model/archetype.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
+import type { CatalogueService } from './model/catalogue.ts'
+import type { ProjectManifest } from './model/project.ts'
+import { interpolate } from './compose.ts'
+import { BardolierError } from './errors.ts'
+import { imageToolchain } from './images.ts'
 import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, WORK_DIR } from './layout.ts'
 
-/** The archetype-specific boundary note §10 requires. */
+export const REPOSITORY_URL = 'https://github.com/mark2802/bardolier'
+
+/** Whether `text` is an `env.md` bardolier rendered, as opposed to a repo's own file of that name. */
+export function isRenderedEnvMd(text: string): boolean {
+  return text.startsWith('# Environment — ') && text.includes(`Created with Bardolier — ${REPOSITORY_URL}`)
+}
+
+/** Docs live under the project folder: `work/<name>/docs/`. */
+export const DOCS_DIR = 'docs'
+export const ENV_DOC = 'env.md'
+
+/** The archetype-specific boundary note (§10). */
 const BOUNDARY: Readonly<Record<Archetype, string>> = {
   web: [
     'Everything builds and runs **in the container**. There is no host-side build',
@@ -45,104 +59,184 @@ const BOUNDARY: Readonly<Record<Archetype, string>> = {
   ].join('\n'),
 }
 
-/**
- * The dev-server note, for the archetypes that publish one (§9).
- *
- * The 0.0.0.0 sentence is the whole reason this section exists. A dev server
- * that defaults to `localhost` binds the CONTAINER's loopback, which nothing on
- * the Mac can reach — the port is published, the browser gets nothing, and the
- * obvious conclusion ("the port mapping is broken") is the wrong one.
- */
-function devServerNote(archetype: Archetype): string {
-  const port = ARCHETYPE_APP_PORT[archetype]
-  if (port === undefined) return ''
-  return `
-## The dev server
+const BASE_OS: Readonly<Record<string, string>> = {
+  'bardolier-web': 'Debian 12 (bookworm-slim) on the official `node` image',
+  'bardolier-ios': 'Ubuntu 24.04 (noble) on the official `swift` image',
+  'bardolier-and': 'Ubuntu 24.04 (noble) on the official `eclipse-temurin` JDK image (linux/amd64)',
+}
 
-This project publishes one port to the Mac: the dev server, on **${port}**
-inside the container. \`$PORT\` is set to it, and the host port it is published
-on may differ — run \`bardolier status\` on the host for the URL to open.
+const TOOL_LABEL: Readonly<Record<string, string>> = {
+  NODE_VERSION: 'Node.js',
+  UV_VERSION: 'uv (manages Python installs; no system Python)',
+  SWIFT_VERSION: 'Swift',
+  SWIFTLINT_VERSION: 'SwiftLint',
+  JAVA_VERSION: 'JDK',
+  GRADLE_VERSION: 'Gradle',
+  ANDROID_PLATFORM: 'Android platform',
+  ANDROID_BUILD_TOOLS: 'Android build-tools',
+}
 
-**Bind to \`0.0.0.0\`, not \`localhost\`.** A server bound to localhost listens on
-the container's own loopback, which no browser on the Mac can reach; the port
-mapping will look broken when it is not. Most frameworks take \`--host 0.0.0.0\`
-or an equivalent setting.
+export function claudeMd(name: string): string {
+  return `# ${name}
 
-This is the ONLY port this container publishes. Services are the other way
-round — you reach them by name over the network, as below.
+Read these only when a task needs them:
 
-Running a second process in here too (e.g. a Python API on \`localhost\`)?
-Don't publish a second port — have the dev server's own proxy config forward
-to it, the same way a browser only ever talks to the one port above.
+- \`docs/product.md\` — what this project is meant to build: purpose, users, scope and
+  constraints. Read before planning features or making product decisions.
+- \`docs/dev-principles.md\` — how code is written and changed here. Read before
+  writing or changing code.
+- \`docs/env.md\` — the development environment: toolchain, services and how to reach
+  them, filesystem, and what cannot run here. Read before building, running or
+  testing, before connecting to a service, or when something environmental fails.
 `
 }
 
-export function projectClaudeMd(name: string, archetype: Archetype): string {
-  return `# CLAUDE.md — ${name}
+export function productMd(name: string): string {
+  return `# ${name} — product
 
-Seeded by \`bardolier new\` for the \`${archetype}\` archetype. Edit freely; bardolier
-will not rewrite this file.
+_Placeholder. Describe what this project is intended to build._
 
-## Where you are
+## Purpose
 
-You are running **inside this project's dev container**, working in
-\`${CONTAINER_WORK}\` — the project's \`${WORK_DIR}/\` folder, bind-mounted and owned by the
-host user, so files you create are editable on the Mac without a chown. Clone
-or \`git init\` repositories here; this is the only part of the project a
-repository ever contains.
+## Users
 
-Two more folders are mounted beside it:
+## Scope
 
-- \`${CONTAINER_DATA}\` — the services' data directories, **read-only**. Look, don't write:
-  a live database written to from a second container corrupts.
-- \`${CONTAINER_LOCAL}\` — scratch space that is neither repository nor service data.
+### In
 
-\`project.yml\` and \`docker-compose.yml\` are above all of these and deliberately
-not visible from in here.
+### Out
 
-## Environment boundary
-
-${BOUNDARY[archetype]}
-${devServerNote(archetype)}
-## Services
-
-Backing services (Postgres, Redis, …) run as sibling containers on this
-project's Docker network. **Connect to them by service name over that network**
-— \`postgres:5432\`, \`redis:6379\` — exactly as production would. Each service
-also publishes a port on the Mac, but that port is a **debugging tap** for host
-GUI tools only. Never wire application code to \`localhost:<port>\`; it would
-make dev diverge from prod and would break the moment the port changed.
-
-Run \`bardolier status ${name}\` on the host to see what is attached and where.
-
-## Managing this project
-
-The lifecycle is driven from the **host**, not from in here:
-
-    bardolier status ${name}
-    bardolier service add ${name} postgres
-    bardolier up ${name}
-    bardolier down ${name}
-
-Nothing in this container should invoke \`bardolier\` or \`docker\`.
-\`docker-compose.yml\` is **generated** from \`project.yml\` and is overwritten on
-every regeneration — never hand-edit it. Neither file is reachable from in here
-anyway.
+## Constraints
 `
+}
+
+export function devPrinciplesMd(): string {
+  return `# Development principles
+
+## Working rules
+
+- Treat project documentation as authoritative; if docs and code disagree, say so.
+- If instructions conflict, ask before proceeding.
+- For non-trivial changes, propose a plan before writing code.
+- Keep changes scoped to the task; no unrelated edits or reformatting.
+- Don't add a dependency without saying why.
+- Never commit secrets; configuration comes from the environment.
+- Typecheck and lint after code changes, where the language has them.
+
+## APIs
+
+- API-first: for HTTP APIs, write the OpenAPI spec — fully typed, with examples —
+  before the implementation.
+- Schema changes go through versioned migrations.
+
+## Testing
+
+- Run the narrowest test that covers the change; run the full suite before calling
+  work done.
+- Mock only interfaces you own; wrap third-party APIs in an adapter.
+- Don't overfit to tests.
+- No real clock, randomness or environment reads in domain logic — inject them.
+
+## Design
+
+- Design for testability first.
+- Separate domain logic from infrastructure (I/O, persistence, notifications).
+- Small modules, single responsibility. Composition over inheritance.
+- Depend on abstractions; inject dependencies explicitly. No global state or hidden
+  dependencies.
+- Interfaces minimal and intention-revealing; names reflect behaviour, not
+  implementation.
+- Fail fast with clear errors. Optimise for readability.
+- Delete unused code aggressively; refactor continuously.
+`
+}
+
+/** A service the project has attached, resolved against the catalogue. */
+export type EnvService = { readonly key: string; readonly definition: CatalogueService }
+
+/**
+ * `docs/env.md`: deterministic for a manifest + catalogue + bundled image, and
+ * free of host ports (machine-specific; a clone allocates its own).
+ */
+export function envMd(manifest: ProjectManifest, services: readonly EnvService[], folder = manifest.work_folder): string {
+  const { name, archetype } = manifest
+  const toolchain = Object.entries(imageToolchain(manifest.base_image)).map(
+    ([arg, version]) => `- ${TOOL_LABEL[arg] ?? arg}: ${version}`,
+  )
+  const extras = manifest.extra_packages ?? []
+  const appPort = ARCHETYPE_APP_PORT[archetype]
+  const extraPorts = Object.entries(manifest.extra_ports ?? {}).sort(([a], [b]) => a.localeCompare(b))
+
+  const out: string[] = [`# Environment — ${name}`, '']
+  out.push(
+    'Development runs in a Linux container as a non-root user with the host user’s uid,',
+    `on ${BASE_OS[manifest.base_image] ?? manifest.base_image}. The agent (Claude Code), git, ripgrep, jq and curl are installed.`,
+    '',
+    '## Toolchain',
+    '',
+    ...toolchain,
+    ...(extras.length > 0 ? [`- Extra apt packages: ${extras.join(', ')}`] : []),
+    '',
+    '## Filesystem',
+    '',
+    `- \`${CONTAINER_WORK}\` — repositories. ${folder === undefined ? 'The project is rooted here' : `This project is \`${CONTAINER_WORK}/${folder}\``}; other repos can sit beside it.`,
+    `- \`${CONTAINER_DATA}\` — service data, **read-only**. Look, don't write: a live database written from a second container corrupts.`,
+    `- \`${CONTAINER_LOCAL}\` — scratch space that is neither repository nor service data.`,
+    '- `$HOME` persists across restarts; the container itself does not.',
+    '',
+  )
+
+  out.push(
+    '## Services',
+    '',
+    'Backing services run as sibling containers on one Docker network. **Connect by name**,',
+    'exactly as production would. Any port a service publishes on the host is a debugging',
+    'tap for GUI tools only — never wire application code to `localhost:<port>`.',
+    '',
+  )
+  if (services.length > 0) {
+    out.push('| Service | Image | Address in the network | Environment |', '| --- | --- | --- | --- |')
+    for (const { key, definition } of [...services].sort((a, b) => a.key.localeCompare(b.key))) {
+      const env = Object.entries(definition.env ?? {})
+        .map(([k, v]) => `\`${k}=${interpolate(v, name)}\``)
+        .join(' ')
+      out.push(`| ${definition.display} | \`${definition.image}\` | \`${key}:${definition.container_port}\` | ${env} |`)
+    }
+  } else {
+    out.push('None attached.')
+  }
+  out.push('')
+
+  if (appPort !== undefined || extraPorts.length > 0) {
+    out.push('## Ports published to the host', '')
+    if (appPort !== undefined) {
+      out.push(
+        `- Dev server: **${appPort}** inside the container; \`$PORT\` is set to it. **Bind to \`0.0.0.0\`, not \`localhost\`** — a server on the container’s own loopback is unreachable from the host and looks like a broken port mapping. Frameworks such as Next.js are project dependencies, not part of the image. A second process in the container (e.g. a Python API) is reached through the dev server’s proxy, not a second published port.`,
+      )
+    }
+    for (const [portName, port] of extraPorts) out.push(`- \`${portName}\`: ${port.container_port} inside the container.`)
+    out.push('')
+  }
+
+  out.push('## Boundary', '', BOUNDARY[archetype], '', '---', '', `Created with Bardolier — ${REPOSITORY_URL}`, '')
+  return out.join('\n')
 }
 
 export type SeededFile = {
+  /** Relative to the project directory. */
   readonly name: string
   readonly contents: string
 }
 
-/**
- * The §10 seed set — one file, in `work/`.
- *
- * `work/CLAUDE.md` rather than the project root: the agent's working directory
- * is `work/`, so that is where it looks, and a repository cloned in beside it
- * never contains the file.
- */
-export function seededFiles(name: string, archetype: Archetype): SeededFile[] {
-  return [{ name: `${WORK_DIR}/CLAUDE.md`, contents: projectClaudeMd(name, archetype) }]
+/** The §10 seed set — four files under `work/<work_folder>/`. */
+export function seededFiles(manifest: ProjectManifest, services: readonly EnvService[]): SeededFile[] {
+  const folder = manifest.work_folder
+  if (folder === undefined) throw new BardolierError('INTERNAL_ERROR', `Seeding \`${manifest.name}\` without a work_folder.`)
+  const base = `${WORK_DIR}/${folder}`
+  return [
+    { name: `${base}/CLAUDE.md`, contents: claudeMd(manifest.name) },
+    { name: `${base}/${DOCS_DIR}/${ENV_DOC}`, contents: envMd(manifest, services, folder) },
+    { name: `${base}/${DOCS_DIR}/product.md`, contents: productMd(manifest.name) },
+    { name: `${base}/${DOCS_DIR}/dev-principles.md`, contents: devPrinciplesMd() },
+  ]
 }

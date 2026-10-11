@@ -66,11 +66,11 @@ describe('new (cli-spec.md §6, §10)', () => {
     const result = await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
 
     assert.ok(validate('new', result).valid, 'new output must match new.schema.json')
-    assert.deepEqual(result.seeded, ['work/CLAUDE.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
     assert.equal(result.project.base_image, 'bardolier-web')
     assert.equal(result.project.created, FIXED_NOW.toISOString())
 
-    for (const file of ['project.yml', 'docker-compose.yml', 'work/CLAUDE.md']) {
+    for (const file of ['project.yml', 'docker-compose.yml', 'work/myapp/CLAUDE.md', 'work/myapp/docs/env.md']) {
       assert.ok(box.exists('myapp', file), `new did not write ${file}`)
     }
     // The four bind sources, and nothing scattered around them: no repo root
@@ -163,15 +163,22 @@ describe('new (cli-spec.md §6, §10)', () => {
       ios: 'xcodebuild',
       android: 'emulator is host-side',
     }
+    const postgres = { key: 'postgres', definition: { display: 'PostgreSQL', image: 'postgres:17', container_port: 5432, host_port_base: 5432, mount: '/x', env: { POSTGRES_DB: '{project}' } } }
     for (const archetype of ARCHETYPES) {
-      const files = seededFiles('myapp', archetype)
-      assert.deepEqual(files.map((f) => f.name), ['work/CLAUDE.md'], `${archetype} seeds more than the one file`)
+      const files = seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), [postgres])
+      assert.deepEqual(files.map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'], `${archetype} seeds the wrong set`)
       const claudeMd = files[0]?.contents ?? ''
-      assert.ok(claudeMd.includes(boundaries[archetype]), `${archetype} CLAUDE.md lacks its boundary note`)
-      // Never localhost: the app talks to services by name over the network (§5).
-      assert.ok(claudeMd.includes('postgres:5432'))
-      // It says where it is, because `work/` is only part of the project.
-      assert.ok(claudeMd.includes('/data'), `${archetype} CLAUDE.md does not describe the layout`)
+      for (const doc of ['docs/env.md', 'docs/product.md', 'docs/dev-principles.md']) assert.ok(claudeMd.includes(doc))
+      assert.ok(!claudeMd.includes('bardolier'), 'CLAUDE.md stays minimal and tool-free')
+
+      const env = files[1]?.contents ?? ''
+      assert.ok(env.includes(boundaries[archetype]), `${archetype} env.md lacks its boundary note`)
+      // Never localhost: services are reached by name over the network (§5).
+      assert.ok(env.includes('`postgres:5432`') && env.includes('POSTGRES_DB=myapp'))
+      assert.ok(env.includes('/data'), `${archetype} env.md does not describe the layout`)
+      // Reproducible without the tool: no host ports, no bardolier commands; one footer.
+      assert.ok(!/bardolier (status|up|down|service|shell)/.test(env))
+      assert.equal(env.split('\n').filter((line) => /bardolier/i.test(line)).length, 1, 'only the footer names the tool')
     }
   })
 })
@@ -236,7 +243,7 @@ describe('clone (cli-spec.md §6)', () => {
     assert.ok(compose.includes('bardolier-twin'), 'compose still names the source')
 
     assert.equal(box.read('source', 'project.yml'), before, 'clone modified the source manifest')
-    assert.deepEqual(result.seeded, ['work/CLAUDE.md'])
+    assert.deepEqual(result.seeded, ['work/twin/CLAUDE.md', 'work/twin/docs/env.md', 'work/twin/docs/product.md', 'work/twin/docs/dev-principles.md'])
   })
 
   test('--with-content copies all four folders of §3, home/ included', async () => {
@@ -260,15 +267,58 @@ describe('clone (cli-spec.md §6)', () => {
     assert.equal(box.read('twin', 'home', '.zsh_history'), 'secrets')
   })
 
-  test('a seed the copy brought is left alone; one it did not is re-seeded', async () => {
+  test('--with-content keeps work/<source>/ as is; a rendered env.md is re-rendered even after the source drifted', async () => {
+    const box = sandbox()
+    const source = await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+    assert.ok(source.seeded.length > 0)
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.ok(!existsSync(box.path('twin', 'work', 'twin')), 'a folder the source never had')
+    assert.ok(existsSync(box.path('twin', 'work', 'source', 'CLAUDE.md')))
+    assert.deepEqual(result.seeded, ['work/source/docs/env.md'])
+    const env = box.read('twin', 'work', 'source', 'docs', 'env.md') ?? ''
+    assert.ok(env.includes('# Environment — twin') && env.includes('/work/source'), env)
+
+    const drifted = box.path('source', 'work', 'source', 'docs', 'env.md')
+    writeFileSync(drifted, `${readFileSync(drifted, 'utf8')}\nMy notes.\n`)
+    const second = await runClone(makeContext(box), { source: 'source', name: 'twin2', withContent: true })
+    assert.deepEqual(second.seeded, ['work/source/docs/env.md'])
+    assert.ok((box.read('twin2', 'work', 'source', 'docs', 'env.md') ?? '').includes('# Environment — twin2'))
+  })
+
+  test('--with-content of a source with no work_folder seeds nothing and records none', async () => {
     const box = sandbox()
     box.writeProject('source', richSource())
-    mkdirSync(box.path('source', 'work'), { recursive: true })
-    writeFileSync(box.path('source', 'work', 'CLAUDE.md'), '# hand-edited')
+    mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
     assert.deepEqual(result.seeded, [])
-    assert.equal(box.read('twin', 'work', 'CLAUDE.md'), '# hand-edited')
+    assert.equal(box.read('twin', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
+    assert.ok(!existsSync(box.path('twin', 'work', 'twin')))
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, undefined)
+  })
+
+  test('--with-content keeps the source’s work_folder; a repo already named like the clone is left alone', async () => {
+    const box = sandbox()
+    await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+    mkdirSync(box.path('source', 'work', 'twin'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'twin', 'CLAUDE.md'), '# another repo')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, 'source')
+    assert.equal(box.read('twin', 'work', 'twin', 'CLAUDE.md'), '# another repo')
+    assert.deepEqual(result.seeded, ['work/source/docs/env.md'])
+  })
+
+  test('a shape clone records and seeds its own work_folder', async () => {
+    const box = sandbox()
+    await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: false })
+    assert.equal(requireProject(makeContext(box), 'twin').manifest.work_folder, 'twin')
+    assert.ok(result.seeded.includes('work/twin/CLAUDE.md'))
+    assert.ok(!existsSync(box.path('twin', 'work', 'source')))
   })
 
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {
@@ -1078,7 +1128,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
     seedServiceData(box, 'alpha', 'postgres', 20971520)
 
     const shell = await runShell(ctx, 'alpha')
-    assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(shell.exec, ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
 
     const status = await collectStatus(ctx, 'alpha')
     assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)

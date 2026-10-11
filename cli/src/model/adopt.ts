@@ -35,8 +35,9 @@ export type AdoptProject = {
 export type AdoptSource = {
   /** The path given on the command line, resolved to absolute. */
   path: string
-  /** Where it lands (or would land): `<project>/work/<basename>`. */
+  /** Where it lands (or would land): `<project>/work/<name>`. */
   dir: string
+  /** The folder name under `work/` — the project's name, not the source's. */
   basename: string
 }
 
@@ -47,6 +48,8 @@ export type AdoptOutput = {
   compose_path?: string
   /** File names seeded per §10. Absent under --dry-run. */
   seeded?: string[]
+  /** Seed paths the source already had, left untouched (§10). Absent when none. */
+  seeds_skipped?: string[]
   /** Catalogue keys requested by --services, whether or not yet attached. */
   requested_services: string[]
   /** Attached services with their allocated ports. Empty under --dry-run — see header. */

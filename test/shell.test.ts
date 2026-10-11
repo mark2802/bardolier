@@ -4,15 +4,26 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { cpSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { runNew } from '../cli/src/commands/new.ts'
 import { runShell } from '../cli/src/commands/shell.ts'
+import { requireProject, writeManifest } from '../cli/src/workspace.ts'
+import type { Context } from '../cli/src/context.ts'
 import { makeContext, project, sandboxes, stubDocker } from './helpers.ts'
 
 const sandbox = sandboxes()
+
+/** Record (or clear) `work_folder` the way a hand edit of project.yml would. */
+function setWorkFolder(ctx: Context, name: string, folder: string | undefined): void {
+  const { manifest, dir } = requireProject(ctx, name)
+  if (folder === undefined) delete manifest.work_folder
+  else manifest.work_folder = folder
+  writeManifest(ctx, dir, manifest)
+}
 
 // ── shell (§6, Shell) ─────────────────────────────────────────────────────────
 describe('shell (cli-spec.md §6, Shell)', () => {
@@ -26,10 +37,43 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     assert.deepEqual(output, {
       project: 'alpha',
       container: 'bardolier-alpha',
-      exec: ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'],
-      workdir: '/work',
+      exec: ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'],
+      workdir: '/work/alpha',
     })
     assert.ok(validate('shell', output).valid)
+  })
+
+  test('a project with no work_folder opens in /work', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    setWorkFolder(ctx, 'alpha', undefined)
+
+    const output = await runShell(ctx, 'alpha')
+    assert.deepEqual(output.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+    assert.equal(output.workdir, '/work')
+    assert.ok(validate('shell', output).valid)
+  })
+
+  test('a work_folder whose directory is gone falls back to /work', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    rmSync(box.path('alpha', 'work', 'alpha'), { recursive: true })
+
+    assert.equal((await runShell(ctx, 'alpha')).workdir, '/work')
+  })
+
+  test('the recorded work_folder is the workdir, whatever else sits in work/', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    renameSync(box.path('alpha', 'work', 'alpha'), box.path('alpha', 'work', 'origin'))
+    cpSync(box.path('alpha', 'work', 'origin'), box.path('alpha', 'work', 'other'), { recursive: true })
+    writeFileSync(box.path('alpha', 'work', 'CLAUDE.md'), '# not a signal any more')
+    setWorkFolder(ctx, 'alpha', 'origin')
+
+    assert.equal((await runShell(ctx, 'alpha')).workdir, '/work/origin')
   })
 
   test('--root swaps to `docker exec -u root`, same container, same checks (phase 14)', async () => {
@@ -39,7 +83,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha', { root: true })
-    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
     assert.ok(validate('shell', output).valid)
   })
 

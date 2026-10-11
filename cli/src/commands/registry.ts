@@ -31,6 +31,7 @@ import { renderUp, runUp } from './up.ts'
 import { renderDown, runDown } from './down.ts'
 import { renderDelete, runDelete } from './delete.ts'
 import { renderBuild, runBuild } from './build.ts'
+import { renderEnv, runEnv } from './env.ts'
 import { renderShell, renderShellPrint, runShell } from './shell.ts'
 import {
   collectOrphanedVolumes,
@@ -174,7 +175,7 @@ export const COMMANDS: readonly CommandNode[] = [
     path: ['new'],
     group: 'Projects',
     usage: 'new <name> --archetype <a> [--services a,b] [--root <name>]',
-    summary: 'Create a project: dir, manifest, compose, work/ data/ local/ home/, work/CLAUDE.md.',
+    summary: 'Create a project: dir, manifest, compose, work/ data/ local/ home/, seeds in work/<name>/.',
     flags: [
       { name: '--archetype', arg: '<a>', description: 'web | ios | android | library. Required.' },
       { name: '--services', arg: '<a,b>', description: 'Catalogue keys to attach immediately; ports assigned now.' },
@@ -554,6 +555,19 @@ export const COMMANDS: readonly CommandNode[] = [
       // the machine contract cannot drift from the flag (§2).
       const result = await runShell(createContext(), name, { root: boolFlag(inv, '--root') })
       return output(result, boolFlag(inv, '--print') ? renderShellPrint : renderShell)
+    },
+  },
+
+  {
+    path: ['env'],
+    group: 'Projects',
+    usage: 'env <name> [--write]',
+    summary: 'Render the project’s docs/env.md from its manifest; --write refreshes the file.',
+    flags: [{ name: '--write', description: 'Overwrite docs/env.md in the project’s work_folder instead of printing it.' }],
+    errors: ['PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'SERVICE_UNKNOWN', 'INVALID_ARGUMENT'],
+    run: async (inv) => {
+      const [name] = exactArgs(inv, byPath('env'), 1)
+      return output(runEnv(createContext(), name, { write: boolFlag(inv, '--write') }), renderEnv)
     },
   },
 

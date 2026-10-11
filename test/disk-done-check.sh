@@ -94,8 +94,8 @@ if [ "$DOCKER_OK" = "1" ]; then
   [ "$IN_CONTAINER" = "$WORKDIR" ] \
     && ok "running it lands a shell in $WORKDIR — the bind-mounted project dir" || bad "the exec command did not land in $WORKDIR (got '$IN_CONTAINER')"
   # `work/` is mounted, and the manifest above it deliberately is NOT (§3).
-  docker exec "$CONTAINER" bash -lc 'test -f /work/CLAUDE.md' >/dev/null 2>&1 \
-    && ok "and the seeded work/CLAUDE.md is visible from inside it" || bad "work/ is not mounted at /work"
+  docker exec "$CONTAINER" bash -lc 'test -f /work/alpha/CLAUDE.md' >/dev/null 2>&1 \
+    && ok "and the seeded work/alpha/CLAUDE.md is visible from inside it" || bad "work/ is not mounted at /work"
   docker exec "$CONTAINER" bash -lc 'test -e /work/project.yml' >/dev/null 2>&1 \
     && bad "project.yml is reachable from the container" || ok "project.yml is above work/ and invisible from in there"
   docker exec "$CONTAINER" bash -lc 'test -w /data' >/dev/null 2>&1 \

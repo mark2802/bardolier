@@ -83,11 +83,11 @@ else
   bad "the ios project's compose file does not use bardolier-ios"
 fi
 
-CLAUDE_MD="$IOS_DIR/work/CLAUDE.md"
+CLAUDE_MD="$IOS_DIR/work/swiftbits/docs/env.md"
 if grep -q "xcodebuild" "$CLAUDE_MD" && grep -qi "never run" "$CLAUDE_MD" && grep -q "swiftlint" "$CLAUDE_MD"; then
-  ok "its seeded CLAUDE.md forbids xcodebuild/Simulator/signing and points at what does work here"
+  ok "its seeded env.md forbids xcodebuild/Simulator/signing and points at what does work here"
 else
-  bad "the ios CLAUDE.md does not steer the agent away from host-only build steps (§10)"
+  bad "the ios env.md does not steer the agent away from host-only build steps (§10)"
 fi
 
 if $BARDOLIER up swiftbits --no-shell >/dev/null 2>&1; then
@@ -190,10 +190,10 @@ else
   bad "the android compose file does not mount bardolier-gradle-cache as an external volume"
 fi
 
-if grep -qi "emulator" "$AND_DIR/work/CLAUDE.md" && grep -q "adb" "$AND_DIR/work/CLAUDE.md"; then
-  ok "its seeded CLAUDE.md keeps the emulator and adb on the host side (§10)"
+if grep -qi "emulator" "$AND_DIR/work/droid/docs/env.md" && grep -q "adb" "$AND_DIR/work/droid/docs/env.md"; then
+  ok "its seeded env.md keeps the emulator and adb on the host side (§10)"
 else
-  bad "the android CLAUDE.md does not name the host-side boundary"
+  bad "the android env.md does not name the host-side boundary"
 fi
 
 # A minimal but real Android application module: resources compiled by aapt2,
@@ -393,10 +393,10 @@ else
   bad "the web project's compose file does not mount bardolier-uv-cache as an external volume"
 fi
 
-if grep -qi "proxy" "$DIR/work/CLAUDE.md"; then
-  ok "its seeded CLAUDE.md says how a second process is reached (proxy, not a second port)"
+if grep -qi "proxy" "$DIR/work/pybits/docs/env.md"; then
+  ok "its seeded env.md says how a second process is reached (proxy, not a second port)"
 else
-  bad "the seeded CLAUDE.md is missing the proxy-not-a-second-port note"
+  bad "the seeded env.md is missing the proxy-not-a-second-port note"
 fi
 
 if $BARDOLIER up pybits --no-shell >/dev/null 2>&1; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The project layout: four folders, one seed, no ignore file; `/data` read-only;
+# The project layout: four folders, four seeds, no ignore file; `/data` read-only;
 # nothing bardolier writes inside a working tree; and what `delete` refuses.
 #
 #   bash test/layout-done-check.sh
@@ -13,19 +13,19 @@ sandbox
 track bardolier-myapp bardolier-myapp-postgres
 track_volume bardolier-myapp-home
 
-# ── 1. new: four folders, one seed, no ignore file ────────────────────────────
+# ── 1. new: four folders, four seeds, no ignore file ────────────────────────────
 head "1. \`new\` makes four folders, one seed, and no ignore file (§3, §10)"
 
 NEW="$($BARDOLIER new alpha --archetype web --services postgres --json)" || bad "new exited non-zero"
-json_assert "$NEW" 'd.seeded.length === 1 && d.seeded[0] === "work/CLAUDE.md"' \
-  && ok "the one seed is work/CLAUDE.md" || bad "new seeded something other than work/CLAUDE.md"
+json_assert "$NEW" 'd.seeded.length === 4 && d.seeded[0] === "work/alpha/CLAUDE.md" && d.seeded.includes("work/alpha/docs/env.md")' \
+  && ok "the seeds are work/alpha/CLAUDE.md and docs/{env,product,dev-principles}.md" || bad "new seeded something other than the four seeds"
 
 ENTRIES="$(cd "$MOUNTED/alpha" && ls -A | sort | tr '\n' ' ')"
 [ "$ENTRIES" = "data docker-compose.yml home local project.yml work " ] \
   && ok "the project directory holds exactly the four folders and bardolier's two files" \
   || bad "unexpected project directory contents: $ENTRIES"
 
-[ -f "$MOUNTED/alpha/work/CLAUDE.md" ] && ok "work/CLAUDE.md is where the agent's cwd will find it" || bad "no work/CLAUDE.md"
+[ -f "$MOUNTED/alpha/work/alpha/CLAUDE.md" ] && ok "work/alpha/CLAUDE.md is seeded beside any repo cloned into work/" || bad "no work/alpha/CLAUDE.md"
 [ -f "$MOUNTED/alpha/data/.metadata_never_index" ] \
   && ok "data/ opts out of Spotlight indexing" || bad "data/.metadata_never_index is missing"
 [ -d "$MOUNTED/alpha/data/postgres" ] \
@@ -102,7 +102,7 @@ else
     && ok "postgres initialised into data/postgres/ — visible from the host, on the project's own disk" \
     || bad "no PG_VERSION on the host: the data did not reach the disk the project is on"
 
-  docker exec bardolier-alpha bash -lc 'test -f /work/CLAUDE.md' >/dev/null 2>&1 \
+  docker exec bardolier-alpha bash -lc 'test -f /work/alpha/CLAUDE.md' >/dev/null 2>&1 \
     && ok "the dev container works in work/" || bad "work/ is not mounted at /work"
   docker exec bardolier-alpha bash -lc 'test -e /work/project.yml' >/dev/null 2>&1 \
     && bad "project.yml is reachable from the dev container" || ok "project.yml is above work/ and invisible from in there"
