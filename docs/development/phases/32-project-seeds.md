@@ -12,10 +12,10 @@ environment is described without depending on bardolier.
 - `new`/`clone` use the new seed set (`clone` writes a seed only where the copy
   brought none).
 - `Docker.exec` gains `workdir`; the handoff runs `claude --continue` in
-  `/work/<name>` when that directory exists (§12).
+  `/work/<name>` when its `CLAUDE.md` exists (§12); `shell` opens there too.
 - `cli-spec.md` §3, §6, §10, §12.
 
-**Non-goals:** no change to compose or the manifest — shells still open in `/work`; old
+**Non-goals:** no change to compose or the manifest ; old
 projects' `work/CLAUDE.md` is left alone; no `git init`.
 
 **Done-check:** `test/lifecycle.test.ts` (seed set, `env.md` has services and no host

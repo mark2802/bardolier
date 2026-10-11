@@ -272,7 +272,7 @@ describe('clone (cli-spec.md §6)', () => {
     box.writeProject('source', richSource())
     mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
     writeFileSync(box.path('source', 'work', 'source', 'CLAUDE.md'), '# hand-edited')
-    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'names source')
+    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), '# Environment — source\n\nCreated with Bardolier — https://github.com/mark2802/bardolier\n')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
     assert.ok(!existsSync(box.path('twin', 'work', 'source')), 'the source-named folder survived')
@@ -281,6 +281,20 @@ describe('clone (cli-spec.md §6)', () => {
     assert.ok(result.seeded.includes('work/twin/docs/env.md'))
     assert.ok(result.seeded.includes('work/twin/docs/product.md'))
     assert.ok((box.read('twin', 'work', 'twin', 'docs', 'env.md') ?? '').includes('# Environment — twin'))
+  })
+
+  test('--with-content keeps a repo’s own docs/env.md and refuses a clash with an existing work/<name>', async () => {
+    const box = sandbox()
+    box.writeProject('source', richSource())
+    mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
+
+    const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.equal(box.read('twin', 'work', 'twin', 'docs', 'env.md'), 'DATABASE_URL=...')
+    assert.ok(!result.seeded.includes('work/twin/docs/env.md'))
+
+    mkdirSync(box.path('source', 'work', 'other'), { recursive: true })
+    await assert.rejects(runClone(makeContext(box), { source: 'source', name: 'other', withContent: true }), { code: 'INVALID_ARGUMENT' })
   })
 
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {

@@ -325,8 +325,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 - `bardolier env <name> [--write]` — render `docs/env.md` (§10) from the manifest
   and the bundled image. Prints by default; `--write` overwrites
   `work/<name>/docs/env.md` (creating `docs/`), skipping a write whose bytes
-  already match, and reports `changed`. Errors: `PROJECT_NOT_FOUND`,
-  `PROJECT_AMBIGUOUS`, `SERVICE_UNKNOWN`.
+  already match, and reports `changed`. It refuses (`INVALID_ARGUMENT`) a file it did
+  not render, e.g. a repo's own `docs/env.md`. Errors: `PROJECT_NOT_FOUND`,
+  `PROJECT_AMBIGUOUS`, `SERVICE_UNKNOWN`, `INVALID_ARGUMENT`.
 - `bardolier list` — array of projects with archetype + running state + root
 
 - `bardolier status [<name>]` — full status object(s) (see §7). No arg = all.
@@ -378,7 +379,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Shell
 - `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
   dev container and returns the exec invocation: `{ "container": "...", "exec":
-  ["docker","exec","-it","<c>","bash"] }`. The **app** spawns the terminal; the
+  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<name>` after `exec` when
+  `work/<name>/CLAUDE.md` exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
   `--root` swaps in `["docker","exec","-u","root","-it","<c>","bash"]` — same
@@ -717,7 +719,8 @@ beside the project without clashing. `shell` opens in
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` and `clone --with-content` write a seed only where the copy has
 no file at that path. `clone --with-content` renames the copied `work/<source>/` to
-`work/<name>/` and re-renders its `env.md`, which names the source.
+`work/<name>/` (`INVALID_ARGUMENT` if the source already has one) and re-renders its
+`env.md`, which names the source, unless that file is not bardolier's.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's files sit above `work/`, inside no working tree — and nothing takes
@@ -750,7 +753,7 @@ true and still reachable, so the note is written there, into
   working tree is reported — branch, recent commits, what is uncommitted — and a
   project with none says so. And the agent's own account, via
   `claude --print --continue` run INSIDE the dev container (in `/work/<name>` when
-  that seeded directory exists, else `/work`), the half that knows
+  that directory's seeded `CLAUDE.md` exists, else `/work`), the half that knows
   what was being
   *attempted*; no git archaeology recovers that.
 - **Written before `compose down`.** The session lives in the dev container and

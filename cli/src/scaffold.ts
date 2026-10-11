@@ -146,6 +146,11 @@ export function devPrinciplesMd(): string {
 `
 }
 
+/** Whether `text` is an `env.md` bardolier rendered, as opposed to a repo's own file of that name. */
+export function isRenderedEnvMd(text: string): boolean {
+  return text.startsWith('# Environment — ') && text.includes(`Created with Bardolier — ${REPOSITORY_URL}`)
+}
+
 /** A service the project has attached, resolved against the catalogue. */
 export type EnvService = { readonly key: string; readonly definition: CatalogueService }
 

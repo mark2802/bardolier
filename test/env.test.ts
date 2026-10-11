@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 
 import { validate } from '../cli/src/schema.ts'
 import { runNew } from '../cli/src/commands/new.ts'
@@ -43,5 +43,14 @@ describe('env (cli-spec.md §6)', () => {
     rmSync(box.path('myapp', 'work', 'myapp', 'docs'), { recursive: true })
     runEnv(ctx, 'myapp', { write: true })
     assert.ok(box.exists('myapp', 'work', 'myapp', 'docs', 'env.md'))
+  })
+
+  test('--write refuses an env.md bardolier did not write', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
+    writeFileSync(box.path('myapp', 'work', 'myapp', 'docs', 'env.md'), 'DATABASE_URL=...')
+    assert.throws(() => runEnv(ctx, 'myapp', { write: true }), { code: 'INVALID_ARGUMENT' })
+    assert.equal(box.read('myapp', 'work', 'myapp', 'docs', 'env.md'), 'DATABASE_URL=...')
   })
 })

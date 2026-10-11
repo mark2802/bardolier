@@ -10,9 +10,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Context } from '../context.ts'
+import { BardolierError } from '../errors.ts'
 import { WORK_DIR } from '../layout.ts'
 import type { EnvOutput } from '../model/env.ts'
-import { DOCS_DIR, ENV_DOC, envMd } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, envMd, isRenderedEnvMd } from '../scaffold.ts'
 import { requireProject } from '../workspace.ts'
 import { resolveServices } from './service.ts'
 
@@ -23,7 +24,11 @@ export function runEnv(ctx: Context, name: string | undefined, options: { write?
   const content = envMd(manifest, services)
 
   const path = join(dir, WORK_DIR, manifest.name, DOCS_DIR, ENV_DOC)
-  const changed = !existsSync(path) || readFileSync(path, 'utf8') !== content
+  const current = existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  const changed = current !== content
+  if (options.write && current !== undefined && !isRenderedEnvMd(current)) {
+    throw new BardolierError('INVALID_ARGUMENT', `${path} was not written by bardolier; not overwriting it.`)
+  }
   if (options.write && changed) {
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, content)
