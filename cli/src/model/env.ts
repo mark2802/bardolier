@@ -4,8 +4,8 @@
 
 export type EnvOutput = {
   project: string
-  /** Where `docs/env.md` lives (or would live) on the host. */
-  path: string
+  /** Where `docs/env.md` lives (or would live) on the host. Absent without a `work_folder`. */
+  path?: string
   /** The rendered document. */
   content: string
   /** True when `--write` was given. */

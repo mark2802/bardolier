@@ -71,7 +71,6 @@ const TOOL_LABEL: Readonly<Record<string, string>> = {
   SWIFTLINT_VERSION: 'SwiftLint',
   JAVA_VERSION: 'JDK',
   GRADLE_VERSION: 'Gradle',
-  CLAUDE_CODE_VERSION: 'Claude Code',
   ANDROID_PLATFORM: 'Android platform',
   ANDROID_BUILD_TOOLS: 'Android build-tools',
 }

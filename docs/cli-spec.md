@@ -330,7 +330,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   and the bundled image. Prints by default; `--write` overwrites
   `docs/env.md` in the project's `work_folder` (creating `docs/`), skipping a write whose bytes
   already match, and reports `changed`. It refuses (`INVALID_ARGUMENT`) a project with
-  no `work_folder`, and a file it did not render, e.g. a repo's own `docs/env.md`. Errors: `PROJECT_NOT_FOUND`,
+  no `work_folder` (whose output then has no `path`), a `work_folder` missing on disk, and a
+  file it did not render, e.g. a repo's own `docs/env.md`. Errors: `PROJECT_NOT_FOUND`,
   `PROJECT_AMBIGUOUS`, `SERVICE_UNKNOWN`, `INVALID_ARGUMENT`.
 - `bardolier list` — array of projects with archetype + running state + root
 
@@ -716,7 +717,7 @@ are filed under that folder.
   read them only when a task needs them.
 - `docs/env.md` — the environment, in terms that reproduce it **without**
   bardolier: base OS, toolchain versions (read from the bundled Dockerfile's
-  `ARG` pins, so they cannot drift), `extra_packages`, the `/work` `/data` `/local`
+  `ARG` pins, so they cannot drift; not Claude Code's, as builds default to `latest`), `extra_packages`, the `/work` `/data` `/local`
   `$HOME` filesystem, attached services (image, in-network `name:port`, env), the
   published dev-server and extra ports as container ports, and the archetype
   boundary. Never a host port (machine-specific), and bardolier appears only in a

@@ -70,6 +70,17 @@ describe('env (cli-spec.md §6)', () => {
     assert.ok(preview.content.startsWith('# Environment — myapp'))
     assert.ok(!preview.content.includes('/work/myapp'), 'no folder is recorded, so none is named')
     assert.equal(preview.changed, false)
+    assert.equal(preview.path, undefined, 'no folder is recorded, so no path is named')
+    assert.ok(validate('env', preview).valid)
+  })
+
+  test('--write refuses a recorded work_folder that is missing on disk', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
+    rmSync(box.path('myapp', 'work', 'myapp'), { recursive: true })
+    assert.throws(() => runEnv(ctx, 'myapp', { write: true }), { code: 'INVALID_ARGUMENT' })
+    assert.equal(box.exists('myapp', 'work', 'myapp'), false)
   })
 
   test('--write updates the recorded work_folder a clone kept, not a new work/<name>/', async () => {
@@ -81,7 +92,7 @@ describe('env (cli-spec.md §6)', () => {
     writeManifest(ctx, dir, { ...manifest, work_folder: 'origin' })
 
     const out = runEnv(ctx, 'myapp', { write: true })
-    assert.ok(out.path.endsWith('work/origin/docs/env.md'), out.path)
+    assert.ok(out.path?.endsWith('work/origin/docs/env.md'), out.path)
     assert.ok((box.read('myapp', 'work', 'origin', 'docs', 'env.md') ?? '').includes('/work/origin'))
     assert.equal(box.exists('myapp', 'work', 'myapp'), false)
   })

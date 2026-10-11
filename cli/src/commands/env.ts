@@ -26,12 +26,19 @@ export function runEnv(ctx: Context, name: string | undefined, options: { write?
   const content = envMd(manifest, services, folder)
 
   // Without a recorded folder there is nowhere to write, and none is invented (§10).
-  const path = join(dir, WORK_DIR, folder ?? manifest.name, DOCS_DIR, ENV_DOC)
-  const current = folder !== undefined && existsSync(path) ? readFileSync(path, 'utf8') : undefined
-  const changed = folder !== undefined && current !== content
-  if (options.write && folder === undefined) {
-    throw new BardolierError('INVALID_ARGUMENT', `\`${manifest.name}\` has no work_folder in project.yml; add one to use --write.`)
+  if (folder === undefined) {
+    if (options.write) {
+      throw new BardolierError('INVALID_ARGUMENT', `\`${manifest.name}\` has no work_folder in project.yml; add one to use --write.`)
+    }
+    return { project: manifest.name, content, written: false, changed: false }
   }
+  const folderDir = join(dir, WORK_DIR, folder)
+  if (options.write && !existsSync(folderDir)) {
+    throw new BardolierError('INVALID_ARGUMENT', `${folderDir} does not exist; not creating the recorded work_folder.`)
+  }
+  const path = join(folderDir, DOCS_DIR, ENV_DOC)
+  const current = existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  const changed = current !== content
   if (options.write && current !== undefined && !isRenderedEnvMd(current)) {
     throw new BardolierError('INVALID_ARGUMENT', `${path} was not written by bardolier; not overwriting it.`)
   }
