@@ -79,6 +79,21 @@ describe('the handoff note', () => {
     )
   })
 
+  test('asks the agent in work/<name>/ when that seeded directory exists, else in /work', async () => {
+    const box = sandbox()
+    const { docker, ctx } = await stoppedProject(box, { exec: answered('ok') })
+    mkdirSync(join(box.path('myapp'), 'work', 'myapp'), { recursive: true })
+    await runDown(ctx, 'myapp')
+    const call = docker.calls.find((c) => c.kind === 'exec')
+    assert.equal(call?.kind === 'exec' ? call.request.workdir : null, '/work/myapp')
+
+    const legacy = sandbox()
+    const old = await stoppedProject(legacy, { exec: answered('ok') })
+    await runDown(old.ctx, 'myapp')
+    const oldCall = old.docker.calls.find((c) => c.kind === 'exec')
+    assert.equal(oldCall?.kind === 'exec' ? oldCall.request.workdir : null, undefined)
+  })
+
   test('carries the agent’s own summary when it answers', async () => {
     const box = sandbox()
     const { ctx } = await stoppedProject(box, { exec: answered('### Next steps\nFinish the lexer.') })

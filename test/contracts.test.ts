@@ -591,6 +591,7 @@ describe('command surface (cli-spec.md §6)', () => {
     'down',
     'down-all',
     'eject',
+    'env',
     'install',
     'list',
     'move',

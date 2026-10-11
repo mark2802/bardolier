@@ -36,7 +36,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import type { Context } from './context.ts'
 import type { GitFacts } from './git.ts'
-import { entries, workDir, WORK_DIR } from './layout.ts'
+import { CONTAINER_WORK, entries, workDir, WORK_DIR } from './layout.ts'
 import { devContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 
@@ -101,10 +101,11 @@ export function summaryArgv(): string[] {
  * purpose — see the module note. A zero exit with empty output is also null: a
  * heading with nothing under it is worse than no heading.
  */
-async function askAgent(ctx: Context, project: string): Promise<string | null> {
+async function askAgent(ctx: Context, project: string, workdir?: string): Promise<string | null> {
   const result = await ctx.docker.exec({
     container: devContainerName(project),
     argv: summaryArgv(),
+    ...(workdir === undefined ? {} : { workdir }),
     timeoutMs: SUMMARY_TIMEOUT_MS,
   })
   if (result.code !== 0) return null
@@ -224,7 +225,11 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
   const { manifest, dir, devRunning } = request
 
   const repos = await repositories(ctx, dir)
-  const summary = devRunning ? await askAgent(ctx, manifest.name) : null
+  // Sessions are filed by working directory, and a project seeded under
+  // `work/<name>/` is where the agent runs `claude` — ask it there (§12).
+  const projectDir = join(workDir(dir), manifest.name)
+  const workdir = existsSync(projectDir) ? `${CONTAINER_WORK}/${manifest.name}` : undefined
+  const summary = devRunning ? await askAgent(ctx, manifest.name, workdir) : null
 
   const path = handoffPath(dir)
   const existing = existsSync(path)

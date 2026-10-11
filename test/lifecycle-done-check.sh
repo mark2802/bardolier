@@ -20,7 +20,7 @@ head "1. \`new\` creates the project (§6, §10)"
 NEW="$($BARDOLIER new myapp --archetype web --json)" || bad "new exited non-zero"
 schema_assert new "$NEW" && ok "new --json validates against new.schema.json" || bad "new output does not match its schema"
 
-for file in project.yml docker-compose.yml work/CLAUDE.md; do
+for file in project.yml docker-compose.yml work/myapp/CLAUDE.md work/myapp/docs/env.md; do
   [ -f "$MOUNTED/myapp/$file" ] && ok "wrote $file" || bad "MISSING: $file"
 done
 for dir in work data local home; do
@@ -41,10 +41,10 @@ node --input-type=module -e "
 
 grep -q 'DO NOT EDIT' "$MOUNTED/myapp/docker-compose.yml" \
   && ok "the compose file says it is generated (§9)" || bad "compose file has no generated-file warning"
-grep -q 'xcodebuild\|in the container' "$MOUNTED/myapp/work/CLAUDE.md" \
-  && ok "seeded CLAUDE.md carries the archetype boundary note (§10)" || bad "CLAUDE.md has no boundary note"
-grep -q 'postgres:5432' "$MOUNTED/myapp/work/CLAUDE.md" \
-  && ok "seeded CLAUDE.md points at the Docker network, not localhost (§5)" || bad "CLAUDE.md does not steer away from localhost"
+grep -q 'xcodebuild\|in the container' "$MOUNTED/myapp/work/myapp/docs/env.md" \
+  && ok "seeded env.md carries the archetype boundary note (§10)" || bad "env.md has no boundary note"
+grep -q 'localhost:<port>' "$MOUNTED/myapp/work/myapp/docs/env.md" \
+  && ok "seeded env.md steers away from localhost (§5)" || bad "env.md does not steer away from localhost"
 
 # Error paths.
 EXISTS="$($BARDOLIER new myapp --archetype web --json 2>/dev/null || true)"
@@ -439,14 +439,14 @@ schema_assert adopt "$ADOPT" && ok "adopt --json validates against adopt.schema.
 json_assert "$ADOPT" 'd.mode === "copy" && d.services.length === 1 && d.services[0].key === "postgres"' \
   && ok "adopt attached the requested service and reported its port" || bad "adopt did not attach postgres"
 
-[ -f "$MOUNTED/adopted/work/old-project/package.json" ] && ok "the source landed under work/old-project/" || bad "the source did not land under work/"
+[ -f "$MOUNTED/adopted/work/adopted/package.json" ] && ok "the source landed under work/adopted/" || bad "the source did not land under work/"
 [ -f "$SOURCE/package.json" ] && ok "the default (copy) mode left the source in place" || bad "adopt deleted the source without --move"
 
 MOVE_SOURCE="$TMP/old-project-2"
 mkdir -p "$MOVE_SOURCE"
 echo 'x' > "$MOVE_SOURCE/README.md"
 $BARDOLIER adopt "$MOVE_SOURCE" moved-in --archetype library --move --json >/dev/null || bad "adopt --move exited non-zero"
-[ -f "$MOUNTED/moved-in/work/old-project-2/README.md" ] && ok "--move copied the source in" || bad "--move did not copy the source"
+[ -f "$MOUNTED/moved-in/work/moved-in/README.md" ] && ok "--move copied the source in" || bad "--move did not copy the source"
 [ ! -e "$MOVE_SOURCE" ] && ok "--move removed the source once the copy landed" || bad "--move left the source behind"
 
 DUPE="$($BARDOLIER adopt "$SOURCE" adopted --archetype web --json 2>/dev/null || true)"

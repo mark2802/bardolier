@@ -25,8 +25,8 @@
  * nothing about it is written in either case.
  */
 
-import { existsSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { allocateAppPort, allocateExtraPort, allocatePorts } from '../allocator.ts'
@@ -155,8 +155,9 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
 
     // Re-seeded unless the copy brought one: a seed you would overwrite is the
     // user's file by then (§10).
-    for (const file of seededFiles(name, manifest.archetype)) {
+    for (const file of seededFiles(manifest, definitions)) {
       if (existsSync(join(staging, file.name))) continue
+      mkdirSync(dirname(join(staging, file.name)), { recursive: true })
       writeFileSync(join(staging, file.name), file.contents)
       seeded.push(file.name)
     }

@@ -87,6 +87,8 @@ export type ContainerExec = {
   /** argv, run without a shell — no quoting rules to get wrong. */
   readonly argv: readonly string[]
   readonly timeoutMs?: number
+  /** `docker exec -w`; the container's own working directory when absent. */
+  readonly workdir?: string
 }
 
 export type BuildRequest = {
@@ -379,7 +381,7 @@ export function createDocker(runner: DockerRunner = execDocker()): Docker {
 
     exec: (request) =>
       runner(
-        ['exec', request.container, ...request.argv],
+        ['exec', ...(request.workdir === undefined ? [] : ['-w', request.workdir]), request.container, ...request.argv],
         request.timeoutMs === undefined ? undefined : { timeoutMs: request.timeoutMs },
       ),
 

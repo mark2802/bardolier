@@ -8,7 +8,7 @@
  * been added yet (or was deleted) is explained rather than crashing the CLI.
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ARCHETYPES, ARCHETYPE_BASE_IMAGE, BASE_IMAGES } from './model/archetype.ts'
@@ -125,4 +125,20 @@ export function baseImages(root = imagesRoot()): ImageDefinition[] {
       cache: IMAGE_CACHE[image] ?? null,
     }
   })
+}
+
+/**
+ * The pinned tool versions a base image's Dockerfile declares, as `ARG NAME=default`
+ * lines — read, not copied, so `env.md` (`scaffold.ts`) cannot disagree with the
+ * image. Only `*_VERSION` and the Android SDK pins; user/arch args are noise.
+ */
+export function imageToolchain(image: BaseImage, root = imagesRoot()): Record<string, string> {
+  const file = join(root, image, 'Dockerfile')
+  if (!existsSync(file)) return {}
+  const found: Record<string, string> = {}
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const match = /^ARG\s+((?:[A-Z_]+_VERSION)|ANDROID_PLATFORM|ANDROID_BUILD_TOOLS)=(\S+)/.exec(line)
+    if (match) found[match[1]!] = match[2]!
+  }
+  return found
 }
