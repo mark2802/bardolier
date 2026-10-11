@@ -9,10 +9,10 @@ environment is described without depending on bardolier.
   `devPrinciplesMd`; `seededFiles(manifest, services)` returns the four paths.
 - `cli/src/images.ts`: `imageToolchain` reads pinned versions from the bundled
   Dockerfile's `ARG` lines.
-- `new`/`clone` use the new seed set (`clone` writes a seed only where the copy
-  brought none).
+- `new`/`clone` use the new seed set (`clone --with-content` keeps the source's
+  seeded folder name and re-renders only an untouched `env.md`).
 - `Docker.exec` gains `workdir`; the handoff runs `claude --continue` in
-  `/work/<name>` when its `CLAUDE.md` exists and no flat `work/CLAUDE.md` does (§10, §12); `shell` opens there too.
+  the seeded folder (`agentFolder`, `layout.ts`) when no flat `work/CLAUDE.md` does (§10, §12); `shell` opens there too.
 - `cli-spec.md` §3, §6, §10, §12.
 
 **Non-goals:** no change to compose or the manifest ; old

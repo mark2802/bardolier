@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync, writeFileSync } from 'node:fs'
+import { cpSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
@@ -51,6 +51,17 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     await project(ctx, 'alpha')
     writeFileSync(box.path('alpha', 'work', 'CLAUDE.md'), '# flat')
 
+    assert.equal((await runShell(ctx, 'alpha')).workdir, '/work')
+  })
+
+  test('a content clone’s seeds stay in work/<source>/: that folder is the workdir, two of them mean /work', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    renameSync(box.path('alpha', 'work', 'alpha'), box.path('alpha', 'work', 'origin'))
+    assert.equal((await runShell(ctx, 'alpha')).workdir, '/work/origin')
+
+    cpSync(box.path('alpha', 'work', 'origin'), box.path('alpha', 'work', 'other'), { recursive: true })
     assert.equal((await runShell(ctx, 'alpha')).workdir, '/work')
   })
 

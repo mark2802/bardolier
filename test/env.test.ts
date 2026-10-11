@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync, writeFileSync } from 'node:fs'
+import { renameSync, rmSync, writeFileSync } from 'node:fs'
 
 import { validate } from '../cli/src/schema.ts'
 import { runNew } from '../cli/src/commands/new.ts'
@@ -52,5 +52,17 @@ describe('env (cli-spec.md §6)', () => {
     writeFileSync(box.path('myapp', 'work', 'myapp', 'docs', 'env.md'), 'DATABASE_URL=...')
     assert.throws(() => runEnv(ctx, 'myapp', { write: true }), { code: 'INVALID_ARGUMENT' })
     assert.equal(box.read('myapp', 'work', 'myapp', 'docs', 'env.md'), 'DATABASE_URL=...')
+  })
+
+  test('--write updates the seeded folder a clone kept, not a new work/<name>/', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box)
+    await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
+    renameSync(box.path('myapp', 'work', 'myapp'), box.path('myapp', 'work', 'origin'))
+
+    const out = runEnv(ctx, 'myapp', { write: true })
+    assert.ok(out.path.endsWith('work/origin/docs/env.md'), out.path)
+    assert.ok((box.read('myapp', 'work', 'origin', 'docs', 'env.md') ?? '').includes('/work/origin'))
+    assert.equal(box.exists('myapp', 'work', 'myapp'), false)
   })
 })

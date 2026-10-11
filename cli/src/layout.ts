@@ -16,7 +16,7 @@
  * `home/` unwritable by the container's own uid.
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
 
 /** Host-side directory names, relative to the project directory. */
@@ -42,15 +42,47 @@ export const CONTAINER_LOCAL = '/local'
  */
 export const NEVER_INDEX = '.metadata_never_index'
 
+export const REPOSITORY_URL = 'https://github.com/mark2802/bardolier'
+
+/** Whether `text` is an `env.md` bardolier rendered, as opposed to a repo's own file of that name. */
+export function isRenderedEnvMd(text: string): boolean {
+  return text.startsWith('# Environment — ') && text.includes(`Created with Bardolier — ${REPOSITORY_URL}`)
+}
+
+const seededIn = (work: string, folder: string): boolean => {
+  if (!existsSync(join(work, folder, 'CLAUDE.md'))) return false
+  try {
+    return isRenderedEnvMd(readFileSync(join(work, folder, 'docs', 'env.md'), 'utf8'))
+  } catch {
+    return false
+  }
+}
+
 /**
- * Where the agent starts inside the container: `/work/<name>` when the seeded
- * `work/<name>/CLAUDE.md` exists, else `/work`. A flat `work/CLAUDE.md` (a project
- * from before the seeds moved) wins: its sessions are filed under `/work` (§10).
+ * The `work/` folder holding the seeds: `<name>` when it has a `CLAUDE.md`, else the
+ * one folder seeded by bardolier (a `--with-content` clone keeps the source's folder
+ * name, as its sessions and absolute paths are filed under it). Undefined when there
+ * is none, more than one, or a flat `work/CLAUDE.md` (a project from before the seeds
+ * moved) owns `/work` (§10).
  */
-export function agentWorkdir(projectDir: string, name: string): string {
+export function agentFolder(projectDir: string, name: string): string | undefined {
   const work = workDir(projectDir)
-  if (existsSync(join(work, 'CLAUDE.md'))) return CONTAINER_WORK
-  return existsSync(join(work, name, 'CLAUDE.md')) ? `${CONTAINER_WORK}/${name}` : CONTAINER_WORK
+  if (existsSync(join(work, 'CLAUDE.md'))) return undefined
+  if (existsSync(join(work, name, 'CLAUDE.md'))) return name
+  let folders: string[]
+  try {
+    folders = readdirSync(work, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+  } catch {
+    return undefined
+  }
+  const seeded = folders.filter((folder) => seededIn(work, folder))
+  return seeded.length === 1 ? seeded[0] : undefined
+}
+
+/** Where the agent starts inside the container: `/work/<folder>` or `/work`. */
+export function agentWorkdir(projectDir: string, name: string): string {
+  const folder = agentFolder(projectDir, name)
+  return folder === undefined ? CONTAINER_WORK : `${CONTAINER_WORK}/${folder}`
 }
 
 export function workDir(dir: string): string {

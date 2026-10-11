@@ -12,9 +12,9 @@ import { dirname, join } from 'node:path'
 import { attachedKeys } from '../compose.ts'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { WORK_DIR } from '../layout.ts'
+import { WORK_DIR, agentFolder, isRenderedEnvMd } from '../layout.ts'
 import type { EnvOutput } from '../model/env.ts'
-import { DOCS_DIR, ENV_DOC, envMd, isRenderedEnvMd } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, envMd } from '../scaffold.ts'
 import { requireProject } from '../workspace.ts'
 import { resolveServices } from './service.ts'
 
@@ -22,9 +22,10 @@ export function runEnv(ctx: Context, name: string | undefined, options: { write?
   const { manifest, dir } = requireProject(ctx, name)
   const keys = attachedKeys(manifest)
   const services = keys.length > 0 ? resolveServices(ctx.catalogue().catalogue, keys) : []
-  const content = envMd(manifest, services)
+  const folder = agentFolder(dir, manifest.name) ?? manifest.name
+  const content = envMd(manifest, services, folder)
 
-  const path = join(dir, WORK_DIR, manifest.name, DOCS_DIR, ENV_DOC)
+  const path = join(dir, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
   const current = existsSync(path) ? readFileSync(path, 'utf8') : undefined
   const changed = current !== content
   if (options.write && current !== undefined && !isRenderedEnvMd(current)) {

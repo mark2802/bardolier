@@ -267,34 +267,35 @@ describe('clone (cli-spec.md §6)', () => {
     assert.equal(box.read('twin', 'home', '.zsh_history'), 'secrets')
   })
 
-  test('--with-content renames work/<source>/ to work/<name>/; its CLAUDE.md is kept, env.md is re-rendered', async () => {
+  test('--with-content keeps work/<source>/ as is; an untouched env.md is re-rendered, an edited one kept', async () => {
     const box = sandbox()
-    box.writeProject('source', richSource())
-    mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
-    writeFileSync(box.path('source', 'work', 'source', 'CLAUDE.md'), '# hand-edited')
-    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), '# Environment — source\n\nCreated with Bardolier — https://github.com/mark2802/bardolier\n')
+    const source = await runNew(makeContext(box), { name: 'source', archetype: 'web', services: undefined })
+    assert.ok(source.seeded.length > 0)
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
-    assert.ok(!existsSync(box.path('twin', 'work', 'source')), 'the source-named folder survived')
-    assert.equal(box.read('twin', 'work', 'twin', 'CLAUDE.md'), '# hand-edited')
-    assert.ok(!result.seeded.includes('work/twin/CLAUDE.md'))
-    assert.ok(result.seeded.includes('work/twin/docs/env.md'))
-    assert.ok(result.seeded.includes('work/twin/docs/product.md'))
-    assert.ok((box.read('twin', 'work', 'twin', 'docs', 'env.md') ?? '').includes('# Environment — twin'))
+    assert.ok(!existsSync(box.path('twin', 'work', 'twin')), 'a folder the source never had')
+    assert.ok(existsSync(box.path('twin', 'work', 'source', 'CLAUDE.md')))
+    assert.deepEqual(result.seeded, ['work/source/docs/env.md'])
+    const env = box.read('twin', 'work', 'source', 'docs', 'env.md') ?? ''
+    assert.ok(env.includes('# Environment — twin') && env.includes('/work/source'), env)
+
+    const edited = box.path('source', 'work', 'source', 'docs', 'env.md')
+    writeFileSync(edited, `${readFileSync(edited, 'utf8')}\nMy notes.\n`)
+    const second = await runClone(makeContext(box), { source: 'source', name: 'twin2', withContent: true })
+    assert.deepEqual(second.seeded, [])
+    assert.ok((box.read('twin2', 'work', 'source', 'docs', 'env.md') ?? '').includes('My notes.'))
   })
 
-  test('--with-content keeps a repo’s own docs/env.md and refuses a clash with an existing work/<name>', async () => {
+  test('--with-content of a source with no seeds seeds work/<name>/ and keeps a repo’s own docs/env.md', async () => {
     const box = sandbox()
     box.writeProject('source', richSource())
     mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
     writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
-    assert.equal(box.read('twin', 'work', 'twin', 'docs', 'env.md'), 'DATABASE_URL=...')
-    assert.ok(!result.seeded.includes('work/twin/docs/env.md'))
-
-    mkdirSync(box.path('source', 'work', 'other'), { recursive: true })
-    await assert.rejects(runClone(makeContext(box), { source: 'source', name: 'other', withContent: true }), { code: 'INVALID_ARGUMENT' })
+    assert.equal(box.read('twin', 'work', 'source', 'docs', 'env.md'), 'DATABASE_URL=...')
+    assert.ok(result.seeded.includes('work/twin/CLAUDE.md'))
+    assert.ok(existsSync(box.path('twin', 'work', 'twin', 'docs', 'env.md')))
   })
 
   test('--with-content of a flat-layout source (work/CLAUDE.md) seeds nothing, so /work stays the workdir', async () => {

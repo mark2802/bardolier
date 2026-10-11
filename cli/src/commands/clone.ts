@@ -25,7 +25,7 @@
  * nothing about it is written in either case.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
@@ -37,8 +37,8 @@ import type { AttachedService } from '../model/service.ts'
 import { attachedKeys } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { describeService } from '../services.ts'
-import { DOCS_DIR, ENV_DOC, isRenderedEnvMd, seededFiles } from '../scaffold.ts'
-import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, ensureProjectDirs } from '../layout.ts'
+import { DOCS_DIR, ENV_DOC, envMd, seededFiles } from '../scaffold.ts'
+import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, agentFolder, ensureProjectDirs } from '../layout.ts'
 import { findRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
 import { validate } from '../schema.ts'
@@ -145,13 +145,6 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     throw new BardolierError('INTERNAL_ERROR', `Generated manifest does not match the project schema: ${errors.join('; ')}`)
   }
 
-  if (request.withContent && source.name !== name && !isFlat(source.dir) && existsSync(join(source.dir, WORK_DIR, name))) {
-    throw new BardolierError(
-      'INVALID_ARGUMENT',
-      `\`${source.name}\` already has a \`${WORK_DIR}/${name}\` folder, which the clone would have to rename over. Pick another name.`,
-    )
-  }
-
   const sources = request.withContent ? contentSources(source.dir) : []
   const bytes = sourceBytes(sources)
   requireSpace(target.path, bytes)
@@ -162,25 +155,25 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     copyInto(staging, sources)
     writeManifest(ctx, staging, manifest)
 
-    // The copy brings `work/<source>/`; the clone's project folder is `work/<name>/`.
-    // `env.md` is derived from the manifest, so the copied one (it names the source)
-    // is re-rendered; every other seed the copy brought is the user's file (§10).
-    // A pre-`work/<name>/` source keeps its flat `work/CLAUDE.md`: no rename and no
-    // seeds, or `shell` and the handoff would leave `/work`, where its sessions are filed.
-    const legacy = request.withContent && isFlat(staging)
-    const copied = join(staging, WORK_DIR, source.name)
-    if (request.withContent && !legacy && existsSync(copied)) {
-      renameSync(copied, join(staging, WORK_DIR, name))
-    }
-    for (const file of legacy ? [] : seededFiles(manifest, definitions)) {
-      const path = join(staging, file.name)
-      if (existsSync(path)) {
-        const isEnv = file.name.endsWith(`/${DOCS_DIR}/${ENV_DOC}`)
-        if (!isEnv || !isRenderedEnvMd(readFileSync(path, 'utf8'))) continue
+    // A content clone is an identical copy: the source's `work/<folder>/` keeps its name,
+    // as its sessions (`home/`) and absolute paths are filed under it. A copied `env.md`
+    // is re-rendered for the clone only if it is still exactly what the source rendered —
+    // an edited one is the user's file (§10). A source with no seeds gets fresh ones.
+    const folder = request.withContent ? agentFolder(staging, source.name) : undefined
+    if (request.withContent && (folder !== undefined || isFlat(staging))) {
+      const path = folder === undefined ? undefined : join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
+      if (folder !== undefined && path !== undefined && existsSync(path) && readFileSync(path, 'utf8') === envMd(from, definitions, folder)) {
+        writeFileSync(path, envMd(manifest, definitions, folder))
+        seeded.push(`${WORK_DIR}/${folder}/${DOCS_DIR}/${ENV_DOC}`)
       }
-      mkdirSync(dirname(join(staging, file.name)), { recursive: true })
-      writeFileSync(join(staging, file.name), file.contents)
-      seeded.push(file.name)
+    } else {
+      for (const file of seededFiles(manifest, definitions)) {
+        const path = join(staging, file.name)
+        if (existsSync(path)) continue
+        mkdirSync(dirname(path), { recursive: true })
+        writeFileSync(path, file.contents)
+        seeded.push(file.name)
+      }
     }
 
     // Rendered from the new manifest, never copied: a generated file is never

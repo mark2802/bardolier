@@ -17,9 +17,7 @@ import type { CatalogueService } from './model/catalogue.ts'
 import type { ProjectManifest } from './model/project.ts'
 import { interpolate } from './compose.ts'
 import { imageToolchain } from './images.ts'
-import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, WORK_DIR } from './layout.ts'
-
-export const REPOSITORY_URL = 'https://github.com/mark2802/bardolier'
+import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, REPOSITORY_URL, WORK_DIR } from './layout.ts'
 
 /** Docs live under the project folder: `work/<name>/docs/`. */
 export const DOCS_DIR = 'docs'
@@ -146,11 +144,6 @@ export function devPrinciplesMd(): string {
 `
 }
 
-/** Whether `text` is an `env.md` bardolier rendered, as opposed to a repo's own file of that name. */
-export function isRenderedEnvMd(text: string): boolean {
-  return text.startsWith('# Environment — ') && text.includes(`Created with Bardolier — ${REPOSITORY_URL}`)
-}
-
 /** A service the project has attached, resolved against the catalogue. */
 export type EnvService = { readonly key: string; readonly definition: CatalogueService }
 
@@ -158,7 +151,7 @@ export type EnvService = { readonly key: string; readonly definition: CatalogueS
  * `docs/env.md`: deterministic for a manifest + catalogue + bundled image, and
  * free of host ports (machine-specific; a clone allocates its own).
  */
-export function envMd(manifest: ProjectManifest, services: readonly EnvService[]): string {
+export function envMd(manifest: ProjectManifest, services: readonly EnvService[], folder = manifest.name): string {
   const { name, archetype } = manifest
   const toolchain = Object.entries(imageToolchain(manifest.base_image)).map(
     ([arg, version]) => `- ${TOOL_LABEL[arg] ?? arg}: ${version}`,
@@ -179,7 +172,7 @@ export function envMd(manifest: ProjectManifest, services: readonly EnvService[]
     '',
     '## Filesystem',
     '',
-    `- \`${CONTAINER_WORK}\` — repositories. This project is \`${CONTAINER_WORK}/${name}\`; other repos can sit beside it.`,
+    `- \`${CONTAINER_WORK}\` — repositories. This project is \`${CONTAINER_WORK}/${folder}\`; other repos can sit beside it.`,
     `- \`${CONTAINER_DATA}\` — service data, **read-only**. Look, don't write: a live database written from a second container corrupts.`,
     `- \`${CONTAINER_LOCAL}\` — scratch space that is neither repository nor service data.`,
     '- `$HOME` persists across restarts; the container itself does not.',

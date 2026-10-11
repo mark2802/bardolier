@@ -703,7 +703,10 @@ beside the project without clashing. `shell` opens in
 `/work/<name>` when its `CLAUDE.md` exists (else `/work`), because Claude Code loads
 `CLAUDE.md` from its starting directory and above. A flat `work/CLAUDE.md` (a project
 from before this layout) wins: its sessions are filed under `/work`, so `shell` and
-the handoff stay there and `clone` neither renames nor seeds it.
+the handoff stay there and `clone` seeds nothing. Likewise a `clone --with-content` keeps
+the source's `work/<folder>/` under that name (its sessions and absolute paths are filed
+there), so the seeded folder is `work/<name>/` or, failing that, the one folder whose
+`CLAUDE.md` sits beside a bardolier-rendered `docs/env.md`; with two, `/work`.
 
 - `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
   read them only when a task needs them.
@@ -720,9 +723,9 @@ the handoff stay there and `clone` neither renames nor seeds it.
 
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` and `clone --with-content` write a seed only where the copy has
-no file at that path. `clone --with-content` renames the copied `work/<source>/` to
-`work/<name>/` (`INVALID_ARGUMENT` if the source already has one) and re-renders its
-`env.md`, which names the source, unless that file is not bardolier's.
+no file at that path. `clone --with-content` re-renders the kept folder's `env.md` for
+the clone only if it is still exactly what the source rendered; an edited one stays.
+A source with no seeds gets fresh ones in `work/<name>/`.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's own files sit above `work/`, inside no working tree; the seeds in `work/<name>/` are ordinary repo files — and nothing takes
