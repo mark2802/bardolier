@@ -701,7 +701,9 @@ Schema stability is the contract. Additive changes only once the app ships.
 Four files under `work/<name>/`, so other repositories can be cloned into `work/`
 beside the project without clashing. `shell` opens in
 `/work/<name>` when its `CLAUDE.md` exists (else `/work`), because Claude Code loads
-`CLAUDE.md` from its starting directory and above.
+`CLAUDE.md` from its starting directory and above. A flat `work/CLAUDE.md` (a project
+from before this layout) wins: its sessions are filed under `/work`, so `shell` and
+the handoff stay there and `clone` neither renames nor seeds it.
 
 - `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
   read them only when a task needs them.

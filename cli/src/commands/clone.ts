@@ -70,6 +70,8 @@ function contentSources(sourceDir: string): CopySource[] {
   })
 }
 
+const isFlat = (projectDir: string): boolean => existsSync(join(projectDir, WORK_DIR, 'CLAUDE.md'))
+
 export async function runClone(ctx: Context, request: CloneRequest): Promise<CloneOutput> {
   const source = requireProject(ctx, request.source)
   const name = requireProjectName(request.name, 'clone <source> <name> [--root <name>] [--with-content]')
@@ -143,7 +145,7 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     throw new BardolierError('INTERNAL_ERROR', `Generated manifest does not match the project schema: ${errors.join('; ')}`)
   }
 
-  if (request.withContent && source.name !== name && existsSync(join(source.dir, WORK_DIR, name))) {
+  if (request.withContent && source.name !== name && !isFlat(source.dir) && existsSync(join(source.dir, WORK_DIR, name))) {
     throw new BardolierError(
       'INVALID_ARGUMENT',
       `\`${source.name}\` already has a \`${WORK_DIR}/${name}\` folder, which the clone would have to rename over. Pick another name.`,
@@ -163,13 +165,13 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     // The copy brings `work/<source>/`; the clone's project folder is `work/<name>/`.
     // `env.md` is derived from the manifest, so the copied one (it names the source)
     // is re-rendered; every other seed the copy brought is the user's file (§10).
+    // A pre-`work/<name>/` source keeps its flat `work/CLAUDE.md`: no rename and no
+    // seeds, or `shell` and the handoff would leave `/work`, where its sessions are filed.
+    const legacy = request.withContent && isFlat(staging)
     const copied = join(staging, WORK_DIR, source.name)
-    if (request.withContent && existsSync(copied)) {
+    if (request.withContent && !legacy && existsSync(copied)) {
       renameSync(copied, join(staging, WORK_DIR, name))
     }
-    // A pre-`work/<name>/` source keeps its flat `work/CLAUDE.md`; seeding the folder
-    // would move `shell` and the handoff off `/work`, where its sessions are filed.
-    const legacy = request.withContent && existsSync(join(staging, WORK_DIR, 'CLAUDE.md'))
     for (const file of legacy ? [] : seededFiles(manifest, definitions)) {
       const path = join(staging, file.name)
       if (existsSync(path)) {

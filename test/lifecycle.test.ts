@@ -302,10 +302,13 @@ describe('clone (cli-spec.md §6)', () => {
     box.writeProject('source', richSource())
     mkdirSync(box.path('source', 'work'), { recursive: true })
     writeFileSync(box.path('source', 'work', 'CLAUDE.md'), '# flat')
+    mkdirSync(box.path('source', 'work', 'source'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'source', 'keep.txt'), 'x')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
     assert.deepEqual(result.seeded, [])
     assert.ok(!existsSync(box.path('twin', 'work', 'twin')))
+    assert.ok(existsSync(box.path('twin', 'work', 'source', 'keep.txt')), 'the repo folder keeps its name')
   })
 
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {

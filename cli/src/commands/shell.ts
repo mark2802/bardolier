@@ -15,11 +15,9 @@
  * would hide a failing start behind a shell that never opens.
  */
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { CONTAINER_WORK, WORK_DIR } from '../layout.ts'
+import { CONTAINER_WORK, agentWorkdir } from '../layout.ts'
 import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
@@ -50,9 +48,7 @@ export async function runShell(
 
   // A project seeded under `work/<name>/` is where the agent should start: Claude
   // Code reads CLAUDE.md from its starting directory upward, never downward (§10).
-  const workdir = existsSync(join(project.dir, WORK_DIR, project.name, 'CLAUDE.md'))
-    ? `${CONTAINER_WORK}/${project.name}`
-    : CONTAINER_WORK
+  const workdir = agentWorkdir(project.dir, project.name)
   const dir = workdir === CONTAINER_WORK ? [] : ['-w', workdir]
 
   return {

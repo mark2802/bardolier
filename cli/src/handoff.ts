@@ -36,7 +36,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import type { Context } from './context.ts'
 import type { GitFacts } from './git.ts'
-import { CONTAINER_WORK, entries, workDir, WORK_DIR } from './layout.ts'
+import { CONTAINER_WORK, agentWorkdir, entries, workDir, WORK_DIR } from './layout.ts'
 import { devContainerName } from './naming.ts'
 import type { ProjectManifest } from './model/project.ts'
 
@@ -229,8 +229,8 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
   // `work/<name>/` is where the agent runs `claude` — ask it there (§12). Keyed on
   // the seeded CLAUDE.md, not the folder: `env --write` on an older project makes
   // the folder without moving its sessions.
-  const projectDir = join(workDir(dir), manifest.name)
-  const workdir = existsSync(join(projectDir, 'CLAUDE.md')) ? `${CONTAINER_WORK}/${manifest.name}` : undefined
+  const agentDir = agentWorkdir(dir, manifest.name)
+  const workdir = agentDir === CONTAINER_WORK ? undefined : agentDir
   const summary = devRunning ? await askAgent(ctx, manifest.name, workdir) : null
 
   const path = handoffPath(dir)

@@ -4,7 +4,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
@@ -43,6 +43,15 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     assert.deepEqual(output.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
     assert.equal(output.workdir, '/work')
     assert.ok(validate('shell', output).valid)
+  })
+
+  test('a flat work/CLAUDE.md keeps /work even when work/<name>/CLAUDE.md exists', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    writeFileSync(box.path('alpha', 'work', 'CLAUDE.md'), '# flat')
+
+    assert.equal((await runShell(ctx, 'alpha')).workdir, '/work')
   })
 
   test('--root swaps to `docker exec -u root`, same container, same checks (phase 14)', async () => {

@@ -88,6 +88,12 @@ describe('the handoff note', () => {
     const call = docker.calls.find((c) => c.kind === 'exec')
     assert.equal(call?.kind === 'exec' ? call.request.workdir : null, '/work/myapp')
 
+    writeFileSync(join(box.path('myapp'), 'work', 'CLAUDE.md'), '# flat')
+    const flat = await stoppedProject(box, { exec: answered('ok') })
+    await runDown(flat.ctx, 'myapp')
+    const flatCall = flat.docker.calls.find((c) => c.kind === 'exec')
+    assert.equal(flatCall?.kind === 'exec' ? flatCall.request.workdir : null, undefined)
+
     const legacy = sandbox()
     const old = await stoppedProject(legacy, { exec: answered('ok') })
     await runDown(old.ctx, 'myapp')

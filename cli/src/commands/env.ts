@@ -9,6 +9,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { attachedKeys } from '../compose.ts'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
 import { WORK_DIR } from '../layout.ts'
@@ -19,7 +20,7 @@ import { resolveServices } from './service.ts'
 
 export function runEnv(ctx: Context, name: string | undefined, options: { write?: boolean } = {}): EnvOutput {
   const { manifest, dir } = requireProject(ctx, name)
-  const keys = Object.keys(manifest.services ?? {})
+  const keys = attachedKeys(manifest)
   const services = keys.length > 0 ? resolveServices(ctx.catalogue().catalogue, keys) : []
   const content = envMd(manifest, services)
 
