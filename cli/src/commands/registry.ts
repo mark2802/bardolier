@@ -560,7 +560,7 @@ export const COMMANDS: readonly CommandNode[] = [
 
   {
     path: ['env'],
-    group: 'Shell',
+    group: 'Projects',
     usage: 'env <name> [--write]',
     summary: 'Render the project’s docs/env.md from its manifest; --write refreshes the file.',
     flags: [{ name: '--write', description: 'Overwrite work/<name>/docs/env.md instead of printing it.' }],

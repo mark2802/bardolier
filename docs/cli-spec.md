@@ -697,9 +697,9 @@ Schema stability is the contract. Additive changes only once the app ships.
 ## 10. Seeded files (by `new`)
 
 Four files under `work/<name>/`, so other repositories can be cloned into `work/`
-beside the project without clashing. A shell opens in `/work`; Claude Code loads
-`CLAUDE.md` from its starting directory and above, so the agent is run from
-`/work/<name>`.
+beside the project without clashing. `shell` opens in
+`/work/<name>` when its `CLAUDE.md` exists (else `/work`), because Claude Code loads
+`CLAUDE.md` from its starting directory and above.
 
 - `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
   read them only when a task needs them.
@@ -716,7 +716,8 @@ beside the project without clashing. A shell opens in `/work`; Claude Code loads
 
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` and `clone --with-content` write a seed only where the copy has
-no file at that path.
+no file at that path. `clone --with-content` renames the copied `work/<source>/` to
+`work/<name>/` and re-renders its `env.md`, which names the source.
 
 No `.gitignore` and no `.dockerignore`: there is no repo root to seed
 — bardolier's files sit above `work/`, inside no working tree — and nothing takes

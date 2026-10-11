@@ -83,6 +83,7 @@ describe('the handoff note', () => {
     const box = sandbox()
     const { docker, ctx } = await stoppedProject(box, { exec: answered('ok') })
     mkdirSync(join(box.path('myapp'), 'work', 'myapp'), { recursive: true })
+    writeFileSync(join(box.path('myapp'), 'work', 'myapp', 'CLAUDE.md'), '# myapp')
     await runDown(ctx, 'myapp')
     const call = docker.calls.find((c) => c.kind === 'exec')
     assert.equal(call?.kind === 'exec' ? call.request.workdir : null, '/work/myapp')

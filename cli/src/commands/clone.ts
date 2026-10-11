@@ -25,7 +25,7 @@
  * nothing about it is written in either case.
  */
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
@@ -37,7 +37,7 @@ import type { AttachedService } from '../model/service.ts'
 import { attachedKeys } from '../compose.ts'
 import { extraPortNames } from '../extraports.ts'
 import { describeService } from '../services.ts'
-import { seededFiles } from '../scaffold.ts'
+import { DOCS_DIR, ENV_DOC, seededFiles } from '../scaffold.ts'
 import { DATA_DIR, HOME_DIR, LOCAL_DIR, WORK_DIR, ensureProjectDirs } from '../layout.ts'
 import { findRoot } from '../projects.ts'
 import { composePath, manifestPath, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
@@ -153,10 +153,16 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     copyInto(staging, sources)
     writeManifest(ctx, staging, manifest)
 
-    // Re-seeded unless the copy brought one: a seed you would overwrite is the
-    // user's file by then (§10).
+    // The copy brings `work/<source>/`; the clone's project folder is `work/<name>/`.
+    // `env.md` is derived from the manifest, so the copied one (it names the source)
+    // is re-rendered; every other seed the copy brought is the user's file (§10).
+    const copied = join(staging, WORK_DIR, source.name)
+    if (request.withContent && existsSync(copied) && !existsSync(join(staging, WORK_DIR, name))) {
+      renameSync(copied, join(staging, WORK_DIR, name))
+    }
     for (const file of seededFiles(manifest, definitions)) {
-      if (existsSync(join(staging, file.name))) continue
+      const exists = existsSync(join(staging, file.name))
+      if (exists && !file.name.endsWith(`/${DOCS_DIR}/${ENV_DOC}`)) continue
       mkdirSync(dirname(join(staging, file.name)), { recursive: true })
       writeFileSync(join(staging, file.name), file.contents)
       seeded.push(file.name)

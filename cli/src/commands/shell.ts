@@ -15,9 +15,11 @@
  * would hide a failing start behind a shell that never opens.
  */
 
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Context } from '../context.ts'
 import { BardolierError } from '../errors.ts'
-import { CONTAINER_WORK } from '../layout.ts'
+import { CONTAINER_WORK, WORK_DIR } from '../layout.ts'
 import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
@@ -46,6 +48,13 @@ export async function runShell(
     )
   }
 
+  // A project seeded under `work/<name>/` is where the agent should start: Claude
+  // Code reads CLAUDE.md from its starting directory upward, never downward (§10).
+  const workdir = existsSync(join(project.dir, WORK_DIR, project.name, 'CLAUDE.md'))
+    ? `${CONTAINER_WORK}/${project.name}`
+    : CONTAINER_WORK
+  const dir = workdir === CONTAINER_WORK ? [] : ['-w', workdir]
+
   return {
     project: project.name,
     container,
@@ -54,9 +63,9 @@ export async function runShell(
     // `-u root` (only when asked) is `docker exec` overriding the image's own
     // USER for this one exec — ephemeral, same as any other runtime change.
     exec: options.root
-      ? ['docker', 'exec', '-u', 'root', '-it', container, 'bash']
-      : ['docker', 'exec', '-it', container, 'bash'],
-    workdir: CONTAINER_WORK,
+      ? ['docker', 'exec', '-u', 'root', ...dir, '-it', container, 'bash']
+      : ['docker', 'exec', ...dir, '-it', container, 'bash'],
+    workdir,
   }
 }
 

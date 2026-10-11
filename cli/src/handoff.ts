@@ -226,9 +226,11 @@ export async function writeHandoff(ctx: Context, request: HandoffRequest): Promi
 
   const repos = await repositories(ctx, dir)
   // Sessions are filed by working directory, and a project seeded under
-  // `work/<name>/` is where the agent runs `claude` — ask it there (§12).
+  // `work/<name>/` is where the agent runs `claude` — ask it there (§12). Keyed on
+  // the seeded CLAUDE.md, not the folder: `env --write` on an older project makes
+  // the folder without moving its sessions.
   const projectDir = join(workDir(dir), manifest.name)
-  const workdir = existsSync(projectDir) ? `${CONTAINER_WORK}/${manifest.name}` : undefined
+  const workdir = existsSync(join(projectDir, 'CLAUDE.md')) ? `${CONTAINER_WORK}/${manifest.name}` : undefined
   const summary = devRunning ? await askAgent(ctx, manifest.name, workdir) : null
 
   const path = handoffPath(dir)

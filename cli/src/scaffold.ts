@@ -15,6 +15,7 @@ import type { Archetype } from './model/archetype.ts'
 import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import type { CatalogueService } from './model/catalogue.ts'
 import type { ProjectManifest } from './model/project.ts'
+import { interpolate } from './compose.ts'
 import { imageToolchain } from './images.ts'
 import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, WORK_DIR } from './layout.ts'
 
@@ -192,7 +193,7 @@ export function envMd(manifest: ProjectManifest, services: readonly EnvService[]
     out.push('| Service | Image | Address in the network | Environment |', '| --- | --- | --- | --- |')
     for (const { key, definition } of [...services].sort((a, b) => a.key.localeCompare(b.key))) {
       const env = Object.entries(definition.env ?? {})
-        .map(([k, v]) => `\`${k}=${v.replaceAll('{project}', name)}\``)
+        .map(([k, v]) => `\`${k}=${interpolate(v, name)}\``)
         .join(' ')
       out.push(`| ${definition.display} | \`${definition.image}\` | \`${key}:${definition.container_port}\` | ${env} |`)
     }

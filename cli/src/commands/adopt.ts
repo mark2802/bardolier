@@ -73,7 +73,6 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   const archetype = requireArchetype(request.archetype)
   const target = requireRoot(ctx, request.root, defaultRoot(ctx.config))
   const sourceDir = requireSourceDir(request.source)
-  const repoName = name
   const mode: 'copy' | 'move' = request.move ? 'move' : 'copy'
 
   const dir = join(target.path, name)
@@ -84,10 +83,10 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   const definitions = catalogue ? resolveServices(catalogue, requested) : []
 
   // A read-only stat walk — real even under --dry-run, unlike a port (see model/adopt.ts).
-  const bytes = sourceBytes([{ from: sourceDir, to: join(WORK_DIR, repoName) }])
+  const bytes = sourceBytes([{ from: sourceDir, to: join(WORK_DIR, name) }])
   requireSpace(target.path, bytes)
 
-  const sourceOutput = { path: sourceDir, dir: join(dir, WORK_DIR, repoName), basename: repoName }
+  const sourceOutput = { path: sourceDir, dir: join(dir, WORK_DIR, name), basename: name }
 
   if (request.dryRun) {
     return {
@@ -140,7 +139,7 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
   const skipped: string[] = []
   const staged = stageProject(target.path, name, (staging) => {
     ensureProjectDirs(staging, definitions.map(({ key }) => key))
-    copyInto(staging, [{ from: sourceDir, to: join(WORK_DIR, repoName) }])
+    copyInto(staging, [{ from: sourceDir, to: join(WORK_DIR, name) }])
     writeManifest(ctx, staging, manifest)
 
     // Gap-fill only: the adopted repo may already have a CLAUDE.md or docs/ (§10).
@@ -174,7 +173,7 @@ export async function runAdopt(ctx: Context, request: AdoptRequest): Promise<Ado
     ...(skipped.length > 0 ? { seeds_skipped: skipped } : {}),
     requested_services: requested,
     services: attached,
-    source: { ...sourceOutput, dir: join(staged.dir, WORK_DIR, repoName) },
+    source: { ...sourceOutput, dir: join(staged.dir, WORK_DIR, name) },
     mode,
     bytes: staged.bytes,
     dry_run: false,

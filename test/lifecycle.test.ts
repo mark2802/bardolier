@@ -267,16 +267,20 @@ describe('clone (cli-spec.md §6)', () => {
     assert.equal(box.read('twin', 'home', '.zsh_history'), 'secrets')
   })
 
-  test('a seed the copy brought is left alone; one it did not is re-seeded', async () => {
+  test('--with-content renames work/<source>/ to work/<name>/; its CLAUDE.md is kept, env.md is re-rendered', async () => {
     const box = sandbox()
     box.writeProject('source', richSource())
-    mkdirSync(box.path('source', 'work', 'twin'), { recursive: true })
-    writeFileSync(box.path('source', 'work', 'twin', 'CLAUDE.md'), '# hand-edited')
+    mkdirSync(box.path('source', 'work', 'source', 'docs'), { recursive: true })
+    writeFileSync(box.path('source', 'work', 'source', 'CLAUDE.md'), '# hand-edited')
+    writeFileSync(box.path('source', 'work', 'source', 'docs', 'env.md'), 'names source')
 
     const result = await runClone(makeContext(box), { source: 'source', name: 'twin', withContent: true })
+    assert.ok(!existsSync(box.path('twin', 'work', 'source')), 'the source-named folder survived')
+    assert.equal(box.read('twin', 'work', 'twin', 'CLAUDE.md'), '# hand-edited')
     assert.ok(!result.seeded.includes('work/twin/CLAUDE.md'))
     assert.ok(result.seeded.includes('work/twin/docs/env.md'))
-    assert.equal(box.read('twin', 'work', 'twin', 'CLAUDE.md'), '# hand-edited')
+    assert.ok(result.seeded.includes('work/twin/docs/product.md'))
+    assert.ok((box.read('twin', 'work', 'twin', 'docs', 'env.md') ?? '').includes('# Environment — twin'))
   })
 
   test('--with-content needs the source stopped; a shape clone of the same project does not', async () => {
@@ -1086,7 +1090,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
     seedServiceData(box, 'alpha', 'postgres', 20971520)
 
     const shell = await runShell(ctx, 'alpha')
-    assert.deepEqual(shell.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(shell.exec, ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
 
     const status = await collectStatus(ctx, 'alpha')
     assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)

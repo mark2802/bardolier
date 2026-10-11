@@ -4,6 +4,7 @@
 
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { BardolierError } from '../cli/src/errors.ts'
@@ -26,9 +27,21 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     assert.deepEqual(output, {
       project: 'alpha',
       container: 'bardolier-alpha',
-      exec: ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'],
-      workdir: '/work',
+      exec: ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'],
+      workdir: '/work/alpha',
     })
+    assert.ok(validate('shell', output).valid)
+  })
+
+  test('a project without a seeded work/<name>/CLAUDE.md opens in /work', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    rmSync(box.path('alpha', 'work', 'alpha', 'CLAUDE.md'))
+
+    const output = await runShell(ctx, 'alpha')
+    assert.deepEqual(output.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+    assert.equal(output.workdir, '/work')
     assert.ok(validate('shell', output).valid)
   })
 
@@ -39,7 +52,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha', { root: true })
-    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
     assert.ok(validate('shell', output).valid)
   })
 
