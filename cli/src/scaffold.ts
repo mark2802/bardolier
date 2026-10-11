@@ -16,6 +16,7 @@ import { ARCHETYPE_APP_PORT } from './model/archetype.ts'
 import type { CatalogueService } from './model/catalogue.ts'
 import type { ProjectManifest } from './model/project.ts'
 import { interpolate } from './compose.ts'
+import { BardolierError } from './errors.ts'
 import { imageToolchain } from './images.ts'
 import { CONTAINER_DATA, CONTAINER_LOCAL, CONTAINER_WORK, WORK_DIR } from './layout.ts'
 
@@ -229,10 +230,12 @@ export type SeededFile = {
 
 /** The §10 seed set — four files under `work/<work_folder>/`. */
 export function seededFiles(manifest: ProjectManifest, services: readonly EnvService[]): SeededFile[] {
-  const base = `${WORK_DIR}/${manifest.work_folder ?? manifest.name}`
+  const folder = manifest.work_folder
+  if (folder === undefined) throw new BardolierError('INTERNAL_ERROR', `Seeding \`${manifest.name}\` without a work_folder.`)
+  const base = `${WORK_DIR}/${folder}`
   return [
     { name: `${base}/CLAUDE.md`, contents: claudeMd(manifest.name) },
-    { name: `${base}/${DOCS_DIR}/${ENV_DOC}`, contents: envMd(manifest, services, manifest.work_folder ?? manifest.name) },
+    { name: `${base}/${DOCS_DIR}/${ENV_DOC}`, contents: envMd(manifest, services, folder) },
     { name: `${base}/${DOCS_DIR}/product.md`, contents: productMd(manifest.name) },
     { name: `${base}/${DOCS_DIR}/dev-principles.md`, contents: devPrinciplesMd() },
   ]

@@ -24,7 +24,7 @@
     "compose_path": { "type": "string", "minLength": 1 },
     "seeded": {
       "type": "array",
-      "description": "File names written per §10, in write order. Empty when --with-content brought them all.",
+      "description": "Paths written per §10, in write order. Under --with-content, only a re-rendered env.md.",
       "items": { "type": "string", "minLength": 1 }
     },
     "services": {

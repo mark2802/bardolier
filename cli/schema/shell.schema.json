@@ -21,7 +21,7 @@
     },
     "workdir": {
       "type": "string",
-      "description": "Where the shell lands inside the container: the bind-mounted project directory.",
+      "description": "Where the shell lands inside the container: /work/<work_folder> when recorded and present, else /work (§10).",
       "minLength": 1
     }
   }

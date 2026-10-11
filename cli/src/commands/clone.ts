@@ -162,10 +162,12 @@ export async function runClone(ctx: Context, request: CloneRequest): Promise<Clo
     // as `env --write`) — a repo's own file is the user's (§10).
     const folder = manifest.work_folder
     if (request.withContent) {
-      const path = folder === undefined ? undefined : join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
-      if (folder !== undefined && path !== undefined && existsSync(path) && isRenderedEnvMd(readFileSync(path, 'utf8'))) {
-        writeFileSync(path, envMd(manifest, definitions, folder))
-        seeded.push(`${WORK_DIR}/${folder}/${DOCS_DIR}/${ENV_DOC}`)
+      if (folder !== undefined) {
+        const path = join(staging, WORK_DIR, folder, DOCS_DIR, ENV_DOC)
+        if (existsSync(path) && isRenderedEnvMd(readFileSync(path, 'utf8'))) {
+          writeFileSync(path, envMd(manifest, definitions, folder))
+          seeded.push(`${WORK_DIR}/${folder}/${DOCS_DIR}/${ENV_DOC}`)
+        }
       }
     } else {
       for (const file of seededFiles(manifest, definitions)) {

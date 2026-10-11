@@ -165,7 +165,7 @@ describe('new (cli-spec.md §6, §10)', () => {
     }
     const postgres = { key: 'postgres', definition: { display: 'PostgreSQL', image: 'postgres:17', container_port: 5432, host_port_base: 5432, mount: '/x', env: { POSTGRES_DB: '{project}' } } }
     for (const archetype of ARCHETYPES) {
-      const files = seededFiles(manifest('myapp', { archetype }), [postgres])
+      const files = seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), [postgres])
       assert.deepEqual(files.map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'], `${archetype} seeds the wrong set`)
       const claudeMd = files[0]?.contents ?? ''
       for (const doc of ['docs/env.md', 'docs/product.md', 'docs/dev-principles.md']) assert.ok(claudeMd.includes(doc))

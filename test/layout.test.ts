@@ -67,7 +67,7 @@ describe('the project directory’s shape', () => {
       }
     }
     for (const archetype of ['web', 'ios', 'android', 'library'] as const) {
-      assert.deepEqual(seededFiles(manifest('myapp', { archetype }), []).map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
+      assert.deepEqual(seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), []).map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
     }
   })
 
