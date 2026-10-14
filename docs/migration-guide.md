@@ -155,7 +155,7 @@ check was for.
 
 ### 5. Leave the repo's own files alone — nothing collides any more
 
-There is nothing to merge or clobber. bardolier seeds four files
+There is nothing to merge or clobber. bardolier seeds six files
 under `work/<name>/` and, on `adopt`, writes none of them over a file the repo already has:
 
 - **`.gitignore` / `.dockerignore`** — the repo's own, untouched. bardolier

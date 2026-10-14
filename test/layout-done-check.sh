@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The project layout: four folders, four seeds, no ignore file; `/data` read-only;
+# The project layout: four folders, six seeds, no ignore file; `/data` read-only;
 # nothing bardolier writes inside a working tree; and what `delete` refuses.
 #
 #   bash test/layout-done-check.sh
@@ -13,8 +13,8 @@ sandbox
 track bardolier-myapp bardolier-myapp-postgres
 track_volume bardolier-myapp-home
 
-# ── 1. new: four folders, four seeds, no ignore file ────────────────────────────
-head "1. \`new\` makes four folders, one seed, and no ignore file (§3, §10)"
+# ── 1. new: four folders, six seeds, no ignore file ────────────────────────────
+head "1. \`new\` makes four folders, six seeds, and no ignore file (§3, §10)"
 
 NEW="$($BARDOLIER new alpha --archetype web --services postgres --json)" || bad "new exited non-zero"
 json_assert "$NEW" 'd.seeded.length === 6 && d.seeded[0] === "work/alpha/CLAUDE.md" && d.seeded.includes("work/alpha/docs/env.md")' \

@@ -261,7 +261,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Projects
 - `bardolier new <name> --archetype <a> [--services a,b] [--root <name>]`
   Creates dir, manifest, compose, the four folders of §3, and
-  the four seeds of §10 under `work/<name>/` (recorded as `work_folder`), under the named root
+  the six seeds of §10 under `work/<name>/` (recorded as `work_folder`), under the named root
   (default: the first configured root — §8).
   Assigns ports for any initial services. An unreadable root beyond the
   target degrades rather than blocking this (§5): the response

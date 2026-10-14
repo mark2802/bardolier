@@ -89,7 +89,7 @@ Read these only when a task needs them:
 - \`docs/design.md\` — visual look and feel, interaction, voice and copy. Read before
   building or changing UI; keep it current.
 - \`docs/dev-principles.md\` — how code is written and changed here. Read before
-  writing or changing code.
+  writing or changing code. The owner's: propose changes, don't edit.
 - \`docs/env.md\` — the development environment: toolchain, services and how to reach
   them, filesystem, and what cannot run here. Read before building, running or
   testing, before connecting to a service, or when something environmental fails.
@@ -141,7 +141,7 @@ APIs, events, storage.
 export function designMd(name: string): string {
   return `# ${name} — design
 
-_Delete if this project has no UI._
+_Delete this file and its line in CLAUDE.md if this project has no UI._
 
 ## Visual
 
