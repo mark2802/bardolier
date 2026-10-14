@@ -170,6 +170,14 @@ describe('new (cli-spec.md §6, §10)', () => {
       const claudeMd = files[0]?.contents ?? ''
       for (const doc of ['docs/env.md', 'docs/product.md', 'docs/dev-principles.md', 'docs/architecture.md', 'docs/design.md']) assert.ok(claudeMd.includes(doc))
       assert.ok(!claudeMd.includes('bardolier'), 'CLAUDE.md stays minimal and tool-free')
+      // Who owns each doc (§10).
+      assert.equal(claudeMd.match(/The owner's:\s+propose changes, don't edit\./g)?.length, 2, 'product and dev-principles are the owner’s')
+      assert.equal(claudeMd.split('keep it current').length - 1, 2, 'architecture and design are kept current by the agent')
+      assert.ok(claudeMd.includes("Generated; don't hand-edit."), 'env.md is generated')
+      const seedBody = (suffix: string) => files.find((f) => f.name.endsWith(suffix))?.contents ?? ''
+      assert.ok(seedBody('dev-principles.md').includes('## Code structure') && !seedBody('dev-principles.md').includes('## Design'))
+      assert.ok(seedBody('architecture.md').includes('| Decision | Why | Date |'))
+      assert.ok(seedBody('design.md').includes('Delete this file and its line in CLAUDE.md'))
 
       const env = files[1]?.contents ?? ''
       assert.ok(env.includes(boundaries[archetype]), `${archetype} env.md lacks its boundary note`)

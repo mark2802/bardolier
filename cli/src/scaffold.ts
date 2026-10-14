@@ -1,8 +1,9 @@
 /**
  * Seeded files — `cli-spec.md` §10.
  *
- * `new` writes these once and never touches them again: they are the owner's
- * files from that moment on, unlike the compose file, which is regenerated.
+ * `new` writes these once and never touches them again: they are the project's
+ * files from that moment on (the seeded CLAUDE.md says who edits each), unlike
+ * the compose file, which is regenerated.
  * The one exception is `env.md`, which `bardolier env --write` refreshes on
  * request.
  *

@@ -731,8 +731,8 @@ are filed under that folder.
 - `docs/design.md` — placeholder for visual design, interaction, voice and copy; deleted,
   with its `CLAUDE.md` line, if the project has no UI.
 
-Seeds are written once and are the owner's from then on (except `env.md`'s
-refresh). `adopt` writes a seed only where the copy has no file at that path.
+Seeds are written once and bardolier never rewrites them (except `env.md`'s
+refresh); the seeded `CLAUDE.md` says who edits each. `adopt` writes a seed only where the copy has no file at that path.
 `clone --with-content` writes none, and re-renders the kept folder's `env.md` for the clone
 only if bardolier wrote it (the rule `env --write` uses); a repo's own file stays.
 
