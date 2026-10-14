@@ -17,8 +17,8 @@ track_volume bardolier-myapp-home
 head "1. \`new\` makes four folders, one seed, and no ignore file (§3, §10)"
 
 NEW="$($BARDOLIER new alpha --archetype web --services postgres --json)" || bad "new exited non-zero"
-json_assert "$NEW" 'd.seeded.length === 4 && d.seeded[0] === "work/alpha/CLAUDE.md" && d.seeded.includes("work/alpha/docs/env.md")' \
-  && ok "the seeds are work/alpha/CLAUDE.md and docs/{env,product,dev-principles}.md" || bad "new seeded something other than the four seeds"
+json_assert "$NEW" 'd.seeded.length === 6 && d.seeded[0] === "work/alpha/CLAUDE.md" && d.seeded.includes("work/alpha/docs/env.md")' \
+  && ok "the seeds are work/alpha/CLAUDE.md and docs/{env,product,dev-principles,architecture,design}.md" || bad "new seeded something other than the six seeds"
 
 ENTRIES="$(cd "$MOUNTED/alpha" && ls -A | sort | tr '\n' ' ')"
 [ "$ENTRIES" = "data docker-compose.yml home local project.yml work " ] \

@@ -98,7 +98,7 @@ bardolier new <name> --archetype web --services <postgres,redis,...>
 ```
 
 This assigns ports and writes `project.yml`, a generated `docker-compose.yml`,
-the four folders above, and four seeded files under `work/<name>/` (`CLAUDE.md`, `docs/env.md`, `docs/product.md`, `docs/dev-principles.md`). Do this
+the four folders above, and six seeded files under `work/<name>/` (`CLAUDE.md`, `docs/{env,product,dev-principles,architecture,design}.md`). Do this
 **before** moving the real source in — `new` refuses (`PROJECT_EXISTS`) if a
 project of that name already exists in any root, and it's the only thing that
 assigns ports.
@@ -164,7 +164,7 @@ under `work/<name>/` and, on `adopt`, writes none of them over a file the repo a
 - **`CLAUDE.md` and `docs/`** — the repo's own win; `adopt` reports them as
   `seeds_skipped`. If the repo has a `CLAUDE.md`, add pointers to the missing
   `docs/env.md` (the environment — `bardolier env <name> --write` refreshes it
-  after services change), `docs/product.md` and `docs/dev-principles.md` by hand.
+  after services change), `docs/product.md`, `docs/architecture.md`, `docs/design.md` and `docs/dev-principles.md` by hand.
   Claude Code loads `CLAUDE.md` from its starting directory and above, so run
   `claude` from `/work/<name>`, not `/work` — `adopt` records that as `work_folder` in
   `project.yml`, which `shell` and the handoff follow. A project made before the field

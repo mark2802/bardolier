@@ -64,7 +64,7 @@ root the same way. Each root:
     data/    → /data:ro            service data, one directory per attached service
     local/   → /local              neither repository nor service data
     home/    → /state/home         the dev container's $HOME
-    work/<project>/                # seeded: CLAUDE.md, docs/{env,product,dev-principles}.md (§10)
+    work/<project>/                # seeded: CLAUDE.md, docs/{env,product,dev-principles,architecture,design}.md (§10)
 ```
 
 - **A project directory is not a repository.** bardolier's files sit
@@ -713,7 +713,7 @@ add the field by hand to move it. `new`, `adopt` and a shape `clone` record thei
 name; `clone --with-content` keeps the source's value, as its sessions and absolute paths
 are filed under that folder.
 
-- `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
+- `CLAUDE.md` — minimal: names the five docs and who owns each, says what each is for, and says to
   read them only when a task needs them.
 - `docs/env.md` — the environment, in terms that reproduce it **without**
   bardolier: base OS, toolchain versions (read from the bundled Dockerfile's
@@ -725,6 +725,8 @@ are filed under that folder.
   and image; refreshed on request by `env --write` (§6).
 - `docs/product.md` — a placeholder for what the project is meant to build.
 - `docs/dev-principles.md` — generic coding and process guidelines.
+- `docs/architecture.md` — placeholder for stack, structure, interfaces and a decisions table.
+- `docs/design.md` — placeholder for visual design, interaction, voice and copy.
 
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` writes a seed only where the copy has no file at that path.
