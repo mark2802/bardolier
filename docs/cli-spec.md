@@ -703,7 +703,7 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 ## 10. Seeded files (by `new`)
 
-Four files under `work/<name>/`, so other repositories can be cloned into `work/`
+Six files under `work/<name>/`, so other repositories can be cloned into `work/`
 beside the project without clashing. The folder is recorded as `work_folder` in
 `project.yml` (§4.2) and is never inferred from file contents. `shell` and the handoff
 (§12) start the agent in `/work/<work_folder>` when it is recorded and the directory
@@ -713,9 +713,10 @@ add the field by hand to move it. `new`, `adopt` and a shape `clone` record thei
 name; `clone --with-content` keeps the source's value, as its sessions and absolute paths
 are filed under that folder.
 
-- `CLAUDE.md` — minimal: names the five docs and who owns each (`product.md` and `dev-principles.md`: owner-edited, the agent proposes;
-  `architecture.md` and `design.md`: the agent keeps current; `env.md`: generated), says what each is for, and says to
-  read them only when a task needs them.
+- `CLAUDE.md` — minimal: names the five docs and who owns each (`product.md` and
+  `dev-principles.md`: owner-edited, the agent proposes; `architecture.md` and `design.md`:
+  the agent keeps current; `env.md`: generated), says what each is for, and says to read
+  them only when a task needs them.
 - `docs/env.md` — the environment, in terms that reproduce it **without**
   bardolier: base OS, toolchain versions (read from the bundled Dockerfile's
   `ARG` pins, so they cannot drift; not Claude Code's, as builds default to `latest`), `extra_packages`, the `/work` `/data` `/local`
@@ -727,7 +728,8 @@ are filed under that folder.
 - `docs/product.md` — a placeholder for what the project is meant to build.
 - `docs/dev-principles.md` — generic coding and process guidelines.
 - `docs/architecture.md` — placeholder for stack, structure, interfaces and a decisions table.
-- `docs/design.md` — placeholder for visual design, interaction, voice and copy.
+- `docs/design.md` — placeholder for visual design, interaction, voice and copy; deleted,
+  with its `CLAUDE.md` line, if the project has no UI.
 
 Seeds are written once and are the owner's from then on (except `env.md`'s
 refresh). `adopt` writes a seed only where the copy has no file at that path.

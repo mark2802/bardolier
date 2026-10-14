@@ -6,7 +6,8 @@ technical and UI knowledge has a home beside `product.md`.
 
 **Deliverables:**
 - `cli/src/scaffold.ts`: `architectureMd`, `designMd`; `seededFiles` returns six paths;
-  `claudeMd` names five docs and who owns each (product: owner's; env: generated, no tool named).
+  `claudeMd` names five docs and who owns each (product, dev-principles: owner's; architecture, design: agent keeps
+  current; env: generated, no tool named).
   `devPrinciplesMd`'s `## Design` becomes `## Code structure`.
 - `cli-spec.md` §3, §10; `migration-guide.md` seed mentions.
 

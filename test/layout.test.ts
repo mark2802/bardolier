@@ -137,7 +137,7 @@ describe('what the generated file binds', () => {
 
 // ── nothing is inside a working tree (§3) ────────────────────────────────────
 describe('the repository boundary', () => {
-  test('the seeds live in work/, where a clone beside it will never contain it', async () => {
+  test('the seeds live in work/, where a clone beside them will never contain them', async () => {
     const box = sandbox()
     await runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined })
     assert.ok(box.exists('myapp', 'work', 'myapp', 'CLAUDE.md'))
