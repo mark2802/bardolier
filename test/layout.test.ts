@@ -43,11 +43,11 @@ const sandbox = sandboxes()
 
 // ── the four directories (§3, §4.2) ──────────────────────────────────────────
 describe('the project directory’s shape', () => {
-  test('`new` creates the four folders and the four seeds under work/<name>/, and nothing else', async () => {
+  test('`new` creates the four folders and the six seeds under work/<name>/, and nothing else', async () => {
     const box = sandbox()
     const result = await runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined })
 
-    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
     assert.deepEqual(
       readdirSync(box.path('myapp')).sort(),
       ['data', 'docker-compose.yml', 'home', 'local', 'project.yml', 'work'],
@@ -67,7 +67,7 @@ describe('the project directory’s shape', () => {
       }
     }
     for (const archetype of ['web', 'ios', 'android', 'library'] as const) {
-      assert.deepEqual(seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), []).map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md'])
+      assert.deepEqual(seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), []).map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
     }
   })
 
@@ -137,7 +137,7 @@ describe('what the generated file binds', () => {
 
 // ── nothing is inside a working tree (§3) ────────────────────────────────────
 describe('the repository boundary', () => {
-  test('the seed lives in work/, where a clone beside it will never contain it', async () => {
+  test('the seeds live in work/, where a clone beside them will never contain them', async () => {
     const box = sandbox()
     await runNew(makeContext(box), { name: 'myapp', archetype: 'web', services: undefined })
     assert.ok(box.exists('myapp', 'work', 'myapp', 'CLAUDE.md'))
