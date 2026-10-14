@@ -713,7 +713,8 @@ add the field by hand to move it. `new`, `adopt` and a shape `clone` record thei
 name; `clone --with-content` keeps the source's value, as its sessions and absolute paths
 are filed under that folder.
 
-- `CLAUDE.md` — minimal: names the five docs and who owns each, says what each is for, and says to
+- `CLAUDE.md` — minimal: names the five docs and who owns each (`product.md` and `dev-principles.md`: owner-edited, the agent proposes;
+  `architecture.md` and `design.md`: the agent keeps current; `env.md`: generated), says what each is for, and says to
   read them only when a task needs them.
 - `docs/env.md` — the environment, in terms that reproduce it **without**
   bardolier: base OS, toolchain versions (read from the bundled Dockerfile's
