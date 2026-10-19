@@ -61,6 +61,7 @@ RUN set -eux; \
     echo "${OHMYZSH_SHA256}  ${tmp}/omz.tgz" | sha256sum -c -; \
     mkdir -p /usr/local/share/oh-my-zsh; \
     tar -xzf "${tmp}/omz.tgz" -C /usr/local/share/oh-my-zsh --strip-components=1; \
+    chmod -R go-w /usr/local/share/oh-my-zsh; \
     rm -rf "${tmp}"; \
     { \
       echo 'export ZSH=/usr/local/share/oh-my-zsh'; \
