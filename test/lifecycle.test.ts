@@ -66,7 +66,7 @@ describe('new (cli-spec.md §6, §10)', () => {
     const result = await runNew(ctx, { name: 'myapp', archetype: 'web', services: undefined })
 
     assert.ok(validate('new', result).valid, 'new output must match new.schema.json')
-    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/spec.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
     assert.equal(result.project.base_image, 'bardolier-web')
     assert.equal(result.project.created, FIXED_NOW.toISOString())
 
@@ -166,16 +166,17 @@ describe('new (cli-spec.md §6, §10)', () => {
     const postgres = { key: 'postgres', definition: { display: 'PostgreSQL', image: 'postgres:17', container_port: 5432, host_port_base: 5432, mount: '/x', env: { POSTGRES_DB: '{project}' } } }
     for (const archetype of ARCHETYPES) {
       const files = seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), [postgres])
-      assert.deepEqual(files.map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'], `${archetype} seeds the wrong set`)
+      assert.deepEqual(files.map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/spec.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'], `${archetype} seeds the wrong set`)
       const claudeMd = files[0]?.contents ?? ''
-      for (const doc of ['docs/env.md', 'docs/product.md', 'docs/dev-principles.md', 'docs/architecture.md', 'docs/design.md']) assert.ok(claudeMd.includes(doc))
+      for (const doc of ['docs/env.md', 'docs/product.md', 'docs/spec.md', 'docs/dev-principles.md', 'docs/architecture.md', 'docs/design.md']) assert.ok(claudeMd.includes(doc))
       assert.ok(!claudeMd.includes('bardolier'), 'CLAUDE.md stays minimal and tool-free')
       // Who owns each doc (§10).
       assert.equal(claudeMd.match(/The owner's:\s+propose changes, don't edit\./g)?.length, 2, 'product and dev-principles are the owner’s')
-      assert.equal(claudeMd.split('keep it current').length - 1, 2, 'architecture and design are kept current by the agent')
+      assert.equal(claudeMd.split('keep it current').length - 1, 3, 'spec, architecture and design are kept current by the agent')
       assert.ok(claudeMd.includes("Generated; don't hand-edit."), 'env.md is generated')
       const seedBody = (suffix: string) => files.find((f) => f.name.endsWith(suffix))?.contents ?? ''
       assert.ok(seedBody('dev-principles.md').includes('## Code structure') && !seedBody('dev-principles.md').includes('## Design'))
+      assert.ok(seedBody('spec.md').includes('## Open questions'))
       assert.ok(seedBody('architecture.md').includes('| Decision | Why | Date |'))
       assert.ok(seedBody('design.md').includes('Delete this file and its line in CLAUDE.md'))
 
@@ -251,7 +252,7 @@ describe('clone (cli-spec.md §6)', () => {
     assert.ok(compose.includes('bardolier-twin'), 'compose still names the source')
 
     assert.equal(box.read('source', 'project.yml'), before, 'clone modified the source manifest')
-    assert.deepEqual(result.seeded, ['work/twin/CLAUDE.md', 'work/twin/docs/env.md', 'work/twin/docs/product.md', 'work/twin/docs/dev-principles.md', 'work/twin/docs/architecture.md', 'work/twin/docs/design.md'])
+    assert.deepEqual(result.seeded, ['work/twin/CLAUDE.md', 'work/twin/docs/env.md', 'work/twin/docs/product.md', 'work/twin/docs/spec.md', 'work/twin/docs/dev-principles.md', 'work/twin/docs/architecture.md', 'work/twin/docs/design.md'])
   })
 
   test('--with-content copies all four folders of §3, home/ included', async () => {

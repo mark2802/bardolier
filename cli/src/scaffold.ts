@@ -85,6 +85,8 @@ Read these only when a task needs them:
 - \`docs/product.md\` — what this project is meant to build: purpose, users, scope and
   constraints. Read before planning features or making product decisions. The owner's:
   propose changes, don't edit.
+- \`docs/spec.md\` — what the system does, in detail: behaviour, rules, edge cases and
+  acceptance criteria. Read before implementing or changing behaviour; keep it current.
 - \`docs/architecture.md\` — tech stack, structure, interfaces and decisions taken. Read
   before changing structure or adding a dependency; keep it current as you change them.
 - \`docs/design.md\` — visual look and feel, interaction, voice and copy. Read before
@@ -114,6 +116,25 @@ _Placeholder. Describe what this project is intended to build._
 ### Out
 
 ## Constraints
+`
+}
+
+export function specMd(name: string): string {
+  return `# ${name} — spec
+
+_Placeholder. Describe what the system does, in detail; \`product.md\` says why._
+
+## Overview
+
+## Features
+
+For each: behaviour, rules, edge cases, acceptance criteria.
+
+## Data
+
+## Errors
+
+## Open questions
 `
 }
 
@@ -272,7 +293,7 @@ export type SeededFile = {
   readonly contents: string
 }
 
-/** The §10 seed set — six files under `work/<work_folder>/`. */
+/** The §10 seed set — seven files under `work/<work_folder>/`. */
 export function seededFiles(manifest: ProjectManifest, services: readonly EnvService[]): SeededFile[] {
   const folder = manifest.work_folder
   if (folder === undefined) throw new BardolierError('INTERNAL_ERROR', `Seeding \`${manifest.name}\` without a work_folder.`)
@@ -281,6 +302,7 @@ export function seededFiles(manifest: ProjectManifest, services: readonly EnvSer
     { name: `${base}/CLAUDE.md`, contents: claudeMd(manifest.name) },
     { name: `${base}/${DOCS_DIR}/${ENV_DOC}`, contents: envMd(manifest, services, folder) },
     { name: `${base}/${DOCS_DIR}/product.md`, contents: productMd(manifest.name) },
+    { name: `${base}/${DOCS_DIR}/spec.md`, contents: specMd(manifest.name) },
     { name: `${base}/${DOCS_DIR}/dev-principles.md`, contents: devPrinciplesMd() },
     { name: `${base}/${DOCS_DIR}/architecture.md`, contents: architectureMd(manifest.name) },
     { name: `${base}/${DOCS_DIR}/design.md`, contents: designMd(manifest.name) },
