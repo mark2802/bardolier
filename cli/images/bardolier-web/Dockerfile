@@ -175,7 +175,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN set -eux; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}"; \
     playwright install --with-deps chromium; \
-    apt-get install -y --no-install-recommends xauth; \
+    apt-get update; apt-get install -y --no-install-recommends xauth; \
     chown -R "${HOST_UID}:${HOST_GID}" "${PLAYWRIGHT_BROWSERS_PATH}" "${NPM_CONFIG_PREFIX}"; \
     rm -rf /var/lib/apt/lists/* /root/.npm
 

@@ -446,10 +446,10 @@ if [ -n "$CONTAINER" ]; then
 
   # zsh really starts for the dev user (the argv tests only compare strings).
   if in_c 'test ! -e ~/.zshrc'; then
-    ZSH_OUT="$(docker exec "$CONTAINER" zsh -ic 'print -r -- "$USER:$ZSH:${+functions[omz]}"' </dev/null 2>&1)"
+    ZSH_OUT="$(docker exec "$CONTAINER" zsh -ic 'print -r -- "$(id -u):$ZSH:${+functions[omz]}"' </dev/null 2>&1)"
     case "$ZSH_OUT" in
       *newuser*|*"configuration function"*|*"This is the Z Shell"*) bad "zsh showed its first-run menu: $ZSH_OUT" ;;
-      root:*) bad "zsh ran as root, not the dev user: $ZSH_OUT" ;;
+      0:*) bad "zsh ran as root, not the dev user: $ZSH_OUT" ;;
       *:/usr/local/share/oh-my-zsh:1) ok "zsh starts for the dev user with oh-my-zsh loaded, no first-run menu" ;;
       *) bad "zsh did not load oh-my-zsh: $ZSH_OUT" ;;
     esac
