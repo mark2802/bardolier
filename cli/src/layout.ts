@@ -18,6 +18,7 @@
 
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync, type Dirent } from 'node:fs'
 import { join } from 'node:path'
+import { isUntouchedDefault } from './agent-settings.ts'
 
 /** Host-side directory names, relative to the project directory. */
 export const WORK_DIR = 'work'
@@ -160,10 +161,9 @@ export function irreplaceableBytes(dir: string): number {
   return directorySize(dataDir(dir)) + directorySize(homeDir(dir))
 }
 
-/** True when any FILE lives under `path`, ignoring one name at its top level. */
-function containsFile(path: string, ignore?: string): boolean {
+/** True when any FILE lives under `path`, ignoring those `ignore` accepts (given the file's full path). */
+function containsFile(path: string, ignore?: (file: string) => boolean): boolean {
   const stack = [path]
-  let top = true
   while (stack.length > 0) {
     const current = stack.pop()
     if (current === undefined) continue
@@ -174,11 +174,10 @@ function containsFile(path: string, ignore?: string): boolean {
       continue
     }
     for (const entry of listing) {
-      if (top && entry.name === ignore) continue
-      if (entry.isDirectory()) stack.push(join(current, entry.name))
-      else return true
+      const child = join(current, entry.name)
+      if (entry.isDirectory()) stack.push(child)
+      else if (!ignore?.(child)) return true
     }
-    top = false
   }
   return false
 }
@@ -190,8 +189,10 @@ function containsFile(path: string, ignore?: string): boolean {
  * FILES, not directories: `new` and `up` create the bind sources themselves
  * (see above), so an empty `data/postgres` is bardolier's own scaffolding and
  * refusing over it would make an untouched project undeletable. The Spotlight
- * marker is ours for the same reason.
+ * marker, and the attribution default `up` writes
+ * into `home/` while it is unedited (`agent-settings.ts`), are ours for the same reason.
  */
 export function holdsData(dir: string): boolean {
-  return containsFile(dataDir(dir), NEVER_INDEX) || containsFile(homeDir(dir))
+  const marker = join(dataDir(dir), NEVER_INDEX)
+  return containsFile(dataDir(dir), (file) => file === marker) || containsFile(homeDir(dir), (file) => isUntouchedDefault(homeDir(dir), file))
 }
