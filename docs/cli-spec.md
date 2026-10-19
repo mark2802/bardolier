@@ -156,7 +156,7 @@ created: 2026-08-19T10:00:00Z
 
 | Archetype | Base image   | In-container build?          | Host build step        |
 |-----------|--------------|------------------------------|------------------------|
-| web       | `bardolier-web` | full (Node/Next + Python via `uv`, services) | none    |
+| web       | `bardolier-web` | full (Node/Next + Python via `uv`, Playwright, services) | none |
 | ios       | `bardolier-ios` | edit + swiftlint + logic test| Xcode (build/sim/sign) |
 | android   | `bardolier-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `bardolier-web` | full                         | none                   |
@@ -170,6 +170,10 @@ to host, installed as a standalone binary on a system path rather than under
 `$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
 ripgrep, jq, curl) and **zsh with oh-my-zsh** (the interactive shell: pinned commit under
 `/usr/local/share`, global `/etc/zsh/zshrc`, history in `$HOME`). Versions: §6, Images.
+
+`bardolier-web` also carries **Playwright with headless Chromium** (pinned `PLAYWRIGHT_VERSION`,
+browsers in `/opt/ms-playwright`, system libraries included — there is no sudo to add them
+later). A project's `@playwright/test` must pin the same version. Chromium only.
 
 **`bardolier-and` is built and run as `linux/amd64`.** Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon

@@ -163,6 +163,20 @@ ENV NPM_CONFIG_PREFIX=/usr/local/npm-global
 ENV PATH=${NPM_CONFIG_PREFIX}/bin:$PATH
 RUN mkdir -p ${NPM_CONFIG_PREFIX} && chown -R "${HOST_UID}:${HOST_GID}" ${NPM_CONFIG_PREFIX}
 
+# Playwright + headless Chromium for browser testing. Chromium lives in the image
+# (/opt/ms-playwright, outside $HOME and /cache), because its system libraries must
+# be apt-installed as root and there is no sudo at runtime. A project's own
+# `@playwright/test` must pin THIS version, or it looks for a browser revision that
+# is not installed. Chromium only: firefox/webkit are ~400MB more on every web image.
+ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN set -eux; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}"; \
+    playwright install --with-deps chromium; \
+    chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"; \
+    chown -R "${HOST_UID}:${HOST_GID}" "${NPM_CONFIG_PREFIX}"; \
+    rm -rf /var/lib/apt/lists/* /root/.npm
+
 # A PERSISTENT HOME, at a path the compose file can name.
 #
 # `bardolier down` removes the container, so a home living in the container layer
