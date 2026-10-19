@@ -23,7 +23,7 @@ import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
 
 /** zsh (oh-my-zsh) when the image has it, bash for a project not yet rebuilt. */
-const SHELL_ARGV = ['sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash']
+export const SHELL_ARGV = ['sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash']
 
 export async function runShell(
   ctx: Context,
@@ -69,7 +69,7 @@ export async function runShell(
 }
 
 /** POSIX-quote an argv word for display, so `--print` output can be pasted. */
-function quoted(word: string): string {
+export function quoted(word: string): string {
   return /^[A-Za-z0-9_./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`
 }
 
