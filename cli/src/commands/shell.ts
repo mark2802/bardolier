@@ -84,7 +84,7 @@ export function renderShell(output: ShellOutput): string[] {
   ]
 }
 
-/** `--print`: the command alone, so it can be pasted or `$(…)`-substituted. */
+/** `--print`: the command alone, quoted so it can be pasted or `eval`'d (not bare `$(…)`: quotes survive word-splitting). */
 export function renderShellPrint(output: ShellOutput): string[] {
   return [output.exec.map(quoted).join(' ')]
 }

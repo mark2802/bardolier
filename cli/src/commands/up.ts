@@ -251,7 +251,7 @@ export function renderUp(output: UpOutput): string[] {
     lines.push(`Not everything came up — run \`bardolier status ${output.project}\` for detail.`)
   } else {
     lines.push('')
-    lines.push(`Shell in with: bardolier shell ${output.project}`)
+    lines.push(`Shell in with: eval "$(bardolier shell ${output.project} --print)"`)
   }
   return lines
 }
