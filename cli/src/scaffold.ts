@@ -39,12 +39,14 @@ const BOUNDARY: Readonly<Record<Archetype, string>> = {
     'step for this archetype — if a command fails, fix it here rather than',
     'reaching for the Mac.',
     '',
-    'Browser tests run headless in Playwright\u2019s Chromium (the only browser installed).',
+    'Browser tests run in Playwright\u2019s Chromium (the only browser installed), headless by',
+    'default; for headed runs use `xvfb-run`.',
     'A project\u2019s `@playwright/test` must match the Playwright version above.',
   ].join('\n'),
   library: [
     'Everything builds and tests **in the container**. There is no host-side build',
-    'step for this archetype. Headless Chromium and Playwright are installed; a',
+    'step for this archetype. Playwright and Chromium are installed (headless, or headed under',
+    '`xvfb-run`); a',
     'project\u2019s `@playwright/test` must match the Playwright version above.',
   ].join('\n'),
   ios: [

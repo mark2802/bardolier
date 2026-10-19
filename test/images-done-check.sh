@@ -433,6 +433,17 @@ if [ -n "$CONTAINER" ]; then
     bad "no working uv in the web container"
   fi
 
+  if in_c 'NODE_PATH=$(npm root -g) node -e "require(\"playwright\").chromium.launch().then((b) => b.close())"' >/dev/null 2>&1; then
+    ok "headless Chromium launches via the pinned Playwright"
+  else
+    bad "headless chromium.launch() failed in the web container"
+  fi
+  if in_c 'command -v xvfb-run >/dev/null && NODE_PATH=$(npm root -g) xvfb-run -a node -e "require(\"playwright\").chromium.launch({ headless: false }).then((b) => b.close())"' >/dev/null 2>&1; then
+    ok "headed Chromium launches under xvfb-run"
+  else
+    bad "headed chromium (xvfb-run) failed in the web container"
+  fi
+
   if [ "${PHASE11_QUICK:-0}" = "1" ]; then
     skip "PHASE11_QUICK=1 — skipped uv python install and the offline-cache proof"
   else

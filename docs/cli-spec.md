@@ -173,7 +173,9 @@ ripgrep, jq, curl) and **zsh with oh-my-zsh** (the interactive shell: pinned com
 
 `bardolier-web` also carries **Playwright with headless Chromium** (pinned `PLAYWRIGHT_VERSION`,
 browsers in `/opt/ms-playwright`, system libraries included — there is no sudo to add them
-later). A project's `@playwright/test` must pin the same version. Chromium only.
+later). A project's `@playwright/test` should pin the same version; the dev user owns the
+browsers directory, so a mismatch can `playwright install` its own revision. Chromium only,
+headless or headed under `xvfb-run`.
 
 **`bardolier-and` is built and run as `linux/amd64`.** Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon

@@ -168,14 +168,14 @@ RUN mkdir -p ${NPM_CONFIG_PREFIX} && chown -R "${HOST_UID}:${HOST_GID}" ${NPM_CO
 # (/opt/ms-playwright, outside $HOME and /cache), because its system libraries must
 # be apt-installed as root and there is no sudo at runtime. A project's own
 # `@playwright/test` must pin THIS version, or it looks for a browser revision that
-# is not installed. Chromium only: firefox/webkit are ~400MB more on every web image.
+# is not installed (the dev user owns the directory, so a mismatched project can
+# still `playwright install` its own revision). Chromium only: firefox/webkit are ~400MB more on every web image.
 ARG PLAYWRIGHT_VERSION=1.64.1
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN set -eux; \
     npm install -g "playwright@${PLAYWRIGHT_VERSION}"; \
     playwright install --with-deps chromium; \
-    chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"; \
-    chown -R "${HOST_UID}:${HOST_GID}" "${NPM_CONFIG_PREFIX}"; \
+    chown -R "${HOST_UID}:${HOST_GID}" "${PLAYWRIGHT_BROWSERS_PATH}" "${NPM_CONFIG_PREFIX}"; \
     rm -rf /var/lib/apt/lists/* /root/.npm
 
 # A PERSISTENT HOME, at a path the compose file can name.
