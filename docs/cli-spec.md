@@ -348,7 +348,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   Brings the project up (app dev container + attached services on one network).
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
   suppresses the app's shell-open (the CLI itself doesn't spawn terminals — it
-  reports the exec command; see §6 shell).
+  reports the exec command; see §6 shell). Each `up` also gives `home/.claude/settings.json`
+  `attribution: {commit: "", pr: ""}` if it has no `attribution` key (§9).
 - `bardolier down <name> [--no-handoff]` — stop + remove this project's containers.
   Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
 - `bardolier delete <name> [--force] [--purge]` — remove containers, then the

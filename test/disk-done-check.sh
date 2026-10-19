@@ -251,7 +251,7 @@ fi
 if [ "$DOCKER_OK" = "1" ]; then
   $BARDOLIER up beta --json >/dev/null || bad "up beta (third time) exited non-zero"
   PRINTED="$($BARDOLIER shell beta --print)"
-  [ "$PRINTED" = "docker exec -it bardolier-beta bash" ] \
+  [ "$PRINTED" = "docker exec -it bardolier-beta sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
     && ok "\`shell --print\` prints exactly the command to run" || bad "shell --print printed '$PRINTED'"
   $BARDOLIER down-all >/dev/null
 fi
