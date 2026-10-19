@@ -95,7 +95,7 @@ describe('adopt (cli-spec.md §6, phase 30)', () => {
 
     assert.ok(validate('adopt', result).valid)
     assert.deepEqual(result.seeds_skipped, ['work/myapp/CLAUDE.md', 'work/myapp/docs/product.md'])
-    assert.deepEqual(result.seeded, ['work/myapp/docs/env.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
+    assert.deepEqual(result.seeded, ['work/myapp/docs/env.md', 'work/myapp/docs/spec.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'])
     assert.equal(box.read('myapp', 'work', 'myapp', 'CLAUDE.md'), '# mine')
     assert.equal(box.read('myapp', 'work', 'myapp', 'docs', 'product.md'), '# my product')
   })
