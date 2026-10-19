@@ -64,7 +64,7 @@ root the same way. Each root:
     data/    → /data:ro            service data, one directory per attached service
     local/   → /local              neither repository nor service data
     home/    → /state/home         the dev container's $HOME
-    work/<project>/                # seeded: CLAUDE.md, docs/{env,product,dev-principles}.md (§10)
+    work/<project>/                # seeded: CLAUDE.md, docs/{env,product,dev-principles,architecture,design}.md (§10)
 ```
 
 - **A project directory is not a repository.** bardolier's files sit
@@ -261,7 +261,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Projects
 - `bardolier new <name> --archetype <a> [--services a,b] [--root <name>]`
   Creates dir, manifest, compose, the four folders of §3, and
-  the four seeds of §10 under `work/<name>/` (recorded as `work_folder`), under the named root
+  the six seeds of §10 under `work/<name>/` (recorded as `work_folder`), under the named root
   (default: the first configured root — §8).
   Assigns ports for any initial services. An unreadable root beyond the
   target degrades rather than blocking this (§5): the response
@@ -703,7 +703,7 @@ Schema stability is the contract. Additive changes only once the app ships.
 
 ## 10. Seeded files (by `new`)
 
-Four files under `work/<name>/`, so other repositories can be cloned into `work/`
+Six files under `work/<name>/`, so other repositories can be cloned into `work/`
 beside the project without clashing. The folder is recorded as `work_folder` in
 `project.yml` (§4.2) and is never inferred from file contents. `shell` and the handoff
 (§12) start the agent in `/work/<work_folder>` when it is recorded and the directory
@@ -713,8 +713,10 @@ add the field by hand to move it. `new`, `adopt` and a shape `clone` record thei
 name; `clone --with-content` keeps the source's value, as its sessions and absolute paths
 are filed under that folder.
 
-- `CLAUDE.md` — minimal: names the three docs, says what each is for, and says to
-  read them only when a task needs them.
+- `CLAUDE.md` — minimal: names the five docs and who owns each (`product.md` and
+  `dev-principles.md`: owner-edited, the agent proposes; `architecture.md` and `design.md`:
+  the agent keeps current; `env.md`: generated), says what each is for, and says to read
+  them only when a task needs them.
 - `docs/env.md` — the environment, in terms that reproduce it **without**
   bardolier: base OS, toolchain versions (read from the bundled Dockerfile's
   `ARG` pins, so they cannot drift; not Claude Code's, as builds default to `latest`), `extra_packages`, the `/work` `/data` `/local`
@@ -725,9 +727,12 @@ are filed under that folder.
   and image; refreshed on request by `env --write` (§6).
 - `docs/product.md` — a placeholder for what the project is meant to build.
 - `docs/dev-principles.md` — generic coding and process guidelines.
+- `docs/architecture.md` — placeholder for stack, structure, interfaces and a decisions table.
+- `docs/design.md` — placeholder for visual design, interaction, voice and copy; deleted,
+  with its `CLAUDE.md` line, if the project has no UI.
 
-Seeds are written once and are the owner's from then on (except `env.md`'s
-refresh). `adopt` writes a seed only where the copy has no file at that path.
+Seeds are written once and bardolier never rewrites them (except `env.md`'s
+refresh); the seeded `CLAUDE.md` says who edits each. `adopt` writes a seed only where the copy has no file at that path.
 `clone --with-content` writes none, and re-renders the kept folder's `env.md` for the clone
 only if bardolier wrote it (the rule `env --write` uses); a repo's own file stays.
 
