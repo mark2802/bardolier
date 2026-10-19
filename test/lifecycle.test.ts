@@ -165,7 +165,7 @@ describe('new (cli-spec.md §6, §10)', () => {
     }
     const postgres = { key: 'postgres', definition: { display: 'PostgreSQL', image: 'postgres:17', container_port: 5432, host_port_base: 5432, mount: '/x', env: { POSTGRES_DB: '{project}' } } }
     for (const archetype of ARCHETYPES) {
-      const files = seededFiles(manifest('myapp', { archetype, work_folder: 'myapp' }), [postgres])
+      const files = seededFiles(manifest('myapp', { archetype, base_image: ARCHETYPE_BASE_IMAGE[archetype], work_folder: 'myapp' }), [postgres])
       assert.deepEqual(files.map((f) => f.name), ['work/myapp/CLAUDE.md', 'work/myapp/docs/env.md', 'work/myapp/docs/product.md', 'work/myapp/docs/spec.md', 'work/myapp/docs/dev-principles.md', 'work/myapp/docs/architecture.md', 'work/myapp/docs/design.md'], `${archetype} seeds the wrong set`)
       const claudeMd = files[0]?.contents ?? ''
       for (const doc of ['docs/env.md', 'docs/product.md', 'docs/spec.md', 'docs/dev-principles.md', 'docs/architecture.md', 'docs/design.md']) assert.ok(claudeMd.includes(doc))
@@ -185,6 +185,7 @@ describe('new (cli-spec.md §6, §10)', () => {
       // Never localhost: services are reached by name over the network (§5).
       assert.ok(env.includes('`postgres:5432`') && env.includes('POSTGRES_DB=myapp'))
       assert.ok(env.includes('/data'), `${archetype} env.md does not describe the layout`)
+      assert.equal(env.includes('Playwright (Chromium only)'), archetype === 'web' || archetype === 'library', `${archetype} env.md Playwright line`)
       // Reproducible without the tool: no host ports, no bardolier commands; one footer.
       assert.ok(!/bardolier (status|up|down|service|shell)/.test(env))
       assert.equal(env.split('\n').filter((line) => /bardolier/i.test(line)).length, 1, 'only the footer names the tool')

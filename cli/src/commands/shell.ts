@@ -25,6 +25,26 @@ import { requireProject, runningNames } from '../workspace.ts'
 /** zsh (oh-my-zsh) when the image has it, bash for a project not yet rebuilt. */
 export const SHELL_ARGV = ['sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash']
 
+/**
+ * The exec argv `shell` returns and `up` prints, built once so they cannot drift.
+ * `-it` because this argv is handed to a terminal, where a shell without a TTY is
+ * useless; the app runs it verbatim — no shell, no quoting. `-u root` is
+ * `docker exec` overriding the image's USER for this one exec (ephemeral), and
+ * `-e HOME=/root` stops root's zsh writing root-owned dotfiles into the dev
+ * user's `$HOME` (`/state/home`, which `docker exec -u root` would otherwise keep).
+ */
+export function shellExec(container: string, workdir: string, root = false): string[] {
+  return [
+    'docker',
+    'exec',
+    ...(root ? ['-u', 'root', '-e', 'HOME=/root'] : []),
+    ...(workdir === CONTAINER_WORK ? [] : ['-w', workdir]),
+    '-it',
+    container,
+    ...SHELL_ARGV,
+  ]
+}
+
 export async function runShell(
   ctx: Context,
   name: string | undefined,
@@ -52,18 +72,11 @@ export async function runShell(
   // The recorded `work_folder` is where the agent should start: Claude Code reads
   // CLAUDE.md from its starting directory upward, never downward (§10).
   const workdir = agentWorkdir(project.manifest, project.dir)
-  const dir = workdir === CONTAINER_WORK ? [] : ['-w', workdir]
 
   return {
     project: project.name,
     container,
-    // `-it` because this argv is handed to a terminal, where a shell without a
-    // TTY is useless. The app runs it verbatim — no shell, no quoting.
-    // `-u root` (only when asked) is `docker exec` overriding the image's own
-    // USER for this one exec — ephemeral, same as any other runtime change.
-    exec: options.root
-      ? ['docker', 'exec', '-u', 'root', ...dir, '-it', container, ...SHELL_ARGV]
-      : ['docker', 'exec', ...dir, '-it', container, ...SHELL_ARGV],
+    exec: shellExec(container, workdir, options.root),
     workdir,
   }
 }

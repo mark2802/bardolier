@@ -17,6 +17,8 @@
 import type { ErrorCode } from '../errors.ts'
 import { BardolierError, notImplemented } from '../errors.ts'
 import { createContext } from '../context.ts'
+import { agentWorkdir } from '../layout.ts'
+import { requireProject } from '../workspace.ts'
 import { flagKey } from '../argv.ts'
 import { collectStatus, renderStatus } from './status.ts'
 import { collectList, renderList } from './list.ts'
@@ -321,7 +323,12 @@ export const COMMANDS: readonly CommandNode[] = [
     errors: ['SSD_NOT_MOUNTED', 'PROJECT_NOT_FOUND', 'PROJECT_AMBIGUOUS', 'PORT_UNAVAILABLE', 'DOCKER_UNAVAILABLE'],
     run: async (inv) => {
       const [name] = exactArgs(inv, byPath('up'), 1)
-      return output(await runUp(createContext(), { name, noShell: boolFlag(inv, '--no-shell') }), renderUp)
+      const ctx = createContext()
+      const result = await runUp(ctx, { name, noShell: boolFlag(inv, '--no-shell') })
+      // The hint's `-w` must match `shell`'s; the workdir is human-only, not in `--json`.
+      const project = requireProject(ctx, result.project)
+      const workdir = agentWorkdir(project.manifest, project.dir)
+      return output(result, (o) => renderUp(o, workdir))
     },
   },
   {

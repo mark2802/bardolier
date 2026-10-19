@@ -86,11 +86,13 @@ if [ "$DOCKER_OK" = "1" ]; then
   json_assert "$SHELL_JSON" "d.container === 'bardolier-alpha' && Array.isArray(d.exec) && d.exec[0] === 'docker'" \
     && ok "it resolves the dev container and returns an exec ARGV, not a string" || bad "shell did not resolve the container"
 
-  # Prove the command it names actually works. `-it` is dropped because this
-  # script has no TTY; everything else is run verbatim.
+  # Prove the command it names actually works. `-it` is dropped (no TTY here) and
+  # the shell is swapped for `pwd`; the exec's own flags, `-w` included, run verbatim.
   CONTAINER="$(json_value "$SHELL_JSON" 'd.container')"
   WORKDIR="$(json_value "$SHELL_JSON" 'd.workdir')"
-  IN_CONTAINER="$(docker exec "$CONTAINER" bash -lc 'pwd' 2>/dev/null | tr -d '\r')"
+  EXEC_ARGV=()
+  while IFS= read -r word || [ -n "$word" ]; do EXEC_ARGV+=("$word"); done < <(json_value "$SHELL_JSON" "d.exec.slice(0, d.exec.indexOf(d.container) + 1).filter((w) => w !== '-it').join('\n')")
+  IN_CONTAINER="$("${EXEC_ARGV[@]}" pwd 2>/dev/null | tr -d '\r')"
   [ "$IN_CONTAINER" = "$WORKDIR" ] \
     && ok "running it lands a shell in $WORKDIR — the bind-mounted project dir" || bad "the exec command did not land in $WORKDIR (got '$IN_CONTAINER')"
   # `work/` is mounted, and the manifest above it deliberately is NOT (§3).
@@ -251,7 +253,7 @@ fi
 if [ "$DOCKER_OK" = "1" ]; then
   $BARDOLIER up beta --json >/dev/null || bad "up beta (third time) exited non-zero"
   PRINTED="$($BARDOLIER shell beta --print)"
-  [ "$PRINTED" = "docker exec -it bardolier-beta sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
+  [ "$PRINTED" = "docker exec -w /work/beta -it bardolier-beta sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
     && ok "\`shell --print\` prints exactly the command to run" || bad "shell --print printed '$PRINTED'"
   $BARDOLIER down-all >/dev/null
 fi

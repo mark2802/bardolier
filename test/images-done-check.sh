@@ -444,6 +444,22 @@ if [ -n "$CONTAINER" ]; then
     bad "headed chromium (xvfb-run) failed in the web container"
   fi
 
+  # zsh really starts for the dev user (the argv tests only compare strings).
+  if in_c 'test ! -e ~/.zshrc'; then
+    ZSH_OUT="$(docker exec "$CONTAINER" zsh -ic 'print -r -- "$(id -u):$ZSH:${+functions[omz]}"' </dev/null 2>&1)"
+    case "$ZSH_OUT" in
+      *newuser*|*"configuration function"*|*"This is the Z Shell"*) bad "zsh showed its first-run menu: $ZSH_OUT" ;;
+      0:*) bad "zsh ran as root, not the dev user: $ZSH_OUT" ;;
+      *:/usr/local/share/oh-my-zsh:1) ok "zsh starts for the dev user with oh-my-zsh loaded, no first-run menu" ;;
+      *) bad "zsh did not load oh-my-zsh: $ZSH_OUT" ;;
+    esac
+    in_c 'test -e ~/.zshrc' && ok "the first zsh creates ~/.zshrc" || bad "~/.zshrc was not created"
+    AUDIT="$(docker exec "$CONTAINER" zsh -ic compaudit </dev/null 2>&1)"
+    [ -z "$AUDIT" ] && ok "compaudit is silent (no insecure completion directories)" || bad "compaudit reported: $AUDIT"
+  else
+    skip "~/.zshrc already exists — cannot show the first-run behaviour"
+  fi
+
   if [ "${PHASE11_QUICK:-0}" = "1" ]; then
     skip "PHASE11_QUICK=1 — skipped uv python install and the offline-cache proof"
   else
