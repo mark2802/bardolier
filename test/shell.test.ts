@@ -10,7 +10,8 @@ import { join } from 'node:path'
 import { BardolierError } from '../cli/src/errors.ts'
 import { validate } from '../cli/src/schema.ts'
 import { runNew } from '../cli/src/commands/new.ts'
-import { runShell } from '../cli/src/commands/shell.ts'
+import { renderUp } from '../cli/src/commands/up.ts'
+import { renderShellPrint, quoted, runShell } from '../cli/src/commands/shell.ts'
 import { requireProject, writeManifest } from '../cli/src/workspace.ts'
 import type { Context } from '../cli/src/context.ts'
 import { makeContext, project, sandboxes, stubDocker } from './helpers.ts'
@@ -83,7 +84,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha', { root: true })
-    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-e', 'HOME=/root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'])
     assert.ok(validate('shell', output).valid)
   })
 
@@ -165,5 +166,39 @@ describe('shell-open (app-spec.md §7)', () => {
     assert.ok(validate('shell', invocation).valid, validate('shell', invocation).errors.join('\n'))
     assert.equal(invocation.exec[0], 'docker')
     assert.ok(invocation.exec.length > 1, 'argv, so the app needs no quoting rules of its own')
+  })
+})
+
+describe('pasteable rendering', () => {
+  test('quoted leaves safe words bare and escapes a single quote', () => {
+    assert.equal(quoted('docker'), 'docker')
+    assert.equal(quoted('/work/a-b_c.d'), '/work/a-b_c.d')
+    assert.equal(quoted('two words'), `'two words'`)
+    assert.equal(quoted(`it's`), `'it'\\''s'`)
+  })
+
+  test('--print is the exec as one pasteable line, workdir included', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+
+    const out = await runShell(ctx, 'alpha', { root: true })
+    assert.deepEqual(renderShellPrint(out), [
+      `docker exec -u root -e HOME=/root -w /work/alpha -it bardolier-alpha sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'`,
+    ])
+  })
+
+  test('the up hint is the same exec as shell --print, and says shell only prints', async () => {
+    const box = sandbox()
+    const ctx = makeContext(box, stubDocker({ running: ['bardolier-alpha'] }))
+    await project(ctx, 'alpha')
+    const shell = await runShell(ctx, 'alpha')
+
+    const lines = renderUp(
+      { project: 'alpha', state: 'running', dev_container: 'bardolier-alpha', services: [], already_running: false, compose_regenerated: false, open_shell: true },
+      shell.workdir,
+    )
+    assert.ok(lines.includes(`Shell in with: ${renderShellPrint(shell)[0]}`), lines.join('\n'))
+    assert.ok(lines.some((l) => l.includes('bardolier shell alpha') && l.includes('does not open a terminal')))
   })
 })

@@ -40,22 +40,29 @@ if [ "$DOCKER_OK" = "1" ]; then
 
   PLAIN="$($BARDOLIER shell alpha --json)" || bad "shell exited non-zero"
   schema_assert shell "$PLAIN" && ok "plain shell --json still validates against shell.schema.json" || bad "plain shell output does not match its schema"
-  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
+  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-w','/work/alpha','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
     && ok "plain shell's exec runs zsh, else bash" || bad "plain shell's exec argv changed"
 
   ROOT="$($BARDOLIER shell alpha --root --json)" || bad "shell --root exited non-zero"
   schema_assert shell "$ROOT" && ok "shell --root --json validates against the same shell.schema.json (no bump)" || bad "shell --root output does not match its schema"
-  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
-    && ok "shell --root's exec has -u root ahead of -it" || bad "shell --root's exec argv is wrong"
+  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-e','HOME=/root','-w','/work/alpha','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
+    && ok "shell --root's exec has -u root -e HOME=/root ahead of -w/-it" || bad "shell --root's exec argv is wrong"
 
   ROOT_PRINT="$($BARDOLIER shell alpha --root --print)"
-  [ "$ROOT_PRINT" = "docker exec -u root -it bardolier-alpha sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
+  [ "$ROOT_PRINT" = "docker exec -u root -e HOME=/root -w /work/alpha -it bardolier-alpha sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
     && ok "shell --root --print prints the same command" || bad "shell --root --print printed '$ROOT_PRINT'"
 
   # Prove -u root actually lands as root, not just named as such.
   WHOAMI="$(docker exec -u root bardolier-alpha whoami 2>/dev/null | tr -d '\r')"
   [ "$WHOAMI" = "root" ] \
     && ok "the named invocation really does land as root" || bad "docker exec -u root did not land as root (got '$WHOAMI')"
+
+  # Root first, then the dev user: nothing under the dev user's $HOME may end up root-owned.
+  docker exec -u root -e HOME=/root bardolier-alpha zsh -ic true </dev/null >/dev/null 2>&1
+  docker exec bardolier-alpha zsh -ic true </dev/null >/dev/null 2>&1
+  ROOT_OWNED="$(docker exec bardolier-alpha find /state/home -user root 2>/dev/null)"
+  [ -z "$ROOT_OWNED" ] \
+    && ok "a root zsh leaves nothing root-owned in the dev user's home" || bad "root-owned files in /state/home: $ROOT_OWNED"
 
   $BARDOLIER down alpha >/dev/null || bad "down alpha exited non-zero"
   STOPPED_ROOT="$($BARDOLIER shell alpha --root --json 2>/dev/null || true)"

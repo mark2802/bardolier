@@ -40,7 +40,7 @@ import type { ServiceCatalogue } from '../model/catalogue.ts'
 import { composePath, observeProject, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
 import { ensureProjectDirs, homeDir } from '../layout.ts'
 import { ensureAttributionDefault } from '../agent-settings.ts'
-import { SHELL_ARGV, quoted } from './shell.ts'
+import { quoted, shellExec } from './shell.ts'
 
 /** The catalogue is needed only when something is attached (§4.1 chain can fail). */
 function catalogueFor(ctx: Context, manifest: ProjectManifest): ServiceCatalogue | null {
@@ -230,7 +230,7 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
   }
 }
 
-export function renderUp(output: UpOutput): string[] {
+export function renderUp(output: UpOutput, workdir: string): string[] {
   const lines: string[] = []
   lines.push(
     output.already_running
@@ -252,8 +252,8 @@ export function renderUp(output: UpOutput): string[] {
     lines.push(`Not everything came up — run \`bardolier status ${output.project}\` for detail.`)
   } else {
     lines.push('')
-    const exec = ['docker', 'exec', '-it', output.dev_container, ...SHELL_ARGV]
-    lines.push(`Shell in with: ${exec.map(quoted).join(' ')}`)
+    lines.push(`Shell in with: ${shellExec(output.dev_container, workdir).map(quoted).join(' ')}`)
+    lines.push(`(\`bardolier shell ${output.project}\` prints this same command; it does not open a terminal.)`)
   }
   return lines
 }

@@ -9,7 +9,7 @@
   `useradd -s /bin/zsh`.
 - `cli/src/commands/shell.ts`: argv `sh -c 'command -v zsh … exec zsh || exec bash'` (an
   un-rebuilt image still gets bash); `--print` quotes words so the line pastes. `up`'s hint
-  now says `bardolier shell <name>`.
+  prints the same `docker exec … sh -c '…'` line as `shell --print`.
 - `cli-spec.md` §4.3, §6 Shell.
 
 **Non-goals:** no image-staleness detection; no Swift change (the app quotes each argv word).

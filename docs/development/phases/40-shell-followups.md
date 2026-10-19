@@ -25,7 +25,7 @@
   - `test/images-done-check.sh`: zsh really starts for the dev user, with oh-my-zsh loaded, no
     first-run menu, `~/.zshrc` created and `compaudit` silent. Today only argv strings are compared.
 
-**Non-goals:** no Dockerfile change; no Swift change (`BardolierTerminal.swift` quotes each argv word).
+**Non-goals:** no Dockerfile change beyond adding `xauth` (headed Chromium's `xvfb-run` needs it; found by the first real run of phase 38's check); no Swift change (`BardolierTerminal.swift` quotes each argv word).
 
 **Done-check:** `npm run test:quiet`; `test/shell-done-check.sh`, `test/disk-done-check.sh` and
 `test/images-done-check.sh` (full, no `IMAGES_QUICK`), which need Docker. Phases 37 and 38 shipped

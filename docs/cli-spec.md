@@ -348,7 +348,7 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   Brings the project up (app dev container + attached services on one network).
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
   suppresses the app's shell-open (the CLI itself doesn't spawn terminals — it
-  reports the exec command; see §6 shell). Each `up` also gives `home/.claude/settings.json`
+  reports the exec command; see §6 shell). The human hint is that same exec, `-w` included. Each `up` also gives `home/.claude/settings.json`
   `attribution: {commit: "", pr: ""}` if it has no `attribution` key (§9).
 - `bardolier down <name> [--no-handoff]` — stop + remove this project's containers.
   Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
@@ -358,7 +358,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   destroys it and "keep the data" cannot mean anything — there is no
   `--keep-data`. A project whose `data/` or `home/` holds anything fails
   `PROJECT_HAS_DATA`, naming what would go and its size; `--purge` is the only
-  way through. `--force` governs the prompt, never the data.
+  way through. `--force` governs the prompt, never the data. The unedited
+  `home/.claude/settings.json` default `up` writes does not count as data.
 
 ### Services
 - `bardolier service add <project> <svc>` — attach; assign host port; regenerate
@@ -397,8 +398,9 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   the manifest records one and that directory exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
-  `--root` swaps in `-u root` ahead of `-it` — same
-  container, same checks, one argv difference. It is ephemeral: nothing installed
+  `--root` swaps in `-u root -e HOME=/root` ahead of `-w`/`-it` — same
+  container, same checks; `HOME` is reset so root's dotfiles stay out of the dev
+  user's `$HOME`. It is ephemeral: nothing installed
   while root survives a `down`. Anything meant to persist belongs in
   `extra_packages` (Deps, above).
 
@@ -682,7 +684,8 @@ Schema stability is the contract. Additive changes only once the app ships.
   working directory and every dev container works in `/work`, so one shared home
   would make `claude --continue` resume whichever project ran last. Being inside
   the project directory attributes it — no label, and `delete` takes it with the
-  folder.
+  folder. `up` gives `home/.claude/settings.json` `attribution: {commit: "", pr: ""}`
+  when it has no `attribution` key, and leaves an existing key alone.
 - **`environment:` in Compose's LIST form**, naming the host variables the
   container may inherit (the agent's credentials, git's identity). A bare name
   (no `=`) passes a value through when the environment running `compose up` has
