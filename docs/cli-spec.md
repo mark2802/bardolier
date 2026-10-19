@@ -168,7 +168,8 @@ attempted in a container by mistake.
 Every base image also carries **Claude Code** — the agent the whole tool exists
 to host, installed as a standalone binary on a system path rather than under
 `$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
-ripgrep, jq, curl). Versions: §6, Images.
+ripgrep, jq, curl) and **zsh with oh-my-zsh** (the interactive shell: pinned commit under
+`/usr/local/share`, global `/etc/zsh/zshrc`, history in `$HOME`). Versions: §6, Images.
 
 **`bardolier-and` is built and run as `linux/amd64`.** Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
@@ -384,11 +385,12 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Shell
 - `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
   dev container and returns the exec invocation: `{ "container": "...", "exec":
-  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<work_folder>` before `-it` when
+  ["docker","exec","-it","<c>","sh","-c","command -v zsh >/dev/null && exec zsh || exec bash"] }`
+  (zsh with oh-my-zsh, bash for an image not yet rebuilt; `--print` quotes it for pasting; with `-w /work/<work_folder>` before `-it` when
   the manifest records one and that directory exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
-  `--root` swaps in `["docker","exec","-u","root","-it","<c>","bash"]` — same
+  `--root` swaps in `-u root` ahead of `-it` — same
   container, same checks, one argv difference. It is ephemeral: nothing installed
   while root survives a `down`. Anything meant to persist belongs in
   `extra_packages` (Deps, above).

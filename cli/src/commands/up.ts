@@ -249,7 +249,7 @@ export function renderUp(output: UpOutput): string[] {
     lines.push(`Not everything came up — run \`bardolier status ${output.project}\` for detail.`)
   } else {
     lines.push('')
-    lines.push(`Shell in with: docker exec -it ${output.dev_container} bash`)
+    lines.push(`Shell in with: bardolier shell ${output.project}`)
   }
   return lines
 }
