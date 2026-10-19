@@ -10,7 +10,7 @@
   web/library boundary text says to match the version.
 - `cli-spec.md` §4.3.
 
-**Non-goals:** no firefox/webkit; no headed browsers.
+**Non-goals:** no firefox/webkit. Headed Chromium stays available (under `xvfb-run`).
 
-**Done-check:** `test/images.test.ts`, `test/lifecycle.test.ts` env.md checks; building the
-image and a headless `chromium.launch()` is unrun (needs Docker).
+**Done-check:** `test/images.test.ts`, `test/lifecycle.test.ts` env.md checks; `images-done-check.sh` §7
+launches Chromium headless and headed in the container (needs Docker; unrun here).
