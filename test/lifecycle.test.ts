@@ -1137,7 +1137,7 @@ describe('new → up → shell → down → remove → reclaim → delete → ej
     seedServiceData(box, 'alpha', 'postgres', 20971520)
 
     const shell = await runShell(ctx, 'alpha')
-    assert.deepEqual(shell.exec, ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(shell.exec, ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'])
 
     const status = await collectStatus(ctx, 'alpha')
     assert.equal(status.projects[0]?.services[0]?.host_port, up.services[0]?.host_port)

@@ -37,7 +37,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     assert.deepEqual(output, {
       project: 'alpha',
       container: 'bardolier-alpha',
-      exec: ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'],
+      exec: ['docker', 'exec', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'],
       workdir: '/work/alpha',
     })
     assert.ok(validate('shell', output).valid)
@@ -50,7 +50,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     setWorkFolder(ctx, 'alpha', undefined)
 
     const output = await runShell(ctx, 'alpha')
-    assert.deepEqual(output.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'])
     assert.equal(output.workdir, '/work')
     assert.ok(validate('shell', output).valid)
   })
@@ -83,7 +83,7 @@ describe('shell (cli-spec.md §6, Shell)', () => {
     await project(ctx, 'alpha')
 
     const output = await runShell(ctx, 'alpha', { root: true })
-    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'bash'])
+    assert.deepEqual(output.exec, ['docker', 'exec', '-u', 'root', '-w', '/work/alpha', '-it', 'bardolier-alpha', 'sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash'])
     assert.ok(validate('shell', output).valid)
   })
 

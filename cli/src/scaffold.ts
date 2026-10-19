@@ -38,10 +38,14 @@ const BOUNDARY: Readonly<Record<Archetype, string>> = {
     'Everything builds and runs **in the container**. There is no host-side build',
     'step for this archetype — if a command fails, fix it here rather than',
     'reaching for the Mac.',
+    '',
+    'Browser tests run headless in Playwright\u2019s Chromium (the only browser installed).',
+    'A project\u2019s `@playwright/test` must match the Playwright version above.',
   ].join('\n'),
   library: [
     'Everything builds and tests **in the container**. There is no host-side build',
-    'step for this archetype.',
+    'step for this archetype. Headless Chromium and Playwright are installed; a',
+    'project\u2019s `@playwright/test` must match the Playwright version above.',
   ].join('\n'),
   ios: [
     '**Never run `xcodebuild`, the iOS Simulator, or code signing.** Those are',
@@ -69,6 +73,7 @@ const BASE_OS: Readonly<Record<string, string>> = {
 const TOOL_LABEL: Readonly<Record<string, string>> = {
   NODE_VERSION: 'Node.js',
   UV_VERSION: 'uv (manages Python installs; no system Python)',
+  PLAYWRIGHT_VERSION: 'Playwright (Chromium only)',
   SWIFT_VERSION: 'Swift',
   SWIFTLINT_VERSION: 'SwiftLint',
   JAVA_VERSION: 'JDK',

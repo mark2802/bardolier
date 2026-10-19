@@ -40,16 +40,16 @@ if [ "$DOCKER_OK" = "1" ]; then
 
   PLAIN="$($BARDOLIER shell alpha --json)" || bad "shell exited non-zero"
   schema_assert shell "$PLAIN" && ok "plain shell --json still validates against shell.schema.json" || bad "plain shell output does not match its schema"
-  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-it','bardolier-alpha','bash'])" \
-    && ok "plain shell is byte-identical to today's output" || bad "plain shell's exec argv changed"
+  json_assert "$PLAIN" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
+    && ok "plain shell's exec runs zsh, else bash" || bad "plain shell's exec argv changed"
 
   ROOT="$($BARDOLIER shell alpha --root --json)" || bad "shell --root exited non-zero"
   schema_assert shell "$ROOT" && ok "shell --root --json validates against the same shell.schema.json (no bump)" || bad "shell --root output does not match its schema"
-  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-it','bardolier-alpha','bash'])" \
+  json_assert "$ROOT" "JSON.stringify(d.exec) === JSON.stringify(['docker','exec','-u','root','-it','bardolier-alpha','sh','-c','command -v zsh >/dev/null && exec zsh || exec bash'])" \
     && ok "shell --root's exec has -u root ahead of -it" || bad "shell --root's exec argv is wrong"
 
   ROOT_PRINT="$($BARDOLIER shell alpha --root --print)"
-  [ "$ROOT_PRINT" = "docker exec -u root -it bardolier-alpha bash" ] \
+  [ "$ROOT_PRINT" = "docker exec -u root -it bardolier-alpha sh -c 'command -v zsh >/dev/null && exec zsh || exec bash'" ] \
     && ok "shell --root --print prints the same command" || bad "shell --root --print printed '$ROOT_PRINT'"
 
   # Prove -u root actually lands as root, not just named as such.

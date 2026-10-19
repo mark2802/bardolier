@@ -22,6 +22,9 @@ import { devContainerName } from '../naming.ts'
 import type { ShellOutput } from '../model/shell.ts'
 import { requireProject, runningNames } from '../workspace.ts'
 
+/** zsh (oh-my-zsh) when the image has it, bash for a project not yet rebuilt. */
+export const SHELL_ARGV = ['sh', '-c', 'command -v zsh >/dev/null && exec zsh || exec bash']
+
 export async function runShell(
   ctx: Context,
   name: string | undefined,
@@ -59,24 +62,29 @@ export async function runShell(
     // `-u root` (only when asked) is `docker exec` overriding the image's own
     // USER for this one exec — ephemeral, same as any other runtime change.
     exec: options.root
-      ? ['docker', 'exec', '-u', 'root', ...dir, '-it', container, 'bash']
-      : ['docker', 'exec', ...dir, '-it', container, 'bash'],
+      ? ['docker', 'exec', '-u', 'root', ...dir, '-it', container, ...SHELL_ARGV]
+      : ['docker', 'exec', ...dir, '-it', container, ...SHELL_ARGV],
     workdir,
   }
+}
+
+/** POSIX-quote an argv word for display, so `--print` output can be pasted. */
+export function quoted(word: string): string {
+  return /^[A-Za-z0-9_./:=@%+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`
 }
 
 /** Default human rendering: what it resolved, and how to use it. */
 export function renderShell(output: ShellOutput): string[] {
   return [
     `${output.project} is running in ${output.container}.`,
-    `  ${output.exec.join(' ')}`,
+    `  ${output.exec.map(quoted).join(' ')}`,
     '',
     `The shell lands in ${output.workdir} — the project directory, bind-mounted from the SSD.`,
     'bardolier does not open terminals; run the command above, or let the menu-bar app do it.',
   ]
 }
 
-/** `--print`: the command alone, so it can be pasted or `$(…)`-substituted. */
+/** `--print`: the command alone, quoted so it can be pasted or `eval`'d (not bare `$(…)`: quotes survive word-splitting). */
 export function renderShellPrint(output: ShellOutput): string[] {
-  return [output.exec.join(' ')]
+  return [output.exec.map(quoted).join(' ')]
 }

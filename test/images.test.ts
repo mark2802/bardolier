@@ -308,6 +308,8 @@ describe('the mobile images encode the host/container boundary (CLAUDE.md)', () 
     // A floating `latest` would make two builds of one Dockerfile differ —
     // the same determinism rule the compose file is held to (§9).
     assert.match(dockerfile('bardolier-web'), /ARG NODE_VERSION=\d/)
+    assert.match(dockerfile('bardolier-web'), /ARG PLAYWRIGHT_VERSION=\d/)
+    assert.match(dockerfile('bardolier-web'), /playwright install --with-deps chromium/)
     assert.match(dockerfile('bardolier-ios'), /ARG SWIFT_VERSION=\d/)
     assert.match(dockerfile('bardolier-ios'), /ARG SWIFTLINT_VERSION=\d/)
     const android = dockerfile('bardolier-and')

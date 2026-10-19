@@ -14,7 +14,7 @@ export type ShellOutput = {
   project: string
   /** The running dev container, e.g. `bardolier-myapp`. */
   container: string
-  /** Argv to run, e.g. `["docker","exec","-it","bardolier-myapp","bash"]` (§6). */
+  /** Argv to run, e.g. `["docker","exec","-it","bardolier-myapp","sh","-c","command -v zsh >/dev/null && exec zsh || exec bash"]` (§6). */
   exec: string[]
   /** Where that shell lands — `/work/<work_folder>` when recorded and present, else `/work` (§10). */
   workdir: string

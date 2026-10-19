@@ -38,7 +38,9 @@ import type { UpOutput, UpService } from '../model/lifecycle.ts'
 import type { ProjectManifest } from '../model/project.ts'
 import type { ServiceCatalogue } from '../model/catalogue.ts'
 import { composePath, observeProject, regenerateCompose, requireProject, writeManifest } from '../workspace.ts'
-import { ensureProjectDirs } from '../layout.ts'
+import { ensureProjectDirs, homeDir } from '../layout.ts'
+import { ensureAttributionDefault } from '../agent-settings.ts'
+import { SHELL_ARGV, quoted } from './shell.ts'
 
 /** The catalogue is needed only when something is attached (§4.1 chain can fail). */
 function catalogueFor(ctx: Context, manifest: ProjectManifest): ServiceCatalogue | null {
@@ -183,6 +185,7 @@ export async function runUp(ctx: Context, request: UpRequest): Promise<UpOutput>
   // service attached since the last start gets its data directory. Letting
   // Docker create a bind source is what this avoids (§4.2, `layout.ts`).
   ensureProjectDirs(dir, attachedKeys(manifest))
+  ensureAttributionDefault(homeDir(dir))
 
   const catalogue = catalogueFor(ctx, manifest)
   const regenerated = regenerateCompose(dir, manifest, catalogue)
@@ -249,7 +252,8 @@ export function renderUp(output: UpOutput): string[] {
     lines.push(`Not everything came up — run \`bardolier status ${output.project}\` for detail.`)
   } else {
     lines.push('')
-    lines.push(`Shell in with: docker exec -it ${output.dev_container} bash`)
+    const exec = ['docker', 'exec', '-it', output.dev_container, ...SHELL_ARGV]
+    lines.push(`Shell in with: ${exec.map(quoted).join(' ')}`)
   }
   return lines
 }

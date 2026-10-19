@@ -35,7 +35,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tini \
       unzip \
       zip \
+      zsh \
     && rm -rf /var/lib/apt/lists/*
+
+# zsh with oh-my-zsh as the interactive shell (`bardolier shell` prefers it, falls
+# back to bash). Installed under /usr/local/share, NOT $HOME: $HOME is a bind mount
+# that masks anything the image put there. Pinned to a commit and checksum-verified,
+# like uv. The config is global (/etc/zsh/zshrc) so a project's own ~/.zshrc still
+# runs after it and can override. No auto-update (the install dir is root-owned and
+# the prompt gets in the way); the cache and history live under $HOME, so they
+# survive `down`. /etc/zsh/zshenv creates an empty ~/.zshrc so a fresh home does
+# not trigger zsh-newuser-install's first-run menu.
+ARG OHMYZSH_COMMIT=964ddf789b022b6958b27d02d7fa54f552de21e9
+ARG OHMYZSH_SHA256=89ccb57b3328f0df303d557bef54cc7d0efb6f22f016552943ef3e15273e0588
+RUN set -eux; \
+    tmp="$(mktemp -d)"; \
+    curl -fsSL -o "${tmp}/omz.tgz" "https://github.com/ohmyzsh/ohmyzsh/archive/${OHMYZSH_COMMIT}.tar.gz"; \
+    echo "${OHMYZSH_SHA256}  ${tmp}/omz.tgz" | sha256sum -c -; \
+    mkdir -p /usr/local/share/oh-my-zsh; \
+    tar -xzf "${tmp}/omz.tgz" -C /usr/local/share/oh-my-zsh --strip-components=1; \
+    chmod -R go-w /usr/local/share/oh-my-zsh; \
+    rm -rf "${tmp}"; \
+    { \
+      echo 'export ZSH=/usr/local/share/oh-my-zsh'; \
+      echo 'ZSH_THEME=robbyrussell'; \
+      echo 'plugins=(git)'; \
+      echo 'DISABLE_AUTO_UPDATE=true'; \
+      echo 'ZSH_CACHE_DIR=$HOME/.cache/oh-my-zsh'; \
+      echo 'ZSH_COMPDUMP=$ZSH_CACHE_DIR/.zcompdump'; \
+      echo 'mkdir -p "$ZSH_CACHE_DIR/completions"'; \
+      echo 'HISTFILE=$HOME/.zsh_history; HISTSIZE=10000; SAVEHIST=10000'; \
+      echo 'source $ZSH/oh-my-zsh.sh'; \
+    } > /etc/zsh/zshrc; \
+    { \
+      echo 'if [[ $- == *i* && ! -e "$HOME/.zshrc" ]]; then : > "$HOME/.zshrc"; fi'; \
+    } > /etc/zsh/zshenv
 
 # Claude Code — the agent this whole yard exists to host.
 #
@@ -106,7 +140,7 @@ RUN set -eux; \
 RUN set -eux; \
     if ! getent group "${HOST_GID}" >/dev/null; then groupadd -o -g "${HOST_GID}" "${USERNAME}"; fi; \
     if ! getent passwd "${HOST_UID}" >/dev/null; then \
-      useradd -o -u "${HOST_UID}" -g "${HOST_GID}" -m -s /bin/bash "${USERNAME}"; \
+      useradd -o -u "${HOST_UID}" -g "${HOST_GID}" -m -s /bin/zsh "${USERNAME}"; \
     fi; \
     home="$(getent passwd "${HOST_UID}" | cut -d: -f6)"; \
     mkdir -p "${home}" /work /cache/uv/python; \
@@ -129,6 +163,20 @@ ENV UV_PYTHON_INSTALL_DIR=/cache/uv/python
 ENV NPM_CONFIG_PREFIX=/usr/local/npm-global
 ENV PATH=${NPM_CONFIG_PREFIX}/bin:$PATH
 RUN mkdir -p ${NPM_CONFIG_PREFIX} && chown -R "${HOST_UID}:${HOST_GID}" ${NPM_CONFIG_PREFIX}
+
+# Playwright + headless Chromium for browser testing. Chromium lives in the image
+# (/opt/ms-playwright, outside $HOME and /cache), because its system libraries must
+# be apt-installed as root and there is no sudo at runtime. A project's own
+# `@playwright/test` must pin THIS version, or it looks for a browser revision that
+# is not installed. Chromium only: firefox/webkit are ~400MB more on every web image.
+ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN set -eux; \
+    npm install -g "playwright@${PLAYWRIGHT_VERSION}"; \
+    playwright install --with-deps chromium; \
+    chmod -R a+rX "${PLAYWRIGHT_BROWSERS_PATH}"; \
+    chown -R "${HOST_UID}:${HOST_GID}" "${NPM_CONFIG_PREFIX}"; \
+    rm -rf /var/lib/apt/lists/* /root/.npm
 
 # A PERSISTENT HOME, at a path the compose file can name.
 #

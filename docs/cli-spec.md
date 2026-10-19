@@ -156,7 +156,7 @@ created: 2026-08-19T10:00:00Z
 
 | Archetype | Base image   | In-container build?          | Host build step        |
 |-----------|--------------|------------------------------|------------------------|
-| web       | `bardolier-web` | full (Node/Next + Python via `uv`, services) | none    |
+| web       | `bardolier-web` | full (Node/Next + Python via `uv`, Playwright, services) | none |
 | ios       | `bardolier-ios` | edit + swiftlint + logic test| Xcode (build/sim/sign) |
 | android   | `bardolier-and` | Gradle build + unit test     | emulator (host)        |
 | library   | `bardolier-web` | full                         | none                   |
@@ -168,7 +168,12 @@ attempted in a container by mistake.
 Every base image also carries **Claude Code** — the agent the whole tool exists
 to host, installed as a standalone binary on a system path rather than under
 `$HOME`, which is a mounted directory (§3, §9) — and the working kit (git,
-ripgrep, jq, curl). Versions: §6, Images.
+ripgrep, jq, curl) and **zsh with oh-my-zsh** (the interactive shell: pinned commit under
+`/usr/local/share`, global `/etc/zsh/zshrc`, history in `$HOME`). Versions: §6, Images.
+
+`bardolier-web` also carries **Playwright with headless Chromium** (pinned `PLAYWRIGHT_VERSION`,
+browsers in `/opt/ms-playwright`, system libraries included — there is no sudo to add them
+later). A project's `@playwright/test` must pin the same version. Chromium only.
 
 **`bardolier-and` is built and run as `linux/amd64`.** Google publishes the Linux
 Android SDK build tools (aapt2 above all) for x86_64 only, so on Apple Silicon
@@ -341,7 +346,8 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
   Brings the project up (app dev container + attached services on one network).
   Validates ports. By default the app-layer opens a shell after; `--no-shell`
   suppresses the app's shell-open (the CLI itself doesn't spawn terminals — it
-  reports the exec command; see §6 shell).
+  reports the exec command; see §6 shell). Each `up` also gives `home/.claude/settings.json`
+  `attribution: {commit: "", pr: ""}` if it has no `attribution` key (§9).
 - `bardolier down <name> [--no-handoff]` — stop + remove this project's containers.
   Data persists. Writes the handoff note first (§12) unless `--no-handoff`.
 - `bardolier delete <name> [--force] [--purge]` — remove containers, then the
@@ -384,11 +390,12 @@ All commands accept `--json`. `<name>` is a project; `<svc>` a catalogue key.
 ### Shell
 - `bardolier shell <name> [--print] [--root]` — for a running project, resolves the
   dev container and returns the exec invocation: `{ "container": "...", "exec":
-  ["docker","exec","-it","<c>","bash"] }` (with `-w /work/<work_folder>` before `-it` when
+  ["docker","exec","-it","<c>","sh","-c","command -v zsh >/dev/null && exec zsh || exec bash"] }`
+  (zsh with oh-my-zsh, bash for an image not yet rebuilt; `--print` quotes it for pasting; with `-w /work/<work_folder>` before `-it` when
   the manifest records one and that directory exists, §10). The **app** spawns the terminal; the
   CLI only names the command (`--print` prints it in human mode). Errors
   `PROJECT_STOPPED`.
-  `--root` swaps in `["docker","exec","-u","root","-it","<c>","bash"]` — same
+  `--root` swaps in `-u root` ahead of `-it` — same
   container, same checks, one argv difference. It is ephemeral: nothing installed
   while root survives a `down`. Anything meant to persist belongs in
   `extra_packages` (Deps, above).
